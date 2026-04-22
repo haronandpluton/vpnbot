@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -71,15 +71,23 @@ class PaymentRepository(BaseRepository):
         await self.session.flush()
         return payment
 
-    async def mark_detected(self, payment: Payment, detected_at: datetime | None = None) -> Payment:
+    async def mark_detected(
+        self,
+        payment: Payment,
+        detected_at: datetime | None = None,
+    ) -> Payment:
         payment.status = PaymentStatus.DETECTED
-        payment.detected_at = detected_at or datetime.utcnow()
+        payment.detected_at = detected_at or datetime.now(UTC)
         await self.session.flush()
         return payment
 
-    async def mark_confirmed(self, payment: Payment, confirmed_at: datetime) -> Payment:
+    async def mark_confirmed(
+        self,
+        payment: Payment,
+        confirmed_at: datetime | None = None,
+    ) -> Payment:
         payment.status = PaymentStatus.CONFIRMED
-        payment.confirmed_at = confirmed_at
+        payment.confirmed_at = confirmed_at or datetime.now(UTC)
         await self.session.flush()
         return payment
 
