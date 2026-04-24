@@ -1,4 +1,5 @@
 import asyncio
+import time
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -11,15 +12,21 @@ from app.services.payment_event_service import PaymentEventService
 
 
 async def main():
+    suffix = str(int(time.time() * 1000))
+
+    telegram_id = int(f"566855{suffix[-6:]}")
+    external_event_id = f"external_event_{suffix}"
+    txid = f"event_txid_{suffix}"
+
     async with SessionLocal() as session:
         order_service = OrderService(session)
         payment_event_service = PaymentEventService(session)
 
         order = await order_service.create_order(
-            telegram_id=566854075,
+            telegram_id=telegram_id,
             tariff_code=TariffCode.DEVICES_1,
             payment_option_code="usdt_trc20",
-            username="event_test_user",
+            username=f"event_test_user_{suffix}",
             first_name="Event",
             last_name="Tester",
             language_code="ru",
@@ -34,12 +41,12 @@ async def main():
             amount=Decimal("4.00"),
             provider="test_provider",
             event_type="payment_confirmed",
-            external_event_id="external_event_001",
-            txid="event_txid_001",
+            external_event_id=external_event_id,
+            txid=txid,
             address_from="sender_wallet",
             address_to="receiver_wallet",
             confirmations=3,
-            raw_payload='{"source": "integration_test"}',
+            raw_payload=f'{{"source": "integration_test", "suffix": "{suffix}"}}',
         )
 
         print("\nEVENT RESULT:")
@@ -54,6 +61,15 @@ async def main():
         print("\nORDER RESULT:")
         print("order_id =", None if paid_order is None else paid_order.id)
         print("order_status =", None if paid_order is None else paid_order.status)
+
+        if event is None:
+            raise RuntimeError("Payment event was not returned")
+
+        if payment is None:
+            raise RuntimeError("Payment was not returned. Probably duplicate event path was triggered.")
+
+        if paid_order is None:
+            raise RuntimeError("Paid order was not returned")
 
         db_event_result = await session.execute(
             select(PaymentEvent).where(PaymentEvent.id == event.id)

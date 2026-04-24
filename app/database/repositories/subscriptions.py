@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -20,6 +20,22 @@ class SubscriptionRepository(BaseRepository):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_active_subscription_by_user_id(
+        self,
+        user_id: int,
+    ) -> Subscription | None:
+        stmt = (
+            select(Subscription)
+            .where(
+                Subscription.user_id == user_id,
+                Subscription.status == SubscriptionStatus.ACTIVE,
+            )
+            .order_by(Subscription.expires_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def create(
         self,
@@ -47,6 +63,37 @@ class SubscriptionRepository(BaseRepository):
 
     async def activate(self, subscription: Subscription) -> Subscription:
         subscription.status = SubscriptionStatus.ACTIVE
+        subscription.error_reason = None
+        await self.session.flush()
+        return subscription
+
+    async def extend(
+        self,
+        subscription: Subscription,
+        order_id: int | None,
+        expires_at: datetime,
+        device_limit: int | None = None,
+    ) -> Subscription:
+        subscription.order_id = order_id
+        subscription.expires_at = expires_at
+
+        if device_limit is not None:
+            subscription.device_limit = device_limit
+
+        if subscription.status != SubscriptionStatus.ACTIVE:
+            subscription.status = SubscriptionStatus.ACTIVE
+
+        subscription.error_reason = None
+
+        await self.session.flush()
+        return subscription
+
+    async def mark_access_sent(
+        self,
+        subscription: Subscription,
+        sent_at: datetime | None = None,
+    ) -> Subscription:
+        subscription.last_access_sent_at = sent_at or datetime.now(timezone.utc)
         await self.session.flush()
         return subscription
 
@@ -55,9 +102,13 @@ class SubscriptionRepository(BaseRepository):
         await self.session.flush()
         return subscription
 
-    async def disable(self, subscription: Subscription, reason: str | None = None) -> Subscription:
+    async def disable(
+        self,
+        subscription: Subscription,
+        reason: str | None = None,
+    ) -> Subscription:
         subscription.status = SubscriptionStatus.DISABLED
         subscription.error_reason = reason
-        subscription.disabled_at = datetime.utcnow()
+        subscription.disabled_at = datetime.now(timezone.utc)
         await self.session.flush()
         return subscription

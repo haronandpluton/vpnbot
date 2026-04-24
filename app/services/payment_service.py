@@ -25,22 +25,23 @@ class PaymentService:
         memo_tag: str | None = None,
         confirmations: int | None = None,
         raw_payload: str | None = None,
+        initial_status: PaymentStatus = PaymentStatus.NEW,
     ):
         order = await self.order_repository.get_by_id(order_id)
         if order is None:
             raise ValueError(f"Order not found: {order_id}")
 
         if txid is not None:
-            existing_by_txid = await self.payment_repository.get_by_txid(txid)
-            if existing_by_txid is not None:
-                return existing_by_txid
+            existing = await self.payment_repository.get_by_txid(txid)
+            if existing:
+                return existing
 
         if provider_payment_id is not None:
-            existing_by_provider_id = await self.payment_repository.get_by_provider_payment_id(
+            existing = await self.payment_repository.get_by_provider_payment_id(
                 provider_payment_id
             )
-            if existing_by_provider_id is not None:
-                return existing_by_provider_id
+            if existing:
+                return existing
 
         payment = await self.payment_repository.create(
             order_id=order.id,
@@ -57,7 +58,7 @@ class PaymentService:
             memo_tag=memo_tag,
             confirmations=confirmations,
             raw_payload=raw_payload,
-            status=PaymentStatus.NEW,
+            status=initial_status,
         )
         return payment
 
@@ -66,8 +67,16 @@ class PaymentService:
         if payment is None:
             raise ValueError(f"Payment not found: {payment_id}")
 
-        payment = await self.payment_repository.mark_detected(payment)
-        return payment
+        if payment.status in {
+            PaymentStatus.DETECTED,
+            PaymentStatus.CONFIRMED,
+            PaymentStatus.INVALID,
+            PaymentStatus.DUPLICATE,
+            PaymentStatus.EXPIRED,
+        }:
+            return payment
+
+        return await self.payment_repository.mark_detected(payment)
 
     async def _confirm_payment(self, payment_id: int):
         payment = await self.payment_repository.get_by_id(payment_id)
@@ -75,10 +84,15 @@ class PaymentService:
             raise ValueError(f"Payment not found: {payment_id}")
 
         order = await self.order_repository.get_by_id(payment.order_id)
-        if order is None:
-            raise ValueError(f"Order not found for payment: {payment.order_id}")
 
         if payment.status == PaymentStatus.CONFIRMED:
+            return payment, order
+
+        if payment.status in {
+            PaymentStatus.INVALID,
+            PaymentStatus.DUPLICATE,
+            PaymentStatus.EXPIRED,
+        }:
             return payment, order
 
         payment = await self.payment_repository.mark_confirmed(payment)
@@ -91,30 +105,9 @@ class PaymentService:
 
         return payment, order
 
-    async def create_payment_for_order(
-        self,
-        order_id: int,
-        amount: Decimal,
-        txid: str | None = None,
-        provider_payment_id: str | None = None,
-        address_from: str | None = None,
-        address_to: str | None = None,
-        memo_tag: str | None = None,
-        confirmations: int | None = None,
-        raw_payload: str | None = None,
-    ):
+    async def create_payment_for_order(self, *args, **kwargs):
         try:
-            payment = await self._create_payment_for_order(
-                order_id=order_id,
-                amount=amount,
-                txid=txid,
-                provider_payment_id=provider_payment_id,
-                address_from=address_from,
-                address_to=address_to,
-                memo_tag=memo_tag,
-                confirmations=confirmations,
-                raw_payload=raw_payload,
-            )
+            payment = await self._create_payment_for_order(*args, **kwargs)
             await self.session.commit()
             return payment
         except Exception:

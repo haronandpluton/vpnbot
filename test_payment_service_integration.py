@@ -1,5 +1,8 @@
 import asyncio
+import time
 from decimal import Decimal
+
+
 
 from sqlalchemy import select
 
@@ -11,15 +14,20 @@ from app.services.payment_service import PaymentService
 
 
 async def main():
+    suffix = str(int(time.time() * 1000))
+
+    telegram_id = int(f"566854{suffix[-6:]}")
+    txid = f"test_txid_{suffix}"
+
     async with SessionLocal() as session:
         order_service = OrderService(session)
         payment_service = PaymentService(session)
 
         order = await order_service.create_order(
-            telegram_id=566854074,
+            telegram_id=telegram_id,
             tariff_code=TariffCode.DEVICES_1,
             payment_option_code="usdt_trc20",
-            username="test_user",
+            username=f"test_user_{suffix}",
             first_name="Test",
             last_name="User",
             language_code="ru",
@@ -33,11 +41,11 @@ async def main():
         payment = await payment_service.create_payment_for_order(
             order_id=order.id,
             amount=Decimal("4.00"),
-            txid="test_txid_001",
+            txid=txid,
             address_from="sender_wallet",
             address_to="receiver_wallet",
             confirmations=1,
-            raw_payload='{"demo": true}',
+            raw_payload=f'{{"demo": true, "suffix": "{suffix}"}}',
         )
 
         print("\nPAYMENT CREATED:")
@@ -77,6 +85,9 @@ async def main():
         print("payment_status =", db_payment.status)
         print("order_status =", db_order.status)
 
+
+import app.services.payment_service as ps
+print(ps.__file__)
 
 if __name__ == "__main__":
     asyncio.run(main())
