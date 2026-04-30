@@ -18,6 +18,33 @@ class PaymentPollingProcessor:
         self.payment_event_service = PaymentEventService(session)
 
     async def process_transaction(self, tx: NormalizedTransaction):
+        late_order = await self._find_late_matching_order(tx)
+
+        if late_order is not None:
+            event, payment, expired_order = (
+                await self.payment_event_service.process_detected_event(
+                    order_id=late_order.id,
+                    amount=tx.amount,
+                    provider=tx.provider or "unknown",
+                    event_type="payment_late",
+                    external_event_id=tx.txid,
+                    txid=tx.txid,
+                    address_from=tx.address_from,
+                    address_to=tx.address_to,
+                    memo_tag=tx.memo_tag,
+                    confirmations=tx.confirmations,
+                    raw_payload=str(tx.raw_payload),
+                )
+            )
+
+            print("LATE TX PROCESSED:")
+            print("txid =", tx.txid)
+            print("order_id =", late_order.id)
+            print("event_id =", event.id)
+            print("payment_id =", payment.id)
+
+            return event, payment, None, None
+
         order = await self._find_matching_order(tx)
 
         if order is not None:
@@ -124,6 +151,27 @@ class PaymentPollingProcessor:
                 results.append(result)
 
         return results
+
+    async def _find_late_matching_order(self, tx: NormalizedTransaction) -> Order | None:
+        now = datetime.now(timezone.utc)
+        tx_amount = Decimal(tx.amount)
+
+        stmt = (
+            select(Order)
+            .where(
+                Order.status == OrderStatus.WAITING_PAYMENT,
+                Order.expires_at <= now,
+                Order.expected_currency == tx.currency,
+                Order.expected_network == tx.network,
+                Order.expected_amount == tx_amount,
+                Order.destination_address == tx.address_to,
+            )
+            .order_by(Order.created_at.asc())
+            .limit(1)
+        )
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def _find_matching_order(self, tx: NormalizedTransaction) -> Order | None:
         now = datetime.now(timezone.utc)
