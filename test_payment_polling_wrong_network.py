@@ -16,7 +16,7 @@ from app.services.order_service import OrderService
 
 async def main():
     suffix = str(int(time.time() * 1000))
-    telegram_id = int(f"577773{suffix[-6:]}")
+    telegram_id = int(f"588883{suffix[-6:]}")
 
     async with SessionLocal() as session:
         order_service = OrderService(session)
@@ -25,28 +25,32 @@ async def main():
             telegram_id=telegram_id,
             tariff_code=TariffCode.DEVICES_1,
             payment_option_code="usdt_trc20",
-            username=f"wrong_amount_test_user_{suffix}",
-            first_name="WrongAmount",
+            username=f"wrong_network_test_user_{suffix}",
+            first_name="WrongNetwork",
             last_name="Tester",
             language_code="ru",
         )
 
         order.expected_amount = Decimal("4.00")
+        order.expected_currency = "USDT"
+        order.expected_network = "TRC20"
+        order.destination_address = f"wrong_network_receiver_{suffix}"
         await session.commit()
 
         tx = NormalizedTransaction(
-            txid=f"wrong_amount_txid_{suffix}",
-            amount=Decimal("3.00"),
+            txid=f"wrong_network_txid_{suffix}",
+            amount=Decimal("4.00"),
             currency="USDT",
-            network="TRC20",
+            network="ERC20",
             address_from="mock_sender_wallet",
             address_to=order.destination_address,
             confirmations=3,
             provider="mock",
             raw_payload={
-                "source": "wrong_amount_test",
-                "expected_amount": "4.00",
-                "actual_amount": "3.00",
+                "source": "wrong_network_test",
+                "expected_network": "TRC20",
+                "actual_network": "ERC20",
+                "amount": "4.00",
             },
         )
 
@@ -75,9 +79,11 @@ async def main():
 
         assert db_event.processed is True
         assert db_event.processing_status == "invalid"
-        assert db_event.error_message == "wrong_amount"
+        assert db_event.error_message == "wrong_network"
 
         assert db_payment.status == PaymentStatus.INVALID
+        assert db_payment.currency == "USDT"
+        assert db_payment.network == "ERC20"
 
         assert db_order.status == OrderStatus.WAITING_PAYMENT
         assert db_order.paid_at is None
@@ -87,7 +93,7 @@ async def main():
         assert subscription is None
         assert config_uri is None
 
-        print("WRONG AMOUNT POLLING TEST PASSED")
+        print("WRONG NETWORK POLLING TEST PASSED")
 
 
 if __name__ == "__main__":
