@@ -50,64 +50,29 @@ class PaymentPollingProcessor:
         invalid_amount_order = await self._find_invalid_amount_order(tx)
 
         if invalid_amount_order is not None:
-            event, payment, invalid_order = (
-                await self.payment_event_service.process_invalid_event(
-                    order_id=invalid_amount_order.id,
-                    amount=tx.amount,
-                    currency=tx.currency,
-                    network=tx.network,
-                    provider=tx.provider or "unknown",
-                    event_type="payment_invalid",
-                    reason="wrong_amount",
-                    external_event_id=tx.txid,
-                    txid=tx.txid,
-                    address_from=tx.address_from,
-                    address_to=tx.address_to,
-                    memo_tag=tx.memo_tag,
-                    confirmations=tx.confirmations,
-                    raw_payload=str(tx.raw_payload),
-                )
+            return await self._process_invalid_tx(
+                order=invalid_amount_order,
+                tx=tx,
+                reason="wrong_amount",
             )
-
-            print("INVALID TX PROCESSED:")
-            print("reason = wrong_amount")
-            print("txid =", tx.txid)
-            print("order_id =", invalid_order.id)
-            print("event_id =", event.id)
-            print("payment_id =", payment.id)
-
-            return event, payment, None, None
 
         invalid_network_order = await self._find_invalid_network_order(tx)
 
         if invalid_network_order is not None:
-            event, payment, invalid_order = (
-                await self.payment_event_service.process_invalid_event(
-                    order_id=invalid_network_order.id,
-                    amount=tx.amount,
-                    currency=tx.currency,
-                    network=tx.network,
-                    provider=tx.provider or "unknown",
-                    event_type="payment_invalid",
-                    reason="wrong_network",
-                    external_event_id=tx.txid,
-                    txid=tx.txid,
-                    address_from=tx.address_from,
-                    address_to=tx.address_to,
-                    memo_tag=tx.memo_tag,
-                    confirmations=tx.confirmations,
-                    raw_payload=str(tx.raw_payload),
-                )
+            return await self._process_invalid_tx(
+                order=invalid_network_order,
+                tx=tx,
+                reason="wrong_network",
             )
 
-            print("INVALID TX PROCESSED:")
-            print("reason = wrong_network")
-            print("txid =", tx.txid)
-            print("order_id =", invalid_order.id)
-            print("event_id =", event.id)
-            print("payment_id =", payment.id)
+        invalid_currency_order = await self._find_invalid_currency_order(tx)
 
-            return event, payment, None, None
+        if invalid_currency_order is not None:
+            return await self._process_invalid_tx(
+                order=invalid_currency_order,
+                tx=tx,
+                reason="wrong_currency",
+            )
 
         print("NO MATCHING ORDER FOR TX:")
         print("txid =", tx.txid)
@@ -115,6 +80,40 @@ class PaymentPollingProcessor:
         print("currency =", tx.currency)
         print("network =", tx.network)
         return None
+
+    async def _process_invalid_tx(
+        self,
+        order: Order,
+        tx: NormalizedTransaction,
+        reason: str,
+    ):
+        event, payment, invalid_order = (
+            await self.payment_event_service.process_invalid_event(
+                order_id=order.id,
+                amount=tx.amount,
+                currency=tx.currency,
+                network=tx.network,
+                provider=tx.provider or "unknown",
+                event_type="payment_invalid",
+                reason=reason,
+                external_event_id=tx.txid,
+                txid=tx.txid,
+                address_from=tx.address_from,
+                address_to=tx.address_to,
+                memo_tag=tx.memo_tag,
+                confirmations=tx.confirmations,
+                raw_payload=str(tx.raw_payload),
+            )
+        )
+
+        print("INVALID TX PROCESSED:")
+        print("reason =", reason)
+        print("txid =", tx.txid)
+        print("order_id =", invalid_order.id)
+        print("event_id =", event.id)
+        print("payment_id =", payment.id)
+
+        return event, payment, None, None
 
     async def process_transactions(self, transactions: list[NormalizedTransaction]) -> list:
         results = []
@@ -201,6 +200,27 @@ class PaymentPollingProcessor:
                 Order.expires_at > now,
                 Order.expected_currency == tx.currency,
                 Order.expected_network != tx.network,
+                Order.expected_amount == tx_amount,
+                Order.destination_address == tx.address_to,
+            )
+            .order_by(Order.created_at.asc())
+            .limit(1)
+        )
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def _find_invalid_currency_order(self, tx: NormalizedTransaction) -> Order | None:
+        now = datetime.now(timezone.utc)
+        tx_amount = Decimal(tx.amount)
+
+        stmt = (
+            select(Order)
+            .where(
+                Order.status == OrderStatus.WAITING_PAYMENT,
+                Order.expires_at > now,
+                Order.expected_currency != tx.currency,
+                Order.expected_network == tx.network,
                 Order.expected_amount == tx_amount,
                 Order.destination_address == tx.address_to,
             )
