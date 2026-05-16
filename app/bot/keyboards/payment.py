@@ -9,6 +9,12 @@ def payment_check_keyboard(order_id: int) -> InlineKeyboardMarkup:
                     text="Я оплатил / Проверить оплату",
                     callback_data=f"check_payment:{order_id}",
                 )
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    text="DEV: подтвердить mock-платеж",
+                    callback_data=f"dev_confirm_payment:{order_id}",
+                )
+            ],
         ]
     )

@@ -4,6 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from app.bot.handlers.buy import router as buy_router
+from app.bot.handlers.dev_payment import router as dev_payment_router
 from app.bot.handlers.dev_subscription import router as dev_subscription_router
 from app.bot.handlers.my_subscription import router as my_subscription_router
 from app.bot.handlers.payment_check import router as payment_check_router
@@ -30,6 +31,7 @@ async def main() -> None:
     dp.include_router(start_router)
     dp.include_router(buy_router)
     dp.include_router(test_payment_check_router)
+    dp.include_router(dev_payment_router)
     dp.include_router(dev_subscription_router)
     dp.include_router(my_subscription_router)
     dp.include_router(payment_check_router)
@@ -38,6 +40,7 @@ async def main() -> None:
     print("- start")
     print("- buy")
     print("- test_payment_check")
+    print("- dev_payment")
     print("- dev_subscription")
     print("- my_subscription")
     print("- payment_check")
