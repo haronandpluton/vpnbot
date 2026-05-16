@@ -3,6 +3,7 @@ import logging
 
 from aiogram import Bot, Dispatcher
 
+from app.bot.handlers.my_subscription import router as my_subscription_router
 from app.bot.handlers.payment_check import router as payment_check_router
 from app.bot.handlers.test_payment_check import router as test_payment_check_router
 from app.bot.middlewares.db_session import DbSessionMiddleware
@@ -24,6 +25,7 @@ async def main() -> None:
     dp.update.middleware(DbSessionMiddleware(SessionLocal))
 
     dp.include_router(test_payment_check_router)
+    dp.include_router(my_subscription_router)
     dp.include_router(payment_check_router)
 
     await dp.start_polling(bot)
