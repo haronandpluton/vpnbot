@@ -5,6 +5,7 @@ from aiogram import Bot, Dispatcher
 
 from app.bot.handlers.admin import router as admin_router
 from app.bot.handlers.admin_invalid_payments import router as admin_invalid_payments_router
+from app.bot.handlers.admin_lookup import router as admin_lookup_router
 from app.bot.handlers.buy import router as buy_router
 from app.bot.handlers.dev_payment import router as dev_payment_router
 from app.bot.handlers.dev_subscription import router as dev_subscription_router
@@ -45,6 +46,7 @@ async def main() -> None:
 
     dp.include_router(admin_router)
     dp.include_router(admin_invalid_payments_router)
+    dp.include_router(admin_lookup_router)
 
     print("BOT ROUTERS LOADED:")
     print("- start")
@@ -57,6 +59,7 @@ async def main() -> None:
     print("- payment_check")
     print("- admin")
     print("- admin_invalid_payments")
+    print("- admin_lookup")
 
     await dp.start_polling(bot)
 
