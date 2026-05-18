@@ -35,11 +35,21 @@ async def select_tariff_callback(callback: CallbackQuery):
     tariff_code = callback.data.replace("select_tariff:", "")
 
     if tariff_code != "devices_1":
-        await callback.answer("Этот тариф пока недоступен", show_alert=True)
+        await callback.answer(
+            "Этот тариф пока недоступен. Сейчас активен тариф на 1 устройство.",
+            show_alert=True,
+        )
         return
 
+    text = (
+        "Тариф: 1 устройство\n"
+        "Стоимость: 4 USDT\n"
+        "Срок: 30 дней\n\n"
+        "Выбери способ оплаты:"
+    )
+
     await callback.message.edit_text(
-        "Выбери способ оплаты:",
+        text,
         reply_markup=payment_method_keyboard(tariff_code),
     )
     await callback.answer()
@@ -91,11 +101,13 @@ async def select_payment_callback(
         "Заказ создан.\n\n"
         f"Order ID: {order.id}\n"
         "Тариф: 1 устройство\n"
+        "Срок: 30 дней\n"
         "Сумма: 4.00 USDT\n"
         "Сеть: TRC20\n\n"
         "Адрес для оплаты:\n"
         f"<code>{order.destination_address}</code>\n\n"
-        "После оплаты нажми кнопку ниже."
+        "После оплаты нажми кнопку ниже.\n\n"
+        "Важно: отправляй точную сумму и только в указанной сети."
     )
 
     await callback.message.edit_text(

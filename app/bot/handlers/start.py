@@ -9,28 +9,26 @@ from app.services.my_subscription_service import MySubscriptionService
 router = Router()
 
 
-@router.message(Command("start"))
-async def start_command(message: Message):
-    text = (
+def main_menu_text() -> str:
+    return (
         "VPNFOR\n\n"
+        "Быстрый VPN-доступ для стабильного подключения.\n\n"
         "Выбери действие:"
     )
 
+
+@router.message(Command("start"))
+async def start_command(message: Message):
     await message.answer(
-        text,
+        main_menu_text(),
         reply_markup=main_menu_keyboard(),
     )
 
 
 @router.callback_query(F.data == "back_to_main_menu")
 async def back_to_main_menu_callback(callback: CallbackQuery):
-    text = (
-        "VPNFOR\n\n"
-        "Выбери действие:"
-    )
-
     await callback.message.edit_text(
-        text,
+        main_menu_text(),
         reply_markup=main_menu_keyboard(),
     )
     await callback.answer()

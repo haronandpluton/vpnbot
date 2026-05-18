@@ -16,6 +16,22 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                     callback_data="my_subscription",
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    text="Скачать VPN",
+                    callback_data="download_vpn",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="FAQ",
+                    callback_data="faq",
+                ),
+                InlineKeyboardButton(
+                    text="Поддержка",
+                    callback_data="support",
+                ),
+            ],
         ]
     )
 
@@ -27,6 +43,18 @@ def tariff_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="1 устройство — 4 USDT",
                     callback_data="select_tariff:devices_1",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="2 устройства — скоро",
+                    callback_data="select_tariff:devices_2",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="3 устройства — скоро",
+                    callback_data="select_tariff:devices_3",
                 )
             ],
             [
@@ -54,5 +82,18 @@ def payment_method_keyboard(tariff_code: str) -> InlineKeyboardMarkup:
                     callback_data="buy_vpn",
                 )
             ],
+        ]
+    )
+
+
+def back_to_main_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Назад в меню",
+                    callback_data="back_to_main_menu",
+                )
+            ]
         ]
     )
