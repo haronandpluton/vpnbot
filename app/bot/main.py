@@ -4,8 +4,12 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from app.bot.handlers.admin import router as admin_router
+from app.bot.handlers.admin_active_subscriptions import (
+    router as admin_active_subscriptions_router,
+)
 from app.bot.handlers.admin_invalid_payments import router as admin_invalid_payments_router
 from app.bot.handlers.admin_lookup import router as admin_lookup_router
+from app.bot.handlers.admin_recovery import router as admin_recovery_router
 from app.bot.handlers.buy import router as buy_router
 from app.bot.handlers.dev_payment import router as dev_payment_router
 from app.bot.handlers.dev_subscription import router as dev_subscription_router
@@ -36,7 +40,6 @@ async def main() -> None:
     dp.include_router(buy_router)
     dp.include_router(info_router)
 
-    # Dev/test routers. Later these should be protected by admin access or removed.
     dp.include_router(test_payment_check_router)
     dp.include_router(dev_payment_router)
     dp.include_router(dev_subscription_router)
@@ -47,6 +50,8 @@ async def main() -> None:
     dp.include_router(admin_router)
     dp.include_router(admin_invalid_payments_router)
     dp.include_router(admin_lookup_router)
+    dp.include_router(admin_recovery_router)
+    dp.include_router(admin_active_subscriptions_router)
 
     print("BOT ROUTERS LOADED:")
     print("- start")
@@ -60,6 +65,8 @@ async def main() -> None:
     print("- admin")
     print("- admin_invalid_payments")
     print("- admin_lookup")
+    print("- admin_recovery")
+    print("- admin_active_subscriptions")
 
     await dp.start_polling(bot)
 
