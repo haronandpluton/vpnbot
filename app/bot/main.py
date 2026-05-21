@@ -10,6 +10,9 @@ from app.bot.handlers.admin_active_subscriptions import (
 from app.bot.handlers.admin_invalid_payments import router as admin_invalid_payments_router
 from app.bot.handlers.admin_lookup import router as admin_lookup_router
 from app.bot.handlers.admin_recovery import router as admin_recovery_router
+from app.bot.handlers.admin_subscription_actions import (
+    router as admin_subscription_actions_router,
+)
 from app.bot.handlers.admin_subscription_lookup import (
     router as admin_subscription_lookup_router,
 )
@@ -59,6 +62,7 @@ async def main() -> None:
     dp.include_router(admin_active_subscriptions_router)
     dp.include_router(admin_subscription_lookup_router)
     dp.include_router(admin_user_lookup_router)
+    dp.include_router(admin_subscription_actions_router)
 
     print("BOT ROUTERS LOADED:")
     print("- start")
@@ -76,6 +80,7 @@ async def main() -> None:
     print("- admin_active_subscriptions")
     print("- admin_subscription_lookup")
     print("- admin_user_lookup")
+    print("- admin_subscription_actions")
 
     await dp.start_polling(bot)
 
