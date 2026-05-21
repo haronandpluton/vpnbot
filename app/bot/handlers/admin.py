@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.admin_menu import admin_back_keyboard, admin_main_menu_keyboard
 from app.config.settings import get_settings
+from app.services.admin_action_log_service import AdminActionLookupService
 from app.services.admin_active_subscriptions_service import (
     AdminActiveSubscriptionsService,
 )
@@ -45,6 +46,13 @@ def _format_datetime(value: Any) -> str:
     return value.strftime("%d.%m.%Y %H:%M")
 
 
+def _format_datetime_seconds(value: Any) -> str:
+    if value is None:
+        return "—"
+
+    return value.strftime("%d.%m.%Y %H:%M:%S")
+
+
 def _clean(value: Any) -> str:
     if value is None or value == "":
         return "—"
@@ -77,6 +85,7 @@ def _admin_menu_text() -> str:
         "Статистика — общие цифры проекта.\n"
         "Активные подписки — список действующих доступов.\n"
         "Некорректные платежи — wrong amount / wrong network / wrong currency.\n"
+        "Журнал действий — последние ручные действия администраторов.\n"
         "Поиск — карточки заказа, платежа, подписки или пользователя."
     )
 
@@ -131,6 +140,65 @@ def _format_stats_text(stats) -> str:
     )
 
 
+def _format_admin_actions_text(items) -> str:
+    if not items:
+        return (
+            "<b>Журнал действий</b>\n\n"
+            "Записей пока нет.\n\n"
+            "Команды:\n"
+            "<code>/admin_actions</code>\n"
+            "<code>/admin_actions_subscription 15</code>\n"
+            "<code>/admin_actions_user 58</code>"
+        )
+
+    blocks: list[str] = [
+        "<b>Журнал действий</b>\n"
+        "Последние 20 записей.\n"
+        f"Найдено: {len(items)}\n\n"
+    ]
+
+    for item in items:
+        admin_username = f"@{item.admin_username}" if item.admin_username else "—"
+
+        blocks.append(
+            f"<b>AdminAction #{item.action_id}</b>\n"
+            f"Action: {_clean(item.action_type)}\n"
+            f"Admin user ID: {_clean(item.admin_user_id)}\n"
+            f"Admin TG ID: {_clean(item.admin_telegram_id)}\n"
+            f"Admin username: {admin_username}\n"
+            f"Target user ID: {_clean(item.target_user_id)}\n"
+            f"Order ID: {_clean(item.order_id)}\n"
+            f"Payment ID: {_clean(item.payment_id)}\n"
+            f"Subscription ID: {_clean(item.subscription_id)}\n"
+            f"Reason: {_clean(item.reason)}\n"
+            f"Payload: <code>{_clean(item.payload)}</code>\n"
+            f"Created: {_format_datetime_seconds(item.created_at)}\n"
+            "Commands:\n"
+        )
+
+        if item.subscription_id is not None:
+            blocks.append(
+                f"<code>/admin_actions_subscription {item.subscription_id}</code>\n"
+                f"<code>/admin_subscription {item.subscription_id}</code>\n"
+            )
+
+        if item.target_user_id is not None:
+            blocks.append(
+                f"<code>/admin_actions_user {item.target_user_id}</code>\n"
+                f"<code>/admin_user {item.target_user_id}</code>\n"
+            )
+
+        if item.order_id is not None:
+            blocks.append(f"<code>/admin_order {item.order_id}</code>\n")
+
+        if item.payment_id is not None:
+            blocks.append(f"<code>/admin_payment {item.payment_id}</code>\n")
+
+        blocks.append("\n")
+
+    return "".join(blocks)
+
+
 async def _send_stats(message: Message, session: AsyncSession) -> None:
     stats = await AdminStatsService(session).get_stats()
 
@@ -149,6 +217,42 @@ async def _send_stats_callback(callback: CallbackQuery, session: AsyncSession) -
         reply_markup=admin_back_keyboard(),
         parse_mode="HTML",
     )
+    await callback.answer()
+
+
+async def _send_actions_callback(
+    callback: CallbackQuery,
+    session: AsyncSession,
+) -> None:
+    items = await AdminActionLookupService(session).get_last_actions(limit=20)
+    text = _format_admin_actions_text(items)
+
+    if len(text) <= TELEGRAM_MESSAGE_LIMIT:
+        await callback.message.edit_text(
+            text,
+            reply_markup=admin_back_keyboard(),
+            parse_mode="HTML",
+        )
+        await callback.answer()
+        return
+
+    blocks = text.split("\n\n")
+    prepared_blocks = [block + "\n\n" for block in blocks]
+    messages = _split_messages(prepared_blocks)
+
+    await callback.message.edit_text(
+        messages[0],
+        reply_markup=admin_back_keyboard(),
+        parse_mode="HTML",
+    )
+
+    for next_text in messages[1:]:
+        await callback.message.answer(
+            next_text,
+            reply_markup=admin_back_keyboard(),
+            parse_mode="HTML",
+        )
+
     await callback.answer()
 
 
@@ -256,6 +360,8 @@ async def _send_active_subscriptions_callback(
             f"<code>/admin_subscription {item.subscription_id}</code>\n"
             f"<code>/admin_order {_clean(item.order_id)}</code>\n"
             f"<code>/admin_resend_config {_clean(item.order_id)}</code>\n"
+            f"<code>/admin_extend_subscription {item.subscription_id} 30</code>\n"
+            f"<code>/admin_disable_subscription {item.subscription_id} reason</code>\n"
             "\n"
         )
 
@@ -359,6 +465,21 @@ async def admin_menu_invalid_payments_callback(
         return
 
     await _send_invalid_payments_callback(callback, session)
+
+
+@router.callback_query(F.data == "admin_menu:actions")
+async def admin_menu_actions_callback(
+    callback: CallbackQuery,
+    session: AsyncSession,
+):
+    if callback.from_user is None:
+        return
+
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+
+    await _send_actions_callback(callback, session)
 
 
 @router.callback_query(F.data == "admin_menu:order_lookup_help")
