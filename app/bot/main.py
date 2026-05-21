@@ -4,6 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from app.bot.handlers.admin import router as admin_router
+from app.bot.handlers.admin_actions_lookup import router as admin_actions_lookup_router
 from app.bot.handlers.admin_active_subscriptions import (
     router as admin_active_subscriptions_router,
 )
@@ -63,6 +64,7 @@ async def main() -> None:
     dp.include_router(admin_subscription_lookup_router)
     dp.include_router(admin_user_lookup_router)
     dp.include_router(admin_subscription_actions_router)
+    dp.include_router(admin_actions_lookup_router)
 
     print("BOT ROUTERS LOADED:")
     print("- start")
@@ -81,6 +83,7 @@ async def main() -> None:
     print("- admin_subscription_lookup")
     print("- admin_user_lookup")
     print("- admin_subscription_actions")
+    print("- admin_actions_lookup")
 
     await dp.start_polling(bot)
 

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import Subscription
 from app.payment_core.enums.subscription_status import SubscriptionStatus
+from app.services.admin_action_log_service import AdminActionLogService
 
 
 @dataclass
@@ -18,6 +19,7 @@ class AdminExtendSubscriptionResult:
     user_id: int | None = None
     order_id: int | None = None
     uuid: str | None = None
+    admin_action_id: int | None = None
     message: str | None = None
 
 
@@ -32,17 +34,20 @@ class AdminDisableSubscriptionResult:
     uuid: str | None = None
     disabled_at: datetime | None = None
     reason: str | None = None
+    admin_action_id: int | None = None
     message: str | None = None
 
 
 class AdminSubscriptionActionsService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        self.action_log_service = AdminActionLogService(session)
 
     async def extend_subscription(
         self,
         subscription_id: int,
         days: int,
+        admin_telegram_id: int,
     ) -> AdminExtendSubscriptionResult:
         if days <= 0:
             return AdminExtendSubscriptionResult(
@@ -65,9 +70,7 @@ class AdminSubscriptionActionsService:
         old_expires_at = subscription.expires_at
         now = datetime.now(timezone.utc)
 
-        if old_expires_at is None:
-            base_date = now
-        elif old_expires_at <= now:
+        if old_expires_at is None or old_expires_at <= now:
             base_date = now
         else:
             base_date = old_expires_at
@@ -76,6 +79,37 @@ class AdminSubscriptionActionsService:
 
         subscription.expires_at = new_expires_at
         subscription.updated_at = now
+
+        payload = (
+            f"old_expires_at={old_expires_at}; "
+            f"new_expires_at={new_expires_at}; "
+            f"days={days}"
+        )
+
+        action_result = await self.action_log_service.create_action_by_admin_telegram_id(
+            admin_telegram_id=admin_telegram_id,
+            action_type="manual_extend_subscription",
+            target_user_id=subscription.user_id,
+            order_id=subscription.order_id,
+            subscription_id=subscription.id,
+            reason=f"extend_days:{days}",
+            payload=payload,
+            commit=False,
+        )
+
+        if action_result.status != "created":
+            await self.session.rollback()
+            return AdminExtendSubscriptionResult(
+                status=action_result.status,
+                subscription_id=subscription_id,
+                days=days,
+                old_expires_at=old_expires_at,
+                new_expires_at=new_expires_at,
+                user_id=subscription.user_id,
+                order_id=subscription.order_id,
+                uuid=subscription.uuid,
+                message=action_result.message,
+            )
 
         await self.session.commit()
         await self.session.refresh(subscription)
@@ -89,6 +123,7 @@ class AdminSubscriptionActionsService:
             user_id=subscription.user_id,
             order_id=subscription.order_id,
             uuid=subscription.uuid,
+            admin_action_id=action_result.action_id,
             message="Subscription extended.",
         )
 
@@ -96,6 +131,7 @@ class AdminSubscriptionActionsService:
         self,
         subscription_id: int,
         reason: str,
+        admin_telegram_id: int,
     ) -> AdminDisableSubscriptionResult:
         clean_reason = reason.strip()
 
@@ -124,6 +160,38 @@ class AdminSubscriptionActionsService:
         subscription.error_reason = clean_reason
         subscription.updated_at = now
 
+        payload = (
+            f"old_status={old_status}; "
+            f"new_status={SubscriptionStatus.DISABLED.value}; "
+            f"disabled_at={now}"
+        )
+
+        action_result = await self.action_log_service.create_action_by_admin_telegram_id(
+            admin_telegram_id=admin_telegram_id,
+            action_type="manual_disable_subscription",
+            target_user_id=subscription.user_id,
+            order_id=subscription.order_id,
+            subscription_id=subscription.id,
+            reason=clean_reason,
+            payload=payload,
+            commit=False,
+        )
+
+        if action_result.status != "created":
+            await self.session.rollback()
+            return AdminDisableSubscriptionResult(
+                status=action_result.status,
+                subscription_id=subscription_id,
+                old_status=old_status,
+                new_status=SubscriptionStatus.DISABLED.value,
+                user_id=subscription.user_id,
+                order_id=subscription.order_id,
+                uuid=subscription.uuid,
+                disabled_at=now,
+                reason=clean_reason,
+                message=action_result.message,
+            )
+
         await self.session.commit()
         await self.session.refresh(subscription)
 
@@ -137,6 +205,7 @@ class AdminSubscriptionActionsService:
             uuid=subscription.uuid,
             disabled_at=subscription.disabled_at,
             reason=subscription.error_reason,
+            admin_action_id=action_result.action_id,
             message="Subscription disabled.",
         )
 

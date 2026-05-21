@@ -4,6 +4,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import get_settings
+from app.services.admin_action_log_service import AdminActionLogService
 from app.services.admin_recovery_service import AdminRecoveryService
 
 router = Router()
@@ -130,6 +131,22 @@ async def admin_resend_config_command(
         )
         return
 
+    action_result = await AdminActionLogService(
+        session,
+    ).create_action_by_admin_telegram_id(
+        admin_telegram_id=message.from_user.id,
+        action_type="admin_resend_config",
+        target_user_id=result.user_id,
+        order_id=result.order_id,
+        subscription_id=result.subscription_id,
+        reason="manual_resend_config",
+        payload=(
+            f"telegram_id={result.telegram_id}; "
+            f"expires_at={result.expires_at}"
+        ),
+        commit=True,
+    )
+
     username_text = f"@{result.username}" if result.username else "—"
 
     admin_text = (
@@ -139,7 +156,8 @@ async def admin_resend_config_command(
         f"Telegram ID: {result.telegram_id}\n"
         f"Username: {username_text}\n"
         f"Subscription ID: {result.subscription_id}\n"
-        f"Активна до: {_format_datetime(result.expires_at)}"
+        f"Активна до: {_format_datetime(result.expires_at)}\n"
+        f"Admin action ID: {action_result.action_id if action_result.status == 'created' else '—'}"
     )
 
     await message.answer(admin_text)

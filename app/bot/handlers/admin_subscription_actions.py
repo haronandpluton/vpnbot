@@ -104,6 +104,7 @@ async def admin_extend_subscription_command(
     result = await AdminSubscriptionActionsService(session).extend_subscription(
         subscription_id=subscription_id,
         days=days,
+        admin_telegram_id=message.from_user.id,
     )
 
     if result.status == "invalid_days":
@@ -115,6 +116,13 @@ async def admin_extend_subscription_command(
 
     if result.status == "subscription_not_found":
         await message.answer(f"Subscription #{subscription_id} не найдена.")
+        return
+
+    if result.status == "admin_user_not_found":
+        await message.answer(
+            "Не удалось записать admin action.\n"
+            "Админ не найден в таблице users."
+        )
         return
 
     if result.status != "extended":
@@ -132,10 +140,12 @@ async def admin_extend_subscription_command(
         f"Days added: {result.days}\n"
         f"Old expires at: {_format_datetime(result.old_expires_at)}\n"
         f"New expires at: {_format_datetime(result.new_expires_at)}\n"
-        f"UUID: <code>{_clean(result.uuid)}</code>\n\n"
+        f"UUID: <code>{_clean(result.uuid)}</code>\n"
+        f"Admin action ID: {_clean(result.admin_action_id)}\n\n"
         "Команды:\n"
         f"<code>/admin_subscription {result.subscription_id}</code>\n"
-        f"<code>/admin_order {_clean(result.order_id)}</code>\n",
+        f"<code>/admin_order {_clean(result.order_id)}</code>\n"
+        f"<code>/admin_actions_subscription {result.subscription_id}</code>\n",
         parse_mode="HTML",
     )
 
@@ -175,6 +185,7 @@ async def admin_disable_subscription_command(
     result = await AdminSubscriptionActionsService(session).disable_subscription(
         subscription_id=subscription_id,
         reason=reason,
+        admin_telegram_id=message.from_user.id,
     )
 
     if result.status == "invalid_reason":
@@ -183,6 +194,13 @@ async def admin_disable_subscription_command(
 
     if result.status == "subscription_not_found":
         await message.answer(f"Subscription #{subscription_id} не найдена.")
+        return
+
+    if result.status == "admin_user_not_found":
+        await message.answer(
+            "Не удалось записать admin action.\n"
+            "Админ не найден в таблице users."
+        )
         return
 
     if result.status != "disabled":
@@ -201,9 +219,11 @@ async def admin_disable_subscription_command(
         f"New status: {_clean(result.new_status)}\n"
         f"Disabled at: {_format_datetime(result.disabled_at)}\n"
         f"Reason: {_clean(result.reason)}\n"
-        f"UUID: <code>{_clean(result.uuid)}</code>\n\n"
+        f"UUID: <code>{_clean(result.uuid)}</code>\n"
+        f"Admin action ID: {_clean(result.admin_action_id)}\n\n"
         "Команды:\n"
         f"<code>/admin_subscription {result.subscription_id}</code>\n"
-        f"<code>/admin_order {_clean(result.order_id)}</code>\n",
+        f"<code>/admin_order {_clean(result.order_id)}</code>\n"
+        f"<code>/admin_actions_subscription {result.subscription_id}</code>\n",
         parse_mode="HTML",
     )
