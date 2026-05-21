@@ -10,6 +10,9 @@ from app.bot.handlers.admin_active_subscriptions import (
 from app.bot.handlers.admin_invalid_payments import router as admin_invalid_payments_router
 from app.bot.handlers.admin_lookup import router as admin_lookup_router
 from app.bot.handlers.admin_recovery import router as admin_recovery_router
+from app.bot.handlers.admin_subscription_lookup import (
+    router as admin_subscription_lookup_router,
+)
 from app.bot.handlers.buy import router as buy_router
 from app.bot.handlers.dev_payment import router as dev_payment_router
 from app.bot.handlers.dev_subscription import router as dev_subscription_router
@@ -40,6 +43,7 @@ async def main() -> None:
     dp.include_router(buy_router)
     dp.include_router(info_router)
 
+    # Dev/test routers. Later these should be protected by admin access or removed.
     dp.include_router(test_payment_check_router)
     dp.include_router(dev_payment_router)
     dp.include_router(dev_subscription_router)
@@ -52,6 +56,7 @@ async def main() -> None:
     dp.include_router(admin_lookup_router)
     dp.include_router(admin_recovery_router)
     dp.include_router(admin_active_subscriptions_router)
+    dp.include_router(admin_subscription_lookup_router)
 
     print("BOT ROUTERS LOADED:")
     print("- start")
@@ -67,6 +72,7 @@ async def main() -> None:
     print("- admin_lookup")
     print("- admin_recovery")
     print("- admin_active_subscriptions")
+    print("- admin_subscription_lookup")
 
     await dp.start_polling(bot)
 
