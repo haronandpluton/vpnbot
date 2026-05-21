@@ -53,6 +53,27 @@ def _parse_extend_args(message: Message) -> tuple[int, int] | None:
     return int(raw_subscription_id), int(raw_days)
 
 
+def _parse_disable_args(message: Message) -> tuple[int, str] | None:
+    if message.text is None:
+        return None
+
+    parts = message.text.strip().split(maxsplit=2)
+
+    if len(parts) != 3:
+        return None
+
+    raw_subscription_id = parts[1].strip()
+    reason = parts[2].strip()
+
+    if not raw_subscription_id.isdigit():
+        return None
+
+    if not reason:
+        return None
+
+    return int(raw_subscription_id), reason
+
+
 @router.message(Command("admin_extend_subscription"))
 async def admin_extend_subscription_command(
     message: Message,
@@ -111,6 +132,75 @@ async def admin_extend_subscription_command(
         f"Days added: {result.days}\n"
         f"Old expires at: {_format_datetime(result.old_expires_at)}\n"
         f"New expires at: {_format_datetime(result.new_expires_at)}\n"
+        f"UUID: <code>{_clean(result.uuid)}</code>\n\n"
+        "Команды:\n"
+        f"<code>/admin_subscription {result.subscription_id}</code>\n"
+        f"<code>/admin_order {_clean(result.order_id)}</code>\n",
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("admin_disable_subscription"))
+async def admin_disable_subscription_command(
+    message: Message,
+    session: AsyncSession,
+):
+    if message.from_user is None:
+        return
+
+    if not _is_admin(message.from_user.id):
+        await message.answer("Нет доступа.")
+        return
+
+    args = _parse_disable_args(message)
+
+    if args is None:
+        await message.answer(
+            "Использование:\n"
+            "<code>/admin_disable_subscription 14 abuse</code>\n\n"
+            "Где:\n"
+            "14 — Subscription ID\n"
+            "abuse — причина отключения\n\n"
+            "Примеры причин:\n"
+            "<code>abuse</code>\n"
+            "<code>manual_refund</code>\n"
+            "<code>chargeback</code>\n"
+            "<code>test_cleanup</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    subscription_id, reason = args
+
+    result = await AdminSubscriptionActionsService(session).disable_subscription(
+        subscription_id=subscription_id,
+        reason=reason,
+    )
+
+    if result.status == "invalid_reason":
+        await message.answer("Причина отключения обязательна.")
+        return
+
+    if result.status == "subscription_not_found":
+        await message.answer(f"Subscription #{subscription_id} не найдена.")
+        return
+
+    if result.status != "disabled":
+        await message.answer(
+            "Не удалось отключить подписку.\n\n"
+            f"Status: {result.status}"
+        )
+        return
+
+    await message.answer(
+        "<b>Подписка отключена</b>\n\n"
+        f"Subscription ID: {result.subscription_id}\n"
+        f"User ID: {_clean(result.user_id)}\n"
+        f"Order ID: {_clean(result.order_id)}\n"
+        f"Old status: {_clean(result.old_status)}\n"
+        f"New status: {_clean(result.new_status)}\n"
+        f"Disabled at: {_format_datetime(result.disabled_at)}\n"
+        f"Reason: {_clean(result.reason)}\n"
         f"UUID: <code>{_clean(result.uuid)}</code>\n\n"
         "Команды:\n"
         f"<code>/admin_subscription {result.subscription_id}</code>\n"
