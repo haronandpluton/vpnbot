@@ -13,6 +13,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    dev_mode: bool = False
+
     app_env: AppEnv = Field(default=AppEnv.DEV, alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 

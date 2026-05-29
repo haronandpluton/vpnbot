@@ -27,6 +27,7 @@ from app.bot.handlers.payment_check import router as payment_check_router
 from app.bot.handlers.start import router as start_router
 from app.bot.handlers.test_payment_check import router as test_payment_check_router
 from app.bot.middlewares.db_session import DbSessionMiddleware
+from app.bot.middlewares.dev_commands_guard import DevCommandsGuardMiddleware
 from app.config.settings import get_settings
 from app.database.session import SessionLocal
 
@@ -43,12 +44,13 @@ async def main() -> None:
     dp = Dispatcher()
 
     dp.update.middleware(DbSessionMiddleware(SessionLocal))
+    dp.message.middleware(DevCommandsGuardMiddleware())
 
     dp.include_router(start_router)
     dp.include_router(buy_router)
     dp.include_router(info_router)
 
-    # Dev/test routers. Later these should be protected by admin access or removed.
+    # Dev/test routers are protected by DevCommandsGuardMiddleware.
     dp.include_router(test_payment_check_router)
     dp.include_router(dev_payment_router)
     dp.include_router(dev_subscription_router)
@@ -84,6 +86,7 @@ async def main() -> None:
     print("- admin_user_lookup")
     print("- admin_subscription_actions")
     print("- admin_actions_lookup")
+    print("- dev_commands_guard")
 
     await dp.start_polling(bot)
 
