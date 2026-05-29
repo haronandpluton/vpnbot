@@ -45,17 +45,17 @@ async def main() -> None:
     dp = Dispatcher()
 
     dp.update.middleware(DbSessionMiddleware(SessionLocal))
+
+    # Production safety layer:
+    # even if dev/test routers are accidentally enabled,
+    # dangerous dev commands are still blocked unless:
+    # 1) sender is admin;
+    # 2) DEV_MODE=true.
     dp.message.middleware(DevCommandsGuardMiddleware())
 
     dp.include_router(start_router)
     dp.include_router(buy_router)
     dp.include_router(info_router)
-
-    # Dev/test routers are protected by DevCommandsGuardMiddleware.
-    # In production DEV_MODE must be false.
-    dp.include_router(test_payment_check_router)
-    dp.include_router(dev_payment_router)
-    dp.include_router(dev_subscription_router)
 
     dp.include_router(my_subscription_router)
     dp.include_router(payment_check_router)
@@ -75,9 +75,6 @@ async def main() -> None:
     print("- start")
     print("- buy")
     print("- info")
-    print("- test_payment_check")
-    print("- dev_payment")
-    print("- dev_subscription")
     print("- my_subscription")
     print("- payment_check")
     print("- admin")
@@ -91,6 +88,21 @@ async def main() -> None:
     print("- admin_actions_lookup")
     print("- admin_commands_help")
     print("- dev_commands_guard")
+
+    if settings.dev_mode:
+        # Dev/test routers are available only in local development mode.
+        # In production DEV_MODE must be false, so these handlers are not loaded.
+        dp.include_router(test_payment_check_router)
+        dp.include_router(dev_payment_router)
+        dp.include_router(dev_subscription_router)
+
+        print("DEV MODE ENABLED:")
+        print("- test_payment_check")
+        print("- dev_payment")
+        print("- dev_subscription")
+    else:
+        print("DEV MODE DISABLED:")
+        print("- dev/test routers are not loaded")
 
     await dp.start_polling(bot)
 
