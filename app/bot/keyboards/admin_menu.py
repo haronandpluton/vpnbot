@@ -30,6 +30,12 @@ def admin_main_menu_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="Список команд",
+                    callback_data="admin_menu:commands_help",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="Поиск заказа",
                     callback_data="admin_menu:order_lookup_help",
                 ),

@@ -8,6 +8,7 @@ from app.bot.handlers.admin_actions_lookup import router as admin_actions_lookup
 from app.bot.handlers.admin_active_subscriptions import (
     router as admin_active_subscriptions_router,
 )
+from app.bot.handlers.admin_commands_help import router as admin_commands_help_router
 from app.bot.handlers.admin_invalid_payments import router as admin_invalid_payments_router
 from app.bot.handlers.admin_lookup import router as admin_lookup_router
 from app.bot.handlers.admin_recovery import router as admin_recovery_router
@@ -51,6 +52,7 @@ async def main() -> None:
     dp.include_router(info_router)
 
     # Dev/test routers are protected by DevCommandsGuardMiddleware.
+    # In production DEV_MODE must be false.
     dp.include_router(test_payment_check_router)
     dp.include_router(dev_payment_router)
     dp.include_router(dev_subscription_router)
@@ -67,6 +69,7 @@ async def main() -> None:
     dp.include_router(admin_user_lookup_router)
     dp.include_router(admin_subscription_actions_router)
     dp.include_router(admin_actions_lookup_router)
+    dp.include_router(admin_commands_help_router)
 
     print("BOT ROUTERS LOADED:")
     print("- start")
@@ -86,6 +89,7 @@ async def main() -> None:
     print("- admin_user_lookup")
     print("- admin_subscription_actions")
     print("- admin_actions_lookup")
+    print("- admin_commands_help")
     print("- dev_commands_guard")
 
     await dp.start_polling(bot)

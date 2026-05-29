@@ -7,6 +7,14 @@ from aiogram.types import Message, TelegramObject
 from app.bot.utils.access import is_admin, is_dev_mode_enabled
 
 
+# Production safety note:
+# This middleware is a centralized guard layer for development/test commands.
+# It runs before command handlers and blocks dangerous dev actions unless:
+# 1) the sender is an admin;
+# 2) DEV_MODE=true is enabled in environment settings.
+#
+# This allows keeping dev handlers in the codebase for local testing while
+# preventing accidental use in production.
 DEV_COMMANDS = {
     "/dev_create_active_subscription",
     "/dev_payment",
