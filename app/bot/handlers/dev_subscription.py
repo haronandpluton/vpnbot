@@ -10,6 +10,9 @@ from app.payment_adapters.base import NormalizedTransaction
 from app.payment_polling.processor import PaymentPollingProcessor
 from app.services.order_service import OrderService
 
+from app.bot.keyboards.vpn_access import vpn_access_keyboard
+from app.bot.texts.vpn_access import format_vpn_access_text
+
 router = Router()
 
 
@@ -69,3 +72,10 @@ async def dev_create_active_subscription_command(
     )
 
     await message.answer(text)
+    await message.answer(
+        format_vpn_access_text(
+            device_limit=subscription.device_limit,
+            expires_at=subscription.expires_at,
+        ),
+        reply_markup=vpn_access_keyboard(),
+    )

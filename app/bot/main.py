@@ -32,6 +32,9 @@ from app.bot.middlewares.dev_commands_guard import DevCommandsGuardMiddleware
 from app.config.settings import get_settings
 from app.database.session import SessionLocal
 
+
+from app.bot.handlers.vpn_access import router as vpn_access_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,6 +62,7 @@ async def main() -> None:
     dp.include_router(info_router)
 
     dp.include_router(my_subscription_router)
+    dp.include_router(vpn_access_router)
     dp.include_router(payment_check_router)
 
     dp.include_router(admin_router)

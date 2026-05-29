@@ -7,6 +7,9 @@ from app.config.settings import get_settings
 from app.services.admin_action_log_service import AdminActionLogService
 from app.services.admin_recovery_service import AdminRecoveryService
 
+from app.bot.keyboards.vpn_access import vpn_access_keyboard
+from app.bot.texts.vpn_access import format_vpn_access_text
+
 router = Router()
 
 
@@ -109,10 +112,11 @@ async def admin_resend_config_command(
         return
 
     user_text = (
-        "Твой VPN-конфиг повторно отправлен администратором.\n\n"
-        f"Активен до: {_format_datetime(result.expires_at)}\n\n"
-        "Конфиг для подключения:\n"
-        f"<code>{result.config_uri}</code>"
+            "Твой VPN-доступ повторно отправлен администратором.\n\n"
+            + format_vpn_access_text(
+        device_limit=None,
+        expires_at=result.expires_at,
+        )
     )
 
     try:
@@ -120,6 +124,7 @@ async def admin_resend_config_command(
             chat_id=result.telegram_id,
             text=user_text,
             parse_mode="HTML",
+            reply_markup=vpn_access_keyboard(),
         )
     except Exception as exc:
         await message.answer(

@@ -3,6 +3,8 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.keyboards.vpn_access import vpn_access_keyboard
+from app.bot.texts.vpn_access import format_vpn_access_text
 from app.services.my_subscription_service import MySubscriptionService
 
 router = Router()
@@ -18,21 +20,13 @@ async def my_subscription_command(
     )
 
     if result.status == "active":
-        expires_at_text = (
-            result.expires_at.strftime("%d.%m.%Y %H:%M")
-            if result.expires_at is not None
-            else "не указано"
+        await message.answer(
+            format_vpn_access_text(
+                device_limit=result.device_limit,
+                expires_at=result.expires_at,
+            ),
+            reply_markup=vpn_access_keyboard(),
         )
-
-        text = (
-            "Твоя VPN-подписка активна.\n\n"
-            f"Устройств: {result.device_limit}\n"
-            f"Активна до: {expires_at_text}\n\n"
-            "Конфиг для подключения:\n"
-            f"<code>{result.config_uri}</code>"
-        )
-
-        await message.answer(text, parse_mode="HTML")
         return
 
     if result.status == "user_not_found":
