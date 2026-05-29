@@ -32,6 +32,8 @@ from app.bot.middlewares.dev_commands_guard import DevCommandsGuardMiddleware
 from app.config.settings import get_settings
 from app.database.session import SessionLocal
 
+logger = logging.getLogger(__name__)
+
 
 async def main() -> None:
     settings = get_settings()
@@ -47,8 +49,7 @@ async def main() -> None:
     dp.update.middleware(DbSessionMiddleware(SessionLocal))
 
     # Production safety layer:
-    # even if dev/test routers are accidentally enabled,
-    # dangerous dev commands are still blocked unless:
+    # Dev/test commands are blocked unless:
     # 1) sender is admin;
     # 2) DEV_MODE=true.
     dp.message.middleware(DevCommandsGuardMiddleware())
@@ -71,23 +72,8 @@ async def main() -> None:
     dp.include_router(admin_actions_lookup_router)
     dp.include_router(admin_commands_help_router)
 
-    print("BOT ROUTERS LOADED:")
-    print("- start")
-    print("- buy")
-    print("- info")
-    print("- my_subscription")
-    print("- payment_check")
-    print("- admin")
-    print("- admin_invalid_payments")
-    print("- admin_lookup")
-    print("- admin_recovery")
-    print("- admin_active_subscriptions")
-    print("- admin_subscription_lookup")
-    print("- admin_user_lookup")
-    print("- admin_subscription_actions")
-    print("- admin_actions_lookup")
-    print("- admin_commands_help")
-    print("- dev_commands_guard")
+    logger.info("Базовые роутеры загружены")
+    logger.info("Защита dev-команд включена")
 
     if settings.dev_mode:
         # Dev/test routers are available only in local development mode.
@@ -96,13 +82,9 @@ async def main() -> None:
         dp.include_router(dev_payment_router)
         dp.include_router(dev_subscription_router)
 
-        print("DEV MODE ENABLED:")
-        print("- test_payment_check")
-        print("- dev_payment")
-        print("- dev_subscription")
+        logger.warning("DEV_MODE=true: dev/test-роутеры загружены")
     else:
-        print("DEV MODE DISABLED:")
-        print("- dev/test routers are not loaded")
+        logger.info("DEV_MODE=false: dev/test-роутеры не загружены")
 
     await dp.start_polling(bot)
 
