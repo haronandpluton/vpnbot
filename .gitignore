@@ -31,3 +31,4 @@ dist/
 
 # Alembic / logs if needed later
 *.log
+*.sql
