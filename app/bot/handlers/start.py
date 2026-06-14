@@ -54,8 +54,9 @@ async def my_subscription_callback(
             "Твоя VPN-подписка активна.\n\n"
             f"Устройств: {result.device_limit}\n"
             f"Активна до: {expires_at_text}\n\n"
-            "Конфиг для подключения:\n"
-            f"<code>{result.config_uri}</code>"
+            "Ссылка подписки для приложения:\n"
+            f"<code>{result.config_uri}</code>\n\n"
+            "Добавь эту ссылку в Happ VPN как Subscription / Подписку."
         )
 
         await callback.message.answer(text, parse_mode="HTML")

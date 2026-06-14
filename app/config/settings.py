@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     xray_panel_username: str = Field(default="", alias="XRAY_PANEL_USERNAME")
     xray_panel_password: str = Field(default="", alias="XRAY_PANEL_PASSWORD")
 
+    xui_base_url: str = Field(default="", alias="XUI_BASE_URL")
+    xui_username: str = Field(default="", alias="XUI_USERNAME")
+    xui_password: str = Field(default="", alias="XUI_PASSWORD")
+    xui_inbound_id: int = Field(default=9, alias="XUI_INBOUND_ID")
+
     vpn_default_server_name: str = Field(default="default-node", alias="VPN_DEFAULT_SERVER_NAME")
     vpn_default_inbound_id: int = Field(default=1, alias="VPN_DEFAULT_INBOUND_ID")
 
