@@ -37,7 +37,7 @@ async def show_vpn_config_callback(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="Открыть страницу подключения",
+                        text="Открыть в Happ VPN",
                         url=result.config_uri,
                     )
                 ]
