@@ -6,6 +6,7 @@ from app.services.xui_client import make_xui_client_from_settings
 
 
 SUBSCRIPTION_BASE_URL = "https://lab83607.hostkey.in:2097/sub"
+CONNECT_BASE_URL = "https://lab83607.hostkey.in:2097/connect"
 
 
 @dataclass(slots=True)
@@ -19,18 +20,23 @@ def build_subscription_url(token: str) -> str:
     return f"{SUBSCRIPTION_BASE_URL}/{token}"
 
 
+def build_connect_url(token: str, device: str = "android") -> str:
+    return f"{CONNECT_BASE_URL}/{token}?device={device}"
+
+
 def build_client_email(user_id: int, client_uuid: str) -> str:
     return f"tg-{user_id}-{client_uuid[:8]}"
 
 
 class VpnAccessService:
     """
-    Создаёт VPN-доступ в 3x-ui и возвращает пользователю subscription-ссылку.
+    Создаёт VPN-доступ в 3x-ui и возвращает пользователю страницу подключения.
 
-    Поток:
-    1. Генерируем UUID.
-    2. Создаём клиента в 3x-ui inbound 443.
-    3. Возвращаем ссылку https://lab83607.hostkey.in:2097/sub/<uuid>
+    Техническая подписка:
+    https://lab83607.hostkey.in:2097/sub/<uuid>
+
+    Пользовательская страница подключения:
+    https://lab83607.hostkey.in:2097/connect/<uuid>?device=android
     """
 
     def __init__(self) -> None:
@@ -52,7 +58,7 @@ class VpnAccessService:
             comment=f"telegram user {user_id}",
         )
 
-        config_uri = build_subscription_url(access_uuid)
+        config_uri = build_connect_url(access_uuid)
 
         return VpnAccessResult(
             uuid=access_uuid,
@@ -65,7 +71,7 @@ class VpnAccessService:
         uuid: str,
         device_limit: int,
     ) -> VpnAccessResult:
-        config_uri = build_subscription_url(uuid)
+        config_uri = build_connect_url(uuid)
 
         return VpnAccessResult(
             uuid=uuid,
@@ -78,4 +84,4 @@ class VpnAccessService:
         uuid: str,
         device_limit: int,
     ) -> str:
-        return build_subscription_url(uuid)
+        return build_connect_url(uuid)

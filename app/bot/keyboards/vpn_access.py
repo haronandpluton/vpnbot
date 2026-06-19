@@ -6,7 +6,7 @@ def vpn_access_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Показать ключ",
+                    text="Подключить VPN",
                     callback_data="vpn_access:show_config",
                 )
             ],

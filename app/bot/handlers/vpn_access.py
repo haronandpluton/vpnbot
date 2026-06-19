@@ -1,5 +1,5 @@
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.texts.vpn_access import (
@@ -33,6 +33,16 @@ async def show_vpn_config_callback(
     await callback.message.answer(
         format_vpn_config_text(result.config_uri),
         parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="Открыть страницу подключения",
+                        url=result.config_uri,
+                    )
+                ]
+            ]
+        ),
     )
     await callback.answer()
 
