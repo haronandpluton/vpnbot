@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
 from app.database.models import Subscription
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.admin_action_log_service import AdminActionLogService
@@ -114,7 +115,7 @@ class AdminSubscriptionActionsService:
         await self.session.commit()
         await self.session.refresh(subscription)
 
-        return AdminExtendSubscriptionResult(
+        result = AdminExtendSubscriptionResult(
             status="extended",
             subscription_id=subscription.id,
             days=days,
@@ -126,6 +127,28 @@ class AdminSubscriptionActionsService:
             admin_action_id=action_result.action_id,
             message="Subscription extended.",
         )
+
+        await SubscriptionMetaSyncService(self.session).sync_safely(
+            entity_type="subscription",
+            entity_id=subscription.id,
+            reason="manual_extend_subscription",
+            payload={
+                "subscription_id": subscription.id,
+                "user_id": subscription.user_id,
+                "order_id": subscription.order_id,
+                "uuid": subscription.uuid,
+                "old_expires_at": None
+                if old_expires_at is None
+                else old_expires_at.isoformat(),
+                "new_expires_at": None
+                if result.new_expires_at is None
+                else result.new_expires_at.isoformat(),
+                "days": days,
+                "admin_action_id": action_result.action_id,
+            },
+        )
+
+        return result
 
     async def disable_subscription(
         self,
@@ -195,7 +218,7 @@ class AdminSubscriptionActionsService:
         await self.session.commit()
         await self.session.refresh(subscription)
 
-        return AdminDisableSubscriptionResult(
+        result = AdminDisableSubscriptionResult(
             status="disabled",
             subscription_id=subscription.id,
             old_status=old_status,
@@ -208,6 +231,27 @@ class AdminSubscriptionActionsService:
             admin_action_id=action_result.action_id,
             message="Subscription disabled.",
         )
+
+        await SubscriptionMetaSyncService(self.session).sync_safely(
+            entity_type="subscription",
+            entity_id=subscription.id,
+            reason="manual_disable_subscription",
+            payload={
+                "subscription_id": subscription.id,
+                "user_id": subscription.user_id,
+                "order_id": subscription.order_id,
+                "uuid": subscription.uuid,
+                "old_status": old_status,
+                "new_status": result.new_status,
+                "disabled_at": None
+                if result.disabled_at is None
+                else result.disabled_at.isoformat(),
+                "reason": clean_reason,
+                "admin_action_id": action_result.action_id,
+            },
+        )
+
+        return result
 
     async def _get_subscription(self, subscription_id: int) -> Subscription | None:
         result = await self.session.execute(

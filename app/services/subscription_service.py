@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
 from app.database.repositories.orders import OrderRepository
 from app.database.repositories.subscriptions import SubscriptionRepository
 from app.payment_core.enums.order_status import OrderStatus
@@ -52,6 +53,25 @@ class SubscriptionService:
                 )
 
                 await self.session.commit()
+
+                await SubscriptionMetaSyncService(self.session).sync_safely(
+                    entity_type="order",
+                    entity_id=order.id,
+                    reason="activated_order_resync",
+                    payload={
+                        "order_id": order.id,
+                        "user_id": active_subscription.user_id,
+                        "subscription_id": active_subscription.id,
+                        "uuid": active_subscription.uuid,
+                        "expires_at": None
+                        if active_subscription.expires_at is None
+                        else active_subscription.expires_at.isoformat(),
+                        "status": str(active_subscription.status.value),
+                    },
+                )
+
+                await self.session.refresh(active_subscription)
+
                 return active_subscription, config_uri
 
             if order.status != OrderStatus.PAID:
@@ -79,6 +99,24 @@ class SubscriptionService:
 
             await self.session.flush()
             await self.session.commit()
+
+            await SubscriptionMetaSyncService(self.session).sync_safely(
+                entity_type="order",
+                entity_id=order.id,
+                reason="post_payment_subscription_change",
+                payload={
+                    "order_id": order.id,
+                    "user_id": subscription.user_id,
+                    "subscription_id": subscription.id,
+                    "uuid": subscription.uuid,
+                    "expires_at": None
+                    if subscription.expires_at is None
+                    else subscription.expires_at.isoformat(),
+                    "status": str(subscription.status.value),
+                },
+            )
+
+            await self.session.refresh(subscription)
 
             return subscription, config_uri
 
