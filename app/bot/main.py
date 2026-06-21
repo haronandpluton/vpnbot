@@ -38,6 +38,7 @@ from app.database.session import SessionLocal
 
 
 from app.bot.handlers.vpn_access import router as vpn_access_router
+from app.bot.handlers.admin_subscription_expiration import router as admin_subscription_expiration_router
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ async def main() -> None:
     dp.include_router(admin_actions_lookup_router)
     dp.include_router(admin_subscription_meta_sync_router)
     dp.include_router(admin_commands_help_router)
+    dp.include_router(admin_subscription_expiration_router)
 
     logger.info("Базовые роутеры загружены")
     logger.info("Защита dev-команд включена")
