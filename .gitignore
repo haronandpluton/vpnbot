@@ -32,3 +32,5 @@ dist/
 # Alembic / logs if needed later
 *.log
 *.sql
+
+deploy/vpn-subscription/subscriptions_meta.generated.json
