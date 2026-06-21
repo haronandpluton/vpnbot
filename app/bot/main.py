@@ -3,6 +3,10 @@ import logging
 
 from aiogram import Bot, Dispatcher
 
+from app.bot.handlers.admin_subscription_meta_sync import (
+    router as admin_subscription_meta_sync_router,
+)
+
 from app.bot.handlers.admin import router as admin_router
 from app.bot.handlers.admin_actions_lookup import router as admin_actions_lookup_router
 from app.bot.handlers.admin_active_subscriptions import (
@@ -74,6 +78,7 @@ async def main() -> None:
     dp.include_router(admin_user_lookup_router)
     dp.include_router(admin_subscription_actions_router)
     dp.include_router(admin_actions_lookup_router)
+    dp.include_router(admin_subscription_meta_sync_router)
     dp.include_router(admin_commands_help_router)
 
     logger.info("Базовые роутеры загружены")

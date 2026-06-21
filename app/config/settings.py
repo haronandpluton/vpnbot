@@ -46,6 +46,23 @@ class Settings(BaseSettings):
 
     support_username: str = Field(default="", alias="SUPPORT_USERNAME")
 
+    subscription_meta_output_path: str = Field(
+        default="deploy/vpn-subscription/subscriptions_meta.generated.json",
+        alias="SUBSCRIPTION_META_OUTPUT_PATH",
+    )
+    subscription_meta_remote_target: str = Field(
+        default="root@151.243.212.64:/opt/vpn-subscription/subscriptions_meta.json",
+        alias="SUBSCRIPTION_META_REMOTE_TARGET",
+    )
+    subscription_meta_ssh_key: str = Field(
+        default="",
+        alias="SUBSCRIPTION_META_SSH_KEY",
+    )
+    subscription_meta_sync_timeout_seconds: int = Field(
+        default=60,
+        alias="SUBSCRIPTION_META_SYNC_TIMEOUT_SECONDS",
+    )
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, value: str) -> str:
