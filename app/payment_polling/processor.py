@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+import logging
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,9 @@ from app.payment_adapters.base import NormalizedTransaction
 from app.payment_core.enums.order_status import OrderStatus
 from app.services.payment_activation_service import PaymentActivationService
 from app.services.payment_event_service import PaymentEventService
+
+
+logger = logging.getLogger(__name__)
 
 
 class PaymentPollingProcessor:
@@ -21,9 +25,11 @@ class PaymentPollingProcessor:
         late_order = await self._find_late_matching_order(tx)
 
         if late_order is not None:
+            late_order_id_for_log = late_order.id
+
             event, payment, expired_order = (
                 await self.payment_event_service.process_detected_event(
-                    order_id=late_order.id,
+                    order_id=late_order_id_for_log,
                     amount=tx.amount,
                     provider=tx.provider or "unknown",
                     event_type="payment_late",
@@ -37,20 +43,22 @@ class PaymentPollingProcessor:
                 )
             )
 
-            print("LATE TX PROCESSED:")
-            print("txid =", tx.txid)
-            print("order_id =", late_order.id)
-            print("event_id =", event.id)
-            print("payment_id =", payment.id)
+            logger.info(
+                "Late payment processed: txid=%s order_id=%s",
+                tx.txid,
+                late_order_id_for_log,
+            )
 
             return event, payment, None, None
 
         order = await self._find_matching_order(tx)
 
         if order is not None:
+            order_id_for_log = order.id
+
             event, payment, subscription, config_uri = (
                 await self.activation_service.process_confirmed_payment_event_and_activate(
-                    order_id=order.id,
+                    order_id=order_id_for_log,
                     amount=tx.amount,
                     provider=tx.provider or "unknown",
                     event_type="payment_confirmed",
@@ -64,13 +72,11 @@ class PaymentPollingProcessor:
                 )
             )
 
-            print("TX PROCESSED:")
-            print("txid =", tx.txid)
-            print("order_id =", order.id)
-            print("event_id =", event.id)
-            print("payment_id =", None if payment is None else payment.id)
-            print("subscription_id =", subscription.id)
-            print("config_uri =", config_uri)
+            logger.info(
+                "Payment transaction processed: txid=%s order_id=%s",
+                tx.txid,
+                order_id_for_log,
+            )
 
             return event, payment, subscription, config_uri
 
@@ -101,11 +107,14 @@ class PaymentPollingProcessor:
                 reason="wrong_currency",
             )
 
-        print("NO MATCHING ORDER FOR TX:")
-        print("txid =", tx.txid)
-        print("amount =", tx.amount)
-        print("currency =", tx.currency)
-        print("network =", tx.network)
+        logger.info(
+            "No matching order for tx: txid=%s amount=%s currency=%s network=%s",
+            tx.txid,
+            tx.amount,
+            tx.currency,
+            tx.network,
+        )
+
         return None
 
     async def _process_invalid_tx(
@@ -114,9 +123,11 @@ class PaymentPollingProcessor:
         tx: NormalizedTransaction,
         reason: str,
     ):
+        order_id_for_log = order.id
+
         event, payment, invalid_order = (
             await self.payment_event_service.process_invalid_event(
-                order_id=order.id,
+                order_id=order_id_for_log,
                 amount=tx.amount,
                 currency=tx.currency,
                 network=tx.network,
@@ -133,12 +144,12 @@ class PaymentPollingProcessor:
             )
         )
 
-        print("INVALID TX PROCESSED:")
-        print("reason =", reason)
-        print("txid =", tx.txid)
-        print("order_id =", invalid_order.id)
-        print("event_id =", event.id)
-        print("payment_id =", payment.id)
+        logger.info(
+            "Invalid payment transaction processed: reason=%s txid=%s order_id=%s",
+            reason,
+            tx.txid,
+            order_id_for_log,
+        )
 
         return event, payment, None, None
 
