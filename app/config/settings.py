@@ -77,6 +77,19 @@ class Settings(BaseSettings):
         alias="SUBSCRIPTION_EXPIRATION_INITIAL_DELAY_SECONDS",
     )
 
+    order_expiration_scheduler_enabled: bool = Field(
+        default=True,
+        alias="ORDER_EXPIRATION_SCHEDULER_ENABLED",
+    )
+    order_expiration_interval_seconds: int = Field(
+        default=600,
+        alias="ORDER_EXPIRATION_INTERVAL_SECONDS",
+    )
+    order_expiration_initial_delay_seconds: int = Field(
+        default=45,
+        alias="ORDER_EXPIRATION_INITIAL_DELAY_SECONDS",
+    )
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, value: str) -> str:

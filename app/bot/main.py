@@ -23,6 +23,7 @@ from app.bot.handlers.admin_subscription_lookup import (
     router as admin_subscription_lookup_router,
 )
 from app.bot.handlers.admin_user_lookup import router as admin_user_lookup_router
+from app.bot.handlers.admin_order_expiration import router as admin_order_expiration_router
 from app.bot.handlers.buy import router as buy_router
 from app.bot.handlers.dev_payment import router as dev_payment_router
 from app.bot.handlers.dev_subscription import router as dev_subscription_router
@@ -36,6 +37,7 @@ from app.bot.middlewares.dev_commands_guard import DevCommandsGuardMiddleware
 from app.config.settings import get_settings
 from app.database.session import SessionLocal
 from app.services.subscription_expiration_scheduler import SubscriptionExpirationScheduler
+from app.services.order_expiration_scheduler import OrderExpirationScheduler
 
 
 from app.bot.handlers.vpn_access import router as vpn_access_router
@@ -83,6 +85,7 @@ async def main() -> None:
     dp.include_router(admin_subscription_meta_sync_router)
     dp.include_router(admin_commands_help_router)
     dp.include_router(admin_subscription_expiration_router)
+    dp.include_router(admin_order_expiration_router)
 
     logger.info("Базовые роутеры загружены")
     logger.info("Защита dev-команд включена")
@@ -104,12 +107,21 @@ async def main() -> None:
         name="subscription-expiration-scheduler",
     )
 
+    order_expiration_scheduler = OrderExpirationScheduler(SessionLocal)
+    order_expiration_scheduler_task = asyncio.create_task(
+        order_expiration_scheduler.run_forever(),
+        name="order-expiration-scheduler",
+    )
+
     try:
         await dp.start_polling(bot)
+
     finally:
         expiration_scheduler_task.cancel()
+        order_expiration_scheduler_task.cancel()
         await asyncio.gather(
             expiration_scheduler_task,
+            order_expiration_scheduler_task,
             return_exceptions=True,
         )
 
