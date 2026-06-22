@@ -63,6 +63,20 @@ class Settings(BaseSettings):
         alias="SUBSCRIPTION_META_SYNC_TIMEOUT_SECONDS",
     )
 
+
+    subscription_expiration_scheduler_enabled: bool = Field(
+        default=True,
+        alias="SUBSCRIPTION_EXPIRATION_SCHEDULER_ENABLED",
+    )
+    subscription_expiration_interval_seconds: int = Field(
+        default=600,
+        alias="SUBSCRIPTION_EXPIRATION_INTERVAL_SECONDS",
+    )
+    subscription_expiration_initial_delay_seconds: int = Field(
+        default=30,
+        alias="SUBSCRIPTION_EXPIRATION_INITIAL_DELAY_SECONDS",
+    )
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, value: str) -> str:

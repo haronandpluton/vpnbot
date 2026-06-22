@@ -35,6 +35,7 @@ from app.bot.middlewares.db_session import DbSessionMiddleware
 from app.bot.middlewares.dev_commands_guard import DevCommandsGuardMiddleware
 from app.config.settings import get_settings
 from app.database.session import SessionLocal
+from app.services.subscription_expiration_scheduler import SubscriptionExpirationScheduler
 
 
 from app.bot.handlers.vpn_access import router as vpn_access_router
@@ -97,7 +98,20 @@ async def main() -> None:
     else:
         logger.info("DEV_MODE=false: dev/test-роутеры не загружены")
 
-    await dp.start_polling(bot)
+    expiration_scheduler = SubscriptionExpirationScheduler(SessionLocal)
+    expiration_scheduler_task = asyncio.create_task(
+        expiration_scheduler.run_forever(),
+        name="subscription-expiration-scheduler",
+    )
+
+    try:
+        await dp.start_polling(bot)
+    finally:
+        expiration_scheduler_task.cancel()
+        await asyncio.gather(
+            expiration_scheduler_task,
+            return_exceptions=True,
+        )
 
 
 if __name__ == "__main__":
