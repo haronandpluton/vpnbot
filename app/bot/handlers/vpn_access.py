@@ -22,7 +22,7 @@ async def show_vpn_config_callback(
         await callback.answer("Не удалось определить пользователя.", show_alert=True)
         return
 
-    result = await MySubscriptionService(session).get_active_subscription_by_telegram_id(
+    result = await MySubscriptionService(session).get_access_by_telegram_id(
         telegram_id=callback.from_user.id,
     )
 
