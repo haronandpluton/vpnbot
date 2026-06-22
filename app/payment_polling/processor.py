@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import Order
@@ -159,8 +159,13 @@ class PaymentPollingProcessor:
         stmt = (
             select(Order)
             .where(
-                Order.status == OrderStatus.WAITING_PAYMENT,
-                Order.expires_at <= now,
+                or_(
+                    Order.status == OrderStatus.EXPIRED,
+                    and_(
+                        Order.status == OrderStatus.WAITING_PAYMENT,
+                        Order.expires_at <= now,
+                    ),
+                ),
                 Order.expected_currency == tx.currency,
                 Order.expected_network == tx.network,
                 Order.expected_amount == tx_amount,

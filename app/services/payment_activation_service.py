@@ -2,10 +2,10 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.payment_core.enums.order_status import OrderStatus
+from app.payment_core.enums.payment_status import PaymentStatus
 from app.services.payment_event_service import PaymentEventService
 from app.services.subscription_service import SubscriptionService
-
-
 class PaymentActivationService:
     """
     Orchestration layer:
@@ -54,16 +54,20 @@ class PaymentActivationService:
             )
         )
 
-        if paid_order is None:
-            if event is not None and event.order_id is not None:
-                subscription, config_uri = (
-                    await self.subscription_service.activate_or_extend_by_order(
-                        event.order_id
-                    )
-                )
-                return event, payment, subscription, config_uri
+        if payment is None:
+            return event, payment, None, None
 
-            raise ValueError("Paid order was not returned and event has no order_id")
+        if payment.status != PaymentStatus.CONFIRMED:
+            return event, payment, None, None
+
+        if paid_order is None:
+            return event, payment, None, None
+
+        if paid_order.status not in {
+            OrderStatus.PAID,
+            OrderStatus.ACTIVATED,
+        }:
+            return event, payment, None, None
 
         subscription, config_uri = (
             await self.subscription_service.activate_or_extend_by_order(paid_order.id)
