@@ -12,6 +12,15 @@ class SubscriptionRepository(BaseRepository):
         stmt = select(Subscription).where(Subscription.id == subscription_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+    async def get_by_order_id(self, order_id: int) -> Subscription | None:
+        stmt = (
+            select(Subscription)
+            .where(Subscription.order_id == order_id)
+            .order_by(Subscription.created_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get_active_by_user(self, user_id: int) -> list[Subscription]:
         stmt = select(Subscription).where(

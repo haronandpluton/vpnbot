@@ -8,6 +8,8 @@ from app.database.repositories.subscriptions import SubscriptionRepository
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.vpn_access_service import VpnAccessService
+from sqlalchemy import select
+from app.database.models import Order
 
 
 class SubscriptionService:
@@ -25,16 +27,32 @@ class SubscriptionService:
 
     async def activate_or_extend_by_order(self, order_id: int):
         """
-        Основной post-payment flow:
+        Идемпотентный post-payment flow:
 
         paid order ->
         create new subscription OR extend existing subscription ->
         order activated
+
+        Защита:
+        - повторная обработка того же order не создает новый UUID;
+        - повторная обработка того же order не продлевает подписку второй раз;
+        - concurrent activation одного order сериализуется через SELECT FOR UPDATE.
         """
         try:
-            order = await self.order_repository.get_by_id(order_id)
+            order = await self._get_order_for_activation(order_id)
             if order is None:
                 raise ValueError(f"Order not found: {order_id}")
+
+            existing_subscription_for_order = (
+                await self.subscription_repository.get_by_order_id(order.id)
+            )
+
+            if existing_subscription_for_order is not None:
+                return await self._return_existing_subscription_for_order(
+                    order=order,
+                    subscription=existing_subscription_for_order,
+                    sync_reason="idempotent_order_activation_reuse",
+                )
 
             if order.status == OrderStatus.ACTIVATED:
                 active_subscription = (
@@ -47,32 +65,11 @@ class SubscriptionService:
                         f"Order {order.id} is activated, but active subscription not found"
                     )
 
-                config_uri = await self.vpn_access_service.get_config(
-                    uuid=active_subscription.uuid,
-                    device_limit=active_subscription.device_limit,
+                return await self._return_existing_subscription_for_order(
+                    order=order,
+                    subscription=active_subscription,
+                    sync_reason="activated_order_resync",
                 )
-
-                await self.session.commit()
-
-                await SubscriptionMetaSyncService(self.session).sync_safely(
-                    entity_type="order",
-                    entity_id=order.id,
-                    reason="activated_order_resync",
-                    payload={
-                        "order_id": order.id,
-                        "user_id": active_subscription.user_id,
-                        "subscription_id": active_subscription.id,
-                        "uuid": active_subscription.uuid,
-                        "expires_at": None
-                        if active_subscription.expires_at is None
-                        else active_subscription.expires_at.isoformat(),
-                        "status": str(active_subscription.status.value),
-                    },
-                )
-
-                await self.session.refresh(active_subscription)
-
-                return active_subscription, config_uri
 
             if order.status != OrderStatus.PAID:
                 raise ValueError(
@@ -123,6 +120,60 @@ class SubscriptionService:
         except Exception:
             await self.session.rollback()
             raise
+
+    async def _get_order_for_activation(self, order_id: int) -> Order | None:
+        stmt = (
+            select(Order)
+            .where(Order.id == order_id)
+            .with_for_update()
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def _return_existing_subscription_for_order(
+        self,
+        order: Order,
+        subscription,
+        sync_reason: str,
+    ):
+        """
+        Идемпотентный возврат уже созданного доступа.
+
+        Не создает новый UUID.
+        Не продлевает expires_at.
+        Не вызывает create_access / extend_access.
+        """
+        if order.status == OrderStatus.PAID:
+            order.status = OrderStatus.ACTIVATED
+            order.activated_at = order.activated_at or datetime.now(timezone.utc)
+            await self.session.flush()
+
+        config_uri = await self.vpn_access_service.get_config(
+            uuid=subscription.uuid,
+            device_limit=subscription.device_limit,
+        )
+
+        await self.session.commit()
+
+        await SubscriptionMetaSyncService(self.session).sync_safely(
+            entity_type="order",
+            entity_id=order.id,
+            reason=sync_reason,
+            payload={
+                "order_id": order.id,
+                "user_id": subscription.user_id,
+                "subscription_id": subscription.id,
+                "uuid": subscription.uuid,
+                "expires_at": None
+                if subscription.expires_at is None
+                else subscription.expires_at.isoformat(),
+                "status": str(subscription.status.value),
+            },
+        )
+
+        await self.session.refresh(subscription)
+
+        return subscription, config_uri
 
     async def resend_access(self, user_id: int):
         """
