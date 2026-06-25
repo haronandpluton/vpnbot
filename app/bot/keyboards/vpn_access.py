@@ -18,6 +18,12 @@ def vpn_access_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="Продлить подписку",
+                    callback_data="buy_vpn",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="Happ VPN: Android",
                     callback_data="vpn_access:happ_android",
                 ),
