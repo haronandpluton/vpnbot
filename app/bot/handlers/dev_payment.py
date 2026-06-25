@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import Order
@@ -17,6 +17,18 @@ def _enum_value(value):
     if hasattr(value, "value"):
         return value.value
     return value
+
+
+def _model_id(obj):
+    if obj is None:
+        return None
+
+    state = inspect(obj)
+
+    if state.identity:
+        return state.identity[0]
+
+    return getattr(obj, "id", None)
 
 
 @router.callback_query(F.data.startswith("dev_confirm_payment:"))
@@ -41,7 +53,15 @@ async def dev_confirm_payment_callback(
         await callback.answer("Заказ не найден", show_alert=True)
         return
 
-    if order.status == OrderStatus.ACTIVATED:
+    order_id_for_text = order.id
+    order_status = order.status
+    destination_address = order.destination_address
+    expected_amount = order.expected_amount
+    price_usd = order.price_usd
+    expected_currency = _enum_value(order.expected_currency)
+    expected_network = _enum_value(order.expected_network)
+
+    if order_status == OrderStatus.ACTIVATED:
         await callback.message.answer(
             "Заказ уже активирован.\n\n"
             "Отправь команду /my_subscription, чтобы получить конфиг."
@@ -49,34 +69,35 @@ async def dev_confirm_payment_callback(
         await callback.answer()
         return
 
-    if order.status != OrderStatus.WAITING_PAYMENT:
+    if order_status != OrderStatus.WAITING_PAYMENT:
         await callback.message.answer(
             "Mock-подтверждение доступно только для заказа в статусе waiting_payment.\n\n"
-            f"Текущий статус заказа: {order.status.value}"
+            f"Текущий статус заказа: {order_status.value}"
         )
         await callback.answer()
         return
 
-    if order.destination_address is None:
-        order.destination_address = f"dev_mock_receiver_order_{order.id}"
+    if destination_address is None:
+        destination_address = f"dev_mock_receiver_order_{order_id_for_text}"
+        order.destination_address = destination_address
         await session.commit()
 
-    amount = order.expected_amount or order.price_usd
-    currency = _enum_value(order.expected_currency)
-    network = _enum_value(order.expected_network)
+    amount = expected_amount or price_usd
+    currency = expected_currency
+    network = expected_network
 
     tx = NormalizedTransaction(
-        txid=f"dev_confirm_txid_order_{order.id}",
+        txid=f"dev_confirm_txid_order_{order_id_for_text}",
         amount=Decimal(amount),
         currency=currency,
         network=network,
         address_from="dev_mock_sender_wallet",
-        address_to=order.destination_address,
+        address_to=destination_address,
         confirmations=3,
         provider="mock",
         raw_payload={
             "source": "dev_confirm_payment_callback",
-            "order_id": order.id,
+            "order_id": order_id_for_text,
             "telegram_id": callback.from_user.id,
             "amount": str(amount),
             "currency": currency,
@@ -97,11 +118,15 @@ async def dev_confirm_payment_callback(
 
     event, payment, subscription, config_uri = processed_result
 
+    event_id = _model_id(event)
+    payment_id = _model_id(payment)
+    subscription_id = _model_id(subscription)
+
     if subscription is None or config_uri is None:
         await callback.message.answer(
             "Mock-платеж обработан, но подписка не была активирована.\n\n"
-            f"Event ID: {event.id}\n"
-            f"Payment ID: {payment.id if payment else 'None'}\n\n"
+            f"Event ID: {event_id}\n"
+            f"Payment ID: {payment_id if payment_id else 'None'}\n\n"
             "Проверь логи processor-а."
         )
         await callback.answer()
@@ -109,10 +134,10 @@ async def dev_confirm_payment_callback(
 
     text = (
         "DEV mock-платеж подтвержден.\n\n"
-        f"Order ID: {order.id}\n"
-        f"Payment ID: {payment.id}\n"
-        f"Event ID: {event.id}\n"
-        f"Subscription ID: {subscription.id}\n\n"
+        f"Order ID: {order_id_for_text}\n"
+        f"Payment ID: {payment_id}\n"
+        f"Event ID: {event_id}\n"
+        f"Subscription ID: {subscription_id}\n\n"
         "VPN-доступ активирован.\n\n"
         "Теперь можно отправить:\n"
         "/my_subscription"
