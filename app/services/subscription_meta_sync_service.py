@@ -179,6 +179,14 @@ class SubscriptionMetaSyncService:
         return int(value.timestamp())
 
     async def _upload(self, output_path: Path) -> tuple[str, str]:
+        remote_target = self.settings.subscription_meta_remote_target.strip()
+
+        if not remote_target:
+            return (
+                f"Local metadata file written: {output_path}",
+                "",
+            )
+
         command = [
             "scp",
             "-o",
@@ -193,7 +201,7 @@ class SubscriptionMetaSyncService:
         command.extend(
             [
                 str(output_path),
-                self.settings.subscription_meta_remote_target,
+                remote_target,
             ]
         )
 
