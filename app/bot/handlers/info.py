@@ -1,4 +1,5 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.bot.keyboards.main_menu import back_to_main_menu_keyboard
@@ -50,12 +51,6 @@ def installed_continue_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Я установил(а)",
-                    callback_data="download_vpn:installed",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
                     text="Купить VPN",
                     callback_data="buy_vpn",
                 ),
@@ -68,6 +63,12 @@ def installed_continue_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="Назад к платформам",
                     callback_data="download_vpn",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад в меню",
+                    callback_data="back_to_main_menu",
                 ),
             ],
         ]
@@ -270,10 +271,15 @@ async def download_vpn_installed_callback(callback: CallbackQuery):
         "Бот откроет страницу подключения, а Happ должен импортировать подписку автоматически."
     )
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=installed_continue_keyboard(),
-    )
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=installed_continue_keyboard(),
+        )
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc):
+            raise
+
     await callback.answer()
 
 
