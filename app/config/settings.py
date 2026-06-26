@@ -29,8 +29,37 @@ class Settings(BaseSettings):
         alias="PAYMENT_POLL_INTERVAL_SECONDS",
     )
 
-    volet_api_url: str = Field(default="", alias="VOLET_API_URL")
-    volet_api_key: str = Field(default="", alias="VOLET_API_KEY")
+    nowpayments_enabled: bool = Field(default=False, alias="NOWPAYMENTS_ENABLED")
+    nowpayments_base_url: str = Field(
+        default="https://api-sandbox.nowpayments.io",
+        alias="NOWPAYMENTS_BASE_URL",
+    )
+    nowpayments_api_key: str = Field(default="", alias="NOWPAYMENTS_API_KEY")
+    nowpayments_ipn_secret: str = Field(default="", alias="NOWPAYMENTS_IPN_SECRET")
+    nowpayments_ipn_callback_url: str = Field(
+        default="",
+        alias="NOWPAYMENTS_IPN_CALLBACK_URL",
+    )
+    nowpayments_success_url: str = Field(
+        default="",
+        alias="NOWPAYMENTS_SUCCESS_URL",
+    )
+    nowpayments_cancel_url: str = Field(
+        default="",
+        alias="NOWPAYMENTS_CANCEL_URL",
+    )
+    nowpayments_price_currency: str = Field(
+        default="usd",
+        alias="NOWPAYMENTS_PRICE_CURRENCY",
+    )
+    nowpayments_pay_currency: str = Field(
+        default="usdttrc20",
+        alias="NOWPAYMENTS_PAY_CURRENCY",
+    )
+    nowpayments_payment_ttl_minutes: int = Field(
+        default=15,
+        alias="NOWPAYMENTS_PAYMENT_TTL_MINUTES",
+    )
 
     xray_panel_url: str = Field(default="", alias="XRAY_PANEL_URL")
     xray_panel_username: str = Field(default="", alias="XRAY_PANEL_USERNAME")
