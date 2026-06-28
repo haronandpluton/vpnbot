@@ -63,6 +63,20 @@ class Settings(BaseSettings):
         alias="VOLET_SCI_STATUS_URL",
     )
 
+    volet_sci_payment_base_url: str = Field(
+        default="",
+        alias="VOLET_SCI_PAYMENT_BASE_URL",
+    )
+    volet_sci_web_host: str = Field(
+        default="0.0.0.0",
+        alias="VOLET_SCI_WEB_HOST",
+    )
+    volet_sci_web_port: int = Field(
+        default=2098,
+        alias="VOLET_SCI_WEB_PORT",
+    )
+    
+
     xray_panel_url: str = Field(default="", alias="XRAY_PANEL_URL")
     xray_panel_username: str = Field(default="", alias="XRAY_PANEL_USERNAME")
     xray_panel_password: str = Field(default="", alias="XRAY_PANEL_PASSWORD")

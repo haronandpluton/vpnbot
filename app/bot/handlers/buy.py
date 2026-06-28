@@ -10,6 +10,8 @@ from app.bot.keyboards.payment import payment_check_keyboard
 from app.common.enums import TariffCode
 from app.services.order_service import OrderService
 
+from app.config.settings import get_settings
+
 router = Router()
 
 
@@ -96,23 +98,45 @@ async def select_payment_callback(
         order.destination_address = f"payment_receiver_order_{order.id}"
 
     await session.commit()
+    settings = get_settings()
 
-    text = (
-        "Заказ создан.\n\n"
-        f"Order ID: {order.id}\n"
-        "Тариф: 1 устройство\n"
-        "Срок: 30 дней\n"
-        "Сумма: 4.00 USDT\n"
-        "Сеть: TRC20\n\n"
-        "Адрес для оплаты:\n"
-        f"<code>{order.destination_address}</code>\n\n"
-        "После оплаты нажми кнопку ниже.\n\n"
-        "Важно: отправляй точную сумму и только в указанной сети."
-    )
+    volet_payment_url = None
+    if settings.volet_sci_enabled and settings.volet_sci_payment_base_url.strip():
+        base_url = settings.volet_sci_payment_base_url.strip().rstrip("/")
+        volet_payment_url = f"{base_url}/volet/pay/{order.id}"
+
+    if volet_payment_url:
+        text = (
+            "Заказ создан.\n\n"
+            f"Order ID: {order.id}\n"
+            "Тариф: 1 устройство\n"
+            "Срок: 30 дней\n"
+            "Сумма: 4.00 USDT\n"
+            "Сеть: TRC20\n\n"
+            "Нажми «Оплатить через Volet», чтобы перейти на страницу оплаты.\n\n"
+            "После оплаты вернись в бот и нажми «Я оплатил / Проверить оплату»."
+        )
+    else:
+        text = (
+            "Заказ создан.\n\n"
+            f"Order ID: {order.id}\n"
+            "Тариф: 1 устройство\n"
+            "Срок: 30 дней\n"
+            "Сумма: 4.00 USDT\n"
+            "Сеть: TRC20\n\n"
+            "Адрес для оплаты:\n"
+            f"<code>{order.destination_address}</code>\n\n"
+            "После оплаты нажми кнопку ниже.\n\n"
+            "Важно: отправляй точную сумму и только в указанной сети."
+        )
 
     await callback.message.edit_text(
         text,
-        reply_markup=payment_check_keyboard(order.id),
+        reply_markup=payment_check_keyboard(
+            order.id,
+            payment_url=volet_payment_url,
+            show_dev_button=settings.dev_mode,
+        ),
         parse_mode="HTML",
     )
     await callback.answer()

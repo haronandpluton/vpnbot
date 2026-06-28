@@ -43,6 +43,8 @@ from app.services.order_expiration_scheduler import OrderExpirationScheduler
 from app.bot.handlers.vpn_access import router as vpn_access_router
 from app.bot.handlers.admin_subscription_expiration import router as admin_subscription_expiration_router
 
+from app.web.volet_sci_server import VoletSciWebServer
+
 logger = logging.getLogger(__name__)
 
 
@@ -112,12 +114,27 @@ async def main() -> None:
         order_expiration_scheduler.run_forever(),
         name="order-expiration-scheduler",
     )
+    volet_sci_web_server = None
 
     try:
+        if settings.volet_sci_enabled:
+            volet_sci_web_server = VoletSciWebServer(SessionLocal, settings)
+            await volet_sci_web_server.start()
+
         await dp.start_polling(bot)
 
     finally:
+        if volet_sci_web_server is not None:
+            await volet_sci_web_server.stop()
+
         expiration_scheduler_task.cancel()
+        order_expiration_scheduler_task.cancel()
+        await asyncio.gather(
+            expiration_scheduler_task,
+            order_expiration_scheduler_task,
+            return_exceptions=True,
+        )
+        
         order_expiration_scheduler_task.cancel()
         await asyncio.gather(
             expiration_scheduler_task,
