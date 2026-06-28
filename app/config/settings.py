@@ -29,36 +29,38 @@ class Settings(BaseSettings):
         alias="PAYMENT_POLL_INTERVAL_SECONDS",
     )
 
-    nowpayments_enabled: bool = Field(default=False, alias="NOWPAYMENTS_ENABLED")
-    nowpayments_base_url: str = Field(
-        default="https://api-sandbox.nowpayments.io",
-        alias="NOWPAYMENTS_BASE_URL",
+    volet_sci_enabled: bool = Field(default=False, alias="VOLET_SCI_ENABLED")
+    volet_sci_url: str = Field(
+        default="https://account.volet.com/sci/",
+        alias="VOLET_SCI_URL",
     )
-    nowpayments_api_key: str = Field(default="", alias="NOWPAYMENTS_API_KEY")
-    nowpayments_ipn_secret: str = Field(default="", alias="NOWPAYMENTS_IPN_SECRET")
-    nowpayments_ipn_callback_url: str = Field(
+    volet_sci_account_email: str = Field(
         default="",
-        alias="NOWPAYMENTS_IPN_CALLBACK_URL",
+        alias="VOLET_SCI_ACCOUNT_EMAIL",
     )
-    nowpayments_success_url: str = Field(
+    volet_sci_name: str = Field(
         default="",
-        alias="NOWPAYMENTS_SUCCESS_URL",
+        alias="VOLET_SCI_NAME",
     )
-    nowpayments_cancel_url: str = Field(
+    volet_sci_password: str = Field(
         default="",
-        alias="NOWPAYMENTS_CANCEL_URL",
+        alias="VOLET_SCI_PASSWORD",
     )
-    nowpayments_price_currency: str = Field(
-        default="usd",
-        alias="NOWPAYMENTS_PRICE_CURRENCY",
+    volet_sci_default_currency: str = Field(
+        default="USDT_TRX",
+        alias="VOLET_SCI_DEFAULT_CURRENCY",
     )
-    nowpayments_pay_currency: str = Field(
-        default="usdttrc20",
-        alias="NOWPAYMENTS_PAY_CURRENCY",
+    volet_sci_success_url: str = Field(
+        default="",
+        alias="VOLET_SCI_SUCCESS_URL",
     )
-    nowpayments_payment_ttl_minutes: int = Field(
-        default=15,
-        alias="NOWPAYMENTS_PAYMENT_TTL_MINUTES",
+    volet_sci_fail_url: str = Field(
+        default="",
+        alias="VOLET_SCI_FAIL_URL",
+    )
+    volet_sci_status_url: str = Field(
+        default="",
+        alias="VOLET_SCI_STATUS_URL",
     )
 
     xray_panel_url: str = Field(default="", alias="XRAY_PANEL_URL")
