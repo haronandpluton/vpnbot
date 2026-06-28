@@ -570,16 +570,31 @@ class VoletSciWebServer:
                 )
             )
 
+            def _model_id(obj):
+                if obj is None:
+                    return None
+
+                state = getattr(obj, "_sa_instance_state", None)
+                if state is not None and state.identity:
+                    return state.identity[0]
+
+                return getattr(obj, "__dict__", {}).get("id")
+
+            event_id = _model_id(event)
+            payment_id = _model_id(payment)
+            subscription_id = _model_id(subscription)
+            has_config_uri = bool(config_uri)
+
             await session.commit()
 
         logger.info(
             "Volet SCI payment activation processed: order_id=%s transfer=%s event_id=%s payment_id=%s subscription_id=%s config_uri=%s",
             order_id,
             transfer_id,
-            getattr(event, "id", None),
-            getattr(payment, "id", None),
-            getattr(subscription, "id", None),
-            bool(config_uri),
+            event_id,
+            payment_id,
+            subscription_id,
+            has_config_uri,
         )
 
         return web.Response(text="OK", content_type="text/plain")
