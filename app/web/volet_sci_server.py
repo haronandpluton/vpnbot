@@ -12,6 +12,15 @@ from app.payment_adapters.volet_sci.form import (
 )
 from app.payment_core.enums.order_status import OrderStatus
 
+
+from app.payment_adapters.volet_sci.verifier import (
+    VoletSciVerificationError,
+    normalize_volet_sci_order_id,
+    redact_volet_sci_status_payload,
+    verify_volet_sci_status_hash,
+)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -152,11 +161,63 @@ class VoletSciWebServer:
         return web.Response(text=html, content_type="text/html", charset="utf-8")
 
     async def handle_status(self, request: web.Request) -> web.Response:
-        data = await request.post()
+        raw_data = await request.post()
+        data = {str(key): str(value) for key, value in raw_data.items()}
+
+        safe_payload = redact_volet_sci_status_payload(data)
+
+        try:
+            verification = verify_volet_sci_status_hash(
+                data,
+                password=self._settings.volet_sci_password,
+            )
+        except VoletSciVerificationError as exc:
+            logger.warning(
+                "Volet SCI status callback rejected: %s payload=%s",
+                exc,
+                safe_payload,
+            )
+            return web.Response(
+                text="INVALID",
+                status=400,
+                content_type="text/plain",
+            )
+
+        if not verification.is_valid:
+            logger.warning(
+                "Volet SCI status callback invalid hash: payload=%s",
+                safe_payload,
+            )
+            return web.Response(
+                text="INVALID_HASH",
+                status=400,
+                content_type="text/plain",
+            )
+
+        try:
+            order_id = normalize_volet_sci_order_id(
+                data.get("ac_order_id", ""),
+            )
+        except VoletSciVerificationError as exc:
+            logger.warning(
+                "Volet SCI status callback invalid order id: %s payload=%s",
+                exc,
+                safe_payload,
+            )
+            return web.Response(
+                text="INVALID_ORDER_ID",
+                status=400,
+                content_type="text/plain",
+            )
+
+        transaction_status = data.get("ac_transaction_status", "").strip().upper()
 
         logger.info(
-            "Volet SCI status callback placeholder received: %s",
-            dict(data),
+            "Volet SCI status callback verified: order_id=%s status=%s transfer=%s hash_variant=%s",
+            order_id,
+            transaction_status,
+            data.get("ac_transfer", ""),
+            verification.variant,
         )
 
         return web.Response(text="OK", content_type="text/plain")
