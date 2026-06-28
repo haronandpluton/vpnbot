@@ -69,280 +69,280 @@ class VoletSciWebServer:
             await self._runner.cleanup()
             logger.info("Volet SCI web server stopped")
 
-        def _html_response(self, title: str, body: str) -> web.Response:
-            html = f"""<!doctype html>
+    def _html_response(self, title: str, body: str) -> web.Response:
+        html = f"""<!doctype html>
     <html lang="ru">
     <head>
       <meta charset="utf-8">
       <title>{title}</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <style>
-        body {{
-          margin: 0;
-          font-family: Arial, sans-serif;
-          background: #f6f7f9;
-          color: #111827;
-          line-height: 1.6;
-        }}
-        header {{
-          background: #111827;
-          color: white;
-          padding: 24px;
-        }}
-        main {{
-          max-width: 920px;
-          margin: 0 auto;
-          padding: 32px 20px;
-          background: white;
-          min-height: 70vh;
-        }}
-        nav a {{
-          color: white;
-          margin-right: 16px;
-          text-decoration: none;
-        }}
-        a {{
-          color: #2563eb;
-        }}
-        .card {{
-          border: 1px solid #e5e7eb;
-          border-radius: 12px;
-          padding: 20px;
-          margin: 16px 0;
-          background: #fafafa;
-        }}
-        .button {{
-          display: inline-block;
-          padding: 12px 18px;
-          background: #111827;
-          color: white;
-          border-radius: 8px;
-          text-decoration: none;
-          margin-top: 12px;
-        }}
-        footer {{
-          max-width: 920px;
-          margin: 0 auto;
-          padding: 20px;
-          color: #6b7280;
-          font-size: 14px;
-        }}
+    body {{
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f6f7f9;
+      color: #111827;
+      line-height: 1.6;
+    }}
+    header {{
+      background: #111827;
+      color: white;
+      padding: 24px;
+    }}
+    main {{
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 32px 20px;
+      background: white;
+      min-height: 70vh;
+    }}
+    nav a {{
+      color: white;
+      margin-right: 16px;
+      text-decoration: none;
+    }}
+    a {{
+      color: #2563eb;
+    }}
+    .card {{
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 16px 0;
+      background: #fafafa;
+    }}
+    .button {{
+      display: inline-block;
+      padding: 12px 18px;
+      background: #111827;
+      color: white;
+      border-radius: 8px;
+      text-decoration: none;
+      margin-top: 12px;
+    }}
+    footer {{
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 20px;
+      color: #6b7280;
+      font-size: 14px;
+    }}
       </style>
     </head>
     <body>
       <header>
-        <h1>PresentVPN</h1>
-        <nav>
-          <a href="/">Home</a>
-          <a href="/terms">Terms</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/support">Support</a>
-        </nav>
+    <h1>PresentVPN</h1>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/support">Support</a>
+    </nav>
       </header>
       <main>
     {body}
       </main>
       <footer>
-        PresentVPN — VPN subscription service. Payments are processed via Volet SCI.
+    PresentVPN — VPN subscription service. Payments are processed via Volet SCI.
       </footer>
     </body>
     </html>
     """
-            return web.Response(text=html, content_type="text/html", charset="utf-8")
+        return web.Response(text=html, content_type="text/html", charset="utf-8")
 
-        def _support_url(self) -> str:
-            support_username = self._settings.support_username.strip().lstrip("@")
+    def _support_url(self) -> str:
+        support_username = self._settings.support_username.strip().lstrip("@")
 
-            if support_username:
-                return f"https://t.me/{support_username}"
+        if support_username:
+            return f"https://t.me/{support_username}"
 
-            return "https://t.me/VPN_FORBOT"
+        return "https://t.me/VPN_FORBOT"
 
-        async def handle_home(self, request: web.Request) -> web.Response:
-            support_url = self._support_url()
+    async def handle_home(self, request: web.Request) -> web.Response:
+        support_url = self._support_url()
 
-            body = f"""
-        <h2>VPN access for private internet connection</h2>
+        body = f"""
+    <h2>VPN access for private internet connection</h2>
 
-        <div class="card">
-          <h3>Service</h3>
-          <p>
-            PresentVPN provides paid VPN subscription access for users who want
-            a private and stable internet connection through supported VPN clients.
-          </p>
-        </div>
+    <div class="card">
+      <h3>Service</h3>
+      <p>
+        PresentVPN provides paid VPN subscription access for users who want
+        a private and stable internet connection through supported VPN clients.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>Current plan</h3>
-          <p><strong>Plan:</strong> 1 device</p>
-          <p><strong>Period:</strong> 30 days</p>
-          <p><strong>Price:</strong> 4 USDT</p>
-          <p>
-            After payment confirmation, the Telegram bot issues a personal VPN
-            connection link for the subscription period.
-          </p>
-        </div>
+    <div class="card">
+      <h3>Current plan</h3>
+      <p><strong>Plan:</strong> 1 device</p>
+      <p><strong>Period:</strong> 30 days</p>
+      <p><strong>Price:</strong> 4 USDT</p>
+      <p>
+        After payment confirmation, the Telegram bot issues a personal VPN
+        connection link for the subscription period.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>How to buy</h3>
-          <ol>
-            <li>Open the Telegram bot.</li>
-            <li>Select the VPN plan.</li>
-            <li>Pay the generated order via Volet.</li>
-            <li>Return to the bot and receive your VPN access link.</li>
-          </ol>
-          <a class="button" href="https://t.me/VPN_FORBOT">Open Telegram bot</a>
-        </div>
+    <div class="card">
+      <h3>How to buy</h3>
+      <ol>
+        <li>Open the Telegram bot.</li>
+        <li>Select the VPN plan.</li>
+        <li>Pay the generated order via Volet.</li>
+        <li>Return to the bot and receive your VPN access link.</li>
+      </ol>
+      <a class="button" href="https://t.me/VPN_FORBOT">Open Telegram bot</a>
+    </div>
 
-        <div class="card">
-          <h3>Support</h3>
-          <p>
-            If you have payment or connection questions, contact support:
-            <a href="{support_url}">{support_url}</a>
-          </p>
-        </div>
+    <div class="card">
+      <h3>Support</h3>
+      <p>
+        If you have payment or connection questions, contact support:
+        <a href="{support_url}">{support_url}</a>
+      </p>
+    </div>
     """
-            return self._html_response("PresentVPN — VPN subscription service", body)
+        return self._html_response("PresentVPN — VPN subscription service", body)
 
-        async def handle_terms(self, request: web.Request) -> web.Response:
-            support_url = self._support_url()
+    async def handle_terms(self, request: web.Request) -> web.Response:
+        support_url = self._support_url()
 
-            body = f"""
-        <h2>Terms of Service</h2>
+        body = f"""
+    <h2>Terms of Service</h2>
 
-        <p>
-          These terms apply to the PresentVPN subscription service.
-          By purchasing or using the service, you agree to these terms.
-        </p>
+    <p>
+      These terms apply to the PresentVPN subscription service.
+      By purchasing or using the service, you agree to these terms.
+    </p>
 
-        <div class="card">
-          <h3>1. Service description</h3>
-          <p>
-            PresentVPN provides digital VPN access for a limited subscription period.
-            The current public plan is VPN access for 1 device for 30 days.
-          </p>
-        </div>
+    <div class="card">
+      <h3>1. Service description</h3>
+      <p>
+        PresentVPN provides digital VPN access for a limited subscription period.
+        The current public plan is VPN access for 1 device for 30 days.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>2. Payment and activation</h3>
-          <p>
-            Payment is made through the payment page generated by the Telegram bot.
-            After payment confirmation, the system activates the subscription and
-            provides a VPN connection link in Telegram.
-          </p>
-        </div>
+    <div class="card">
+      <h3>2. Payment and activation</h3>
+      <p>
+        Payment is made through the payment page generated by the Telegram bot.
+        After payment confirmation, the system activates the subscription and
+        provides a VPN connection link in Telegram.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>3. Acceptable use</h3>
-          <p>
-            The service must not be used for illegal activity, fraud, spam,
-            attacks, abuse of third-party services, or violation of applicable law.
-            Access may be limited or terminated in case of abuse.
-          </p>
-        </div>
+    <div class="card">
+      <h3>3. Acceptable use</h3>
+      <p>
+        The service must not be used for illegal activity, fraud, spam,
+        attacks, abuse of third-party services, or violation of applicable law.
+        Access may be limited or terminated in case of abuse.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>4. Subscription period</h3>
-          <p>
-            The subscription is valid for the paid period. When the subscription
-            expires, VPN access may be disabled until renewal.
-          </p>
-        </div>
+    <div class="card">
+      <h3>4. Subscription period</h3>
+      <p>
+        The subscription is valid for the paid period. When the subscription
+        expires, VPN access may be disabled until renewal.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>5. Support</h3>
-          <p>
-            For payment or technical questions, contact support:
-            <a href="{support_url}">{support_url}</a>
-          </p>
-        </div>
+    <div class="card">
+      <h3>5. Support</h3>
+      <p>
+        For payment or technical questions, contact support:
+        <a href="{support_url}">{support_url}</a>
+      </p>
+    </div>
     """
-            return self._html_response("PresentVPN — Terms of Service", body)
+        return self._html_response("PresentVPN — Terms of Service", body)
 
-        async def handle_privacy(self, request: web.Request) -> web.Response:
-            support_url = self._support_url()
+    async def handle_privacy(self, request: web.Request) -> web.Response:
+        support_url = self._support_url()
 
-            body = f"""
-        <h2>Privacy Policy</h2>
+        body = f"""
+    <h2>Privacy Policy</h2>
 
-        <p>
-          This policy explains what data is processed when using PresentVPN.
-        </p>
+    <p>
+      This policy explains what data is processed when using PresentVPN.
+    </p>
 
-        <div class="card">
-          <h3>1. Telegram data</h3>
-          <p>
-            The service may process Telegram user ID, username, first name,
-            language code, order data, subscription status, and technical service
-            records required to provide VPN access.
-          </p>
-        </div>
+    <div class="card">
+      <h3>1. Telegram data</h3>
+      <p>
+        The service may process Telegram user ID, username, first name,
+        language code, order data, subscription status, and technical service
+        records required to provide VPN access.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>2. Payment data</h3>
-          <p>
-            Payments are processed by Volet. PresentVPN receives payment status
-            data required to match a payment with an order and activate the
-            subscription.
-          </p>
-        </div>
+    <div class="card">
+      <h3>2. Payment data</h3>
+      <p>
+        Payments are processed by Volet. PresentVPN receives payment status
+        data required to match a payment with an order and activate the
+        subscription.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>3. Technical data</h3>
-          <p>
-            The service may store technical logs required for security,
-            troubleshooting, payment verification, and subscription management.
-          </p>
-        </div>
+    <div class="card">
+      <h3>3. Technical data</h3>
+      <p>
+        The service may store technical logs required for security,
+        troubleshooting, payment verification, and subscription management.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>4. Data use</h3>
-          <p>
-            Data is used to create orders, verify payments, issue VPN access,
-            manage subscriptions, prevent abuse, and provide support.
-          </p>
-        </div>
+    <div class="card">
+      <h3>4. Data use</h3>
+      <p>
+        Data is used to create orders, verify payments, issue VPN access,
+        manage subscriptions, prevent abuse, and provide support.
+      </p>
+    </div>
 
-        <div class="card">
-          <h3>5. Contact</h3>
-          <p>
-            Privacy and support questions:
-            <a href="{support_url}">{support_url}</a>
-          </p>
-        </div>
+    <div class="card">
+      <h3>5. Contact</h3>
+      <p>
+        Privacy and support questions:
+        <a href="{support_url}">{support_url}</a>
+      </p>
+    </div>
     """
-            return self._html_response("PresentVPN — Privacy Policy", body)
+        return self._html_response("PresentVPN — Privacy Policy", body)
 
-        async def handle_support(self, request: web.Request) -> web.Response:
-            support_url = self._support_url()
+    async def handle_support(self, request: web.Request) -> web.Response:
+        support_url = self._support_url()
 
-            body = f"""
-        <h2>Support</h2>
+        body = f"""
+    <h2>Support</h2>
 
-        <div class="card">
-          <h3>Contact</h3>
-          <p>
-            For payment issues, VPN setup questions, subscription problems,
-            or access recovery, contact support in Telegram:
-          </p>
-          <p><a href="{support_url}">{support_url}</a></p>
-        </div>
+    <div class="card">
+      <h3>Contact</h3>
+      <p>
+        For payment issues, VPN setup questions, subscription problems,
+        or access recovery, contact support in Telegram:
+      </p>
+      <p><a href="{support_url}">{support_url}</a></p>
+    </div>
 
-        <div class="card">
-          <h3>Before contacting support</h3>
-          <p>Please prepare your Telegram account and order ID if available.</p>
-        </div>
+    <div class="card">
+      <h3>Before contacting support</h3>
+      <p>Please prepare your Telegram account and order ID if available.</p>
+    </div>
 
-        <div class="card">
-          <h3>Payment status</h3>
-          <p>
-            After payment, return to the Telegram bot and press
-            “Я оплатил / Проверить оплату”.
-          </p>
-        </div>
+    <div class="card">
+      <h3>Payment status</h3>
+      <p>
+        After payment, return to the Telegram bot and press
+        “Я оплатил / Проверить оплату”.
+      </p>
+    </div>
     """
-            return self._html_response("PresentVPN — Support", body)
-        
+        return self._html_response("PresentVPN — Support", body)
+    
     async def handle_pay(self, request: web.Request) -> web.Response:
         raw_order_id = request.match_info.get("order_id", "")
 
