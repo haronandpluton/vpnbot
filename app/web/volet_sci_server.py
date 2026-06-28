@@ -1,3 +1,4 @@
+import json
 import logging
 from decimal import Decimal
 
@@ -12,6 +13,7 @@ from app.payment_adapters.volet_sci.form import (
 )
 from app.payment_core.enums.order_status import OrderStatus
 
+from app.services.payment_activation_service import PaymentActivationService
 
 from app.payment_adapters.volet_sci.verifier import (
     VoletSciVerificationError,
@@ -490,13 +492,94 @@ class VoletSciWebServer:
             )
 
         transaction_status = data.get("ac_transaction_status", "").strip().upper()
+        transfer_id = data.get("ac_transfer", "").strip()
 
         logger.info(
             "Volet SCI status callback verified: order_id=%s status=%s transfer=%s hash_variant=%s",
             order_id,
             transaction_status,
-            data.get("ac_transfer", ""),
+            transfer_id,
             verification.variant,
+        )
+
+        success_statuses = {
+            "COMPLETED",
+            "SUCCESS",
+            "CONFIRMED",
+            "PAID",
+        }
+
+        if transaction_status not in success_statuses:
+            logger.info(
+                "Volet SCI callback ignored because status is not final success: order_id=%s status=%s transfer=%s",
+                order_id,
+                transaction_status,
+                transfer_id,
+            )
+            return web.Response(text="OK", content_type="text/plain")
+
+        try:
+            amount = Decimal(data.get("ac_amount", "0"))
+        except Exception:
+            logger.warning(
+                "Volet SCI callback invalid amount: order_id=%s payload=%s",
+                order_id,
+                safe_payload,
+            )
+            return web.Response(
+                text="INVALID_AMOUNT",
+                status=400,
+                content_type="text/plain",
+            )
+
+        if not transfer_id:
+            logger.warning(
+                "Volet SCI callback missing transfer id: order_id=%s payload=%s",
+                order_id,
+                safe_payload,
+            )
+            return web.Response(
+                text="INVALID_TRANSFER",
+                status=400,
+                content_type="text/plain",
+            )
+
+        txid = f"volet:{transfer_id}"
+        raw_payload_json = json.dumps(
+            safe_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+
+        async with self._session_factory() as session:
+            activation_service = PaymentActivationService(session)
+
+            event, payment, subscription, config_uri = (
+                await activation_service.process_confirmed_payment_event_and_activate(
+                    order_id=order_id,
+                    amount=amount,
+                    provider="volet_sci",
+                    event_type="payment_confirmed",
+                    external_event_id=transfer_id,
+                    txid=txid,
+                    address_from=data.get("ac_src_wallet", ""),
+                    address_to=data.get("ac_dest_wallet", ""),
+                    memo_tag=data.get("ac_order_id", ""),
+                    confirmations=None,
+                    raw_payload=raw_payload_json,
+                )
+            )
+
+            await session.commit()
+
+        logger.info(
+            "Volet SCI payment activation processed: order_id=%s transfer=%s event_id=%s payment_id=%s subscription_id=%s config_uri=%s",
+            order_id,
+            transfer_id,
+            getattr(event, "id", None),
+            getattr(payment, "id", None),
+            getattr(subscription, "id", None),
+            bool(config_uri),
         )
 
         return web.Response(text="OK", content_type="text/plain")
