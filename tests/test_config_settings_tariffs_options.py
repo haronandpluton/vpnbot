@@ -1,0 +1,243 @@
+from __future__ import annotations
+
+from decimal import Decimal
+
+import pytest
+from pydantic import ValidationError
+
+from app.common.enums import AppEnv, CurrencyCode, NetworkCode, TariffCode
+from app.config import constants
+from app.config.payment_options import (
+    PAYMENT_OPTIONS,
+    PaymentOptionConfig,
+    get_active_payment_options,
+    get_payment_option,
+)
+from app.config.settings import Settings, get_settings
+from app.config.tariffs import TARIFFS, TariffConfig, get_tariff
+from app.payment_core.enums.payment_method import PaymentMethod
+
+
+def make_settings(**overrides):
+    values = {
+        "_env_file": None,
+        "BOT_TOKEN": "bot-token",
+        "DATABASE_URL": "sqlite+aiosqlite:///test.db",
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
+def test_settings_required_aliases_and_safe_defaults_are_stable():
+    settings = make_settings()
+
+    assert settings.bot_token == "bot-token"
+    assert settings.database_url == "sqlite+aiosqlite:///test.db"
+    assert settings.app_env == AppEnv.DEV
+    assert settings.log_level == "INFO"
+    assert settings.dev_mode is False
+    assert settings.order_ttl_minutes == 15
+    assert settings.payment_poll_interval_seconds == 15
+    assert settings.volet_sci_enabled is False
+    assert settings.volet_sci_url == "https://account.volet.com/sci/"
+    assert settings.volet_sci_default_currency == "USDT_TRX"
+    assert settings.volet_sci_web_host == "0.0.0.0"
+    assert settings.volet_sci_web_port == 2098
+    assert settings.cryptobot_enabled is False
+    assert settings.cryptobot_api_url == "https://pay.crypt.bot/api"
+    assert settings.cryptobot_asset == "USDT"
+    assert settings.cryptobot_expires_in == 900
+    assert settings.xui_inbound_id == 9
+    assert settings.vpn_default_server_name == "default-node"
+    assert settings.vpn_default_inbound_id == 1
+    assert settings.subscription_expiration_scheduler_enabled is True
+    assert settings.order_expiration_scheduler_enabled is True
+
+
+@pytest.mark.parametrize(
+    ("raw_level", "expected"),
+    [
+        ("debug", "DEBUG"),
+        ("Info", "INFO"),
+        ("WARNING", "WARNING"),
+        ("error", "ERROR"),
+        ("critical", "CRITICAL"),
+    ],
+)
+def test_settings_log_level_is_normalized(raw_level, expected):
+    assert make_settings(LOG_LEVEL=raw_level).log_level == expected
+
+
+def test_settings_rejects_invalid_log_level():
+    with pytest.raises(ValidationError) as exc_info:
+        make_settings(LOG_LEVEL="verbose")
+
+    assert "Invalid LOG_LEVEL: verbose" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("raw_admin_ids", "expected"),
+    [
+        ("", []),
+        ("   ", []),
+        ("1", [1]),
+        ("1,2,3", [1, 2, 3]),
+        (" 1, 2,, 3 ", [1, 2, 3]),
+    ],
+)
+def test_settings_admin_ids_parser_trims_and_skips_empty_parts(raw_admin_ids, expected):
+    assert make_settings(ADMIN_IDS=raw_admin_ids).admin_ids == expected
+
+
+def test_settings_admin_ids_raises_for_non_numeric_admin_id():
+    settings = make_settings(ADMIN_IDS="1,broken")
+
+    with pytest.raises(ValueError):
+        _ = settings.admin_ids
+
+
+def test_settings_environment_helpers_distinguish_dev_prod_and_test():
+    assert make_settings(APP_ENV="dev").is_dev is True
+    assert make_settings(APP_ENV="dev").is_prod is False
+    assert make_settings(APP_ENV="prod").is_prod is True
+    assert make_settings(APP_ENV="prod").is_dev is False
+    assert make_settings(APP_ENV="test").is_prod is False
+    assert make_settings(APP_ENV="test").is_dev is False
+
+
+def test_get_settings_is_cached_and_reads_environment(monkeypatch):
+    get_settings.cache_clear()
+    monkeypatch.setenv("BOT_TOKEN", "env-token")
+    monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///env.db")
+    monkeypatch.setenv("ADMIN_IDS", "7,8")
+    monkeypatch.setenv("LOG_LEVEL", "debug")
+
+    first = get_settings()
+    second = get_settings()
+
+    assert first is second
+    assert first.bot_token == "env-token"
+    assert first.database_url == "sqlite+aiosqlite:///env.db"
+    assert first.admin_ids == [7, 8]
+    assert first.log_level == "DEBUG"
+    get_settings.cache_clear()
+
+
+def test_tariffs_match_public_pricing_and_duration():
+    assert set(TARIFFS) == {
+        TariffCode.DEVICES_1,
+        TariffCode.DEVICES_2,
+        TariffCode.DEVICES_3,
+    }
+    assert TARIFFS[TariffCode.DEVICES_1] == TariffConfig(
+        code=TariffCode.DEVICES_1,
+        title="1 устройство",
+        device_limit=1,
+        price_usd=Decimal("4.00"),
+        duration_days=30,
+    )
+    assert TARIFFS[TariffCode.DEVICES_2].device_limit == 2
+    assert TARIFFS[TariffCode.DEVICES_2].price_usd == Decimal("7.00")
+    assert TARIFFS[TariffCode.DEVICES_3].device_limit == 3
+    assert TARIFFS[TariffCode.DEVICES_3].price_usd == Decimal("10.00")
+    assert all(tariff.duration_days == 30 for tariff in TARIFFS.values())
+
+
+def test_get_tariff_returns_config_and_rejects_unknown_code():
+    assert get_tariff(TariffCode.DEVICES_1) is TARIFFS[TariffCode.DEVICES_1]
+
+    with pytest.raises(ValueError, match="Unsupported tariff code: broken"):
+        get_tariff("broken")  # type: ignore[arg-type]
+
+
+def test_payment_options_include_configured_crypto_networks_and_inactive_stars():
+    assert set(PAYMENT_OPTIONS) == {
+        "cryptobot_usdt",
+        "xrp_xrpl",
+        "sol_solana",
+        "usdt_trc20",
+        "usdt_erc20",
+        "usdt_bep20",
+        "usdc_erc20",
+        "usdc_solana",
+        "usdc_polygon",
+        "telegram_stars",
+    }
+    assert PAYMENT_OPTIONS["usdt_trc20"] == PaymentOptionConfig(
+        code="usdt_trc20",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.USDT,
+        network=NetworkCode.TRC20,
+        display_name="USDT (TRC20)",
+        is_active=True,
+        sort_order=30,
+    )
+    assert PAYMENT_OPTIONS["xrp_xrpl"].network == NetworkCode.XRPL
+    assert PAYMENT_OPTIONS["sol_solana"].currency == CurrencyCode.SOL
+    assert PAYMENT_OPTIONS["cryptobot_usdt"].network is None
+    assert PAYMENT_OPTIONS["telegram_stars"].payment_method == PaymentMethod.TELEGRAM_STARS
+    assert PAYMENT_OPTIONS["telegram_stars"].currency is None
+    assert PAYMENT_OPTIONS["telegram_stars"].network is None
+    assert PAYMENT_OPTIONS["telegram_stars"].is_active is False
+
+
+def test_active_payment_options_are_only_active_and_sorted_by_sort_order():
+    active = get_active_payment_options()
+
+    assert [option.code for option in active] == [
+        "cryptobot_usdt",
+        "xrp_xrpl",
+        "sol_solana",
+        "usdt_trc20",
+        "usdt_erc20",
+        "usdt_bep20",
+        "usdc_erc20",
+        "usdc_solana",
+        "usdc_polygon",
+    ]
+    assert all(option.is_active for option in active)
+    assert "telegram_stars" not in {option.code for option in active}
+    assert [option.sort_order for option in active] == sorted(
+        option.sort_order for option in active
+    )
+
+
+def test_get_payment_option_returns_config_and_rejects_unknown_code():
+    assert get_payment_option("usdt_trc20") is PAYMENT_OPTIONS["usdt_trc20"]
+
+    with pytest.raises(ValueError, match="Unsupported payment option code: broken"):
+        get_payment_option("broken")
+
+
+def test_common_enums_keep_external_string_values_stable():
+    assert AppEnv.DEV.value == "dev"
+    assert AppEnv.PROD.value == "prod"
+    assert AppEnv.TEST.value == "test"
+    assert [item.value for item in CurrencyCode] == ["USDT", "USDC", "XRP", "SOL"]
+    assert [item.value for item in NetworkCode] == [
+        "TRC20",
+        "ERC20",
+        "BEP20",
+        "POLYGON",
+        "SOLANA",
+        "XRPL",
+    ]
+    assert [item.value for item in TariffCode] == [
+        "devices_1",
+        "devices_2",
+        "devices_3",
+    ]
+
+
+def test_text_constants_and_callback_constants_are_stable_for_user_navigation():
+    assert "Добро пожаловать" in constants.START_TEXT
+    assert "FAQ" in constants.FAQ_TEXT
+    assert "поддержку" in constants.SUPPORT_TEXT
+    assert "точную сумму" in constants.PAYMENT_EXACT_AMOUNT_WARNING
+    assert "XRP" in constants.XRP_MEMO_WARNING
+    assert constants.CALLBACK_MAIN_MENU == "main_menu"
+    assert constants.CALLBACK_BUY == "buy"
+    assert constants.CALLBACK_DOWNLOAD == "download"
+    assert constants.CALLBACK_MY_SUBSCRIPTION == "my_subscription"
+    assert constants.CALLBACK_SUPPORT == "support"
+    assert constants.CALLBACK_FAQ == "faq"
