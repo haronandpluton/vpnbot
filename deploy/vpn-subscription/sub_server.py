@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from uuid import UUID
+import time
 
 HOST = "0.0.0.0"
 PORT = 2097
@@ -125,6 +126,36 @@ def build_vless_link(client_uuid: str) -> str:
         f"&type=ws"
         f"#vpn-{client_uuid[:8]}"
     )
+
+def build_expired_vless_link(client_uuid: str) -> str:
+    return (
+        f"vless://{client_uuid}@127.0.0.1:9"
+        f"?encryption=none"
+        f"&security=none"
+        f"&type=tcp"
+        f"#❌ Подписка закончилась — продлите в Telegram"
+    )
+
+
+def is_subscription_expired(client_uuid: str, *, now: int | None = None) -> bool:
+    meta = get_subscription_meta(client_uuid)
+    expire = meta["expire"]
+
+    if expire <= 0:
+        return False
+
+    current_time = int(time.time()) if now is None else int(now)
+
+    return expire <= current_time
+
+
+def build_subscription_payload(client_uuid: str) -> bytes:
+    if is_subscription_expired(client_uuid):
+        link = build_expired_vless_link(client_uuid)
+    else:
+        link = build_vless_link(client_uuid)
+
+    return base64.b64encode((link + "\n").encode("utf-8"))
 
 
 def build_subscription_url(client_uuid: str) -> str:
@@ -444,8 +475,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b"forbidden")
             return
 
-        vless_link = build_vless_link(token)
-        payload = base64.b64encode((vless_link + "\n").encode("utf-8"))
+        payload = build_subscription_payload(token)
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -474,8 +504,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(b"forbidden")
             return
 
-        vless_link = build_vless_link(token)
-        payload = base64.b64encode((vless_link + "\n").encode("utf-8"))
+        payload = build_subscription_payload(token)
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
