@@ -18,7 +18,7 @@
 
 ```env
 BOT_TOKEN=your_dev_bot_token
-ADMINS=your_telegram_id
+ADMIN_IDS=your_telegram_id
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/vpn_bot
 LOG_LEVEL=INFO
 DEV_MODE=true
@@ -27,7 +27,7 @@ DEV_MODE=true
 Важно:
 
 - `BOT_TOKEN` — токен тестового или текущего Telegram-бота.
-- `ADMINS` — Telegram ID администратора.
+- `ADMIN_IDS` — Telegram ID администратора.
 - `DATABASE_URL` — строка подключения к локальной PostgreSQL.
 - `DEV_MODE=true` — включает dev/test-команды для локальной разработки.
 

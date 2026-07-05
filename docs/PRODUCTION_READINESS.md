@@ -69,7 +69,7 @@ dev/test-команды доступны только администратор
 
 ```env
 BOT_TOKEN=real_bot_token
-ADMINS=real_admin_telegram_id
+ADMIN_IDS=real_admin_telegram_id
 DATABASE_URL=postgresql+asyncpg://user:password@host:5432/db_name
 LOG_LEVEL=INFO
 DEV_MODE=false
@@ -79,7 +79,7 @@ DEV_MODE=false
 
 ```env
 BOT_TOKEN=dev_bot_token
-ADMINS=your_telegram_id
+ADMIN_IDS=your_telegram_id
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/vpn_bot
 LOG_LEVEL=INFO
 DEV_MODE=true
@@ -94,7 +94,7 @@ DEV_MODE=true
 - `.env.example` не содержит настоящих секретов
 - `DEV_MODE=false`
 - `BOT_TOKEN` настоящий и валидный
-- `ADMINS` содержит корректные Telegram ID администраторов
+- `AADMIN_IDS` содержит корректные Telegram ID администраторов
 - PostgreSQL доступен
 - Alembic-миграции применены
 - Бот запускается командой `python -m app.bot.main`
