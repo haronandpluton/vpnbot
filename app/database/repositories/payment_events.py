@@ -43,7 +43,7 @@ class PaymentEventRepository(BaseRepository):
         return event
 
     async def get_unprocessed(self) -> list[PaymentEvent]:
-        stmt = select(PaymentEvent).where(PaymentEvent.processed == False)
+        stmt = select(PaymentEvent).where(PaymentEvent.processed.is_(False))
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 

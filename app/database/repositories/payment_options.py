@@ -19,7 +19,7 @@ class PaymentOptionRepository(BaseRepository):
     async def get_active(self) -> list[PaymentOption]:
         stmt = (
             select(PaymentOption)
-            .where(PaymentOption.is_active == True)
+            .where(PaymentOption.is_active.is_(True))
             .order_by(PaymentOption.sort_order.asc(), PaymentOption.id.asc())
         )
         result = await self.session.execute(stmt)

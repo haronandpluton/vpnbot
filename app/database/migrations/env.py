@@ -8,17 +8,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config.settings import get_settings
 from app.database.base import Base
-from app.database.models import (
-    User,
-    PaymentOption,
-    Order,
-    Payment,
-    PaymentEvent,
-    VPNServer,
-    Subscription,
-    AdminAction,
-    SystemErrorRecord,
-)
+from app.database import models as _models  # noqa: F401
 
 config = context.config
 

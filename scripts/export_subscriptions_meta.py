@@ -7,11 +7,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from sqlalchemy import select
+from sqlalchemy import select  # noqa: E402
 
-from app.database.models import Subscription
-from app.database.session import SessionLocal
-from app.payment_core.enums.subscription_status import SubscriptionStatus
+from app.database.models import Subscription  # noqa: E402
+from app.database.session import SessionLocal  # noqa: E402
+from app.payment_core.enums.subscription_status import SubscriptionStatus  # noqa: E402
 
 
 OUTPUT_PATH = PROJECT_ROOT / "deploy" / "vpn-subscription" / "subscriptions_meta.generated.json"

@@ -25,7 +25,7 @@ class SystemErrorRecordRepository(BaseRepository):
         return error
 
     async def get_unresolved(self) -> list[SystemErrorRecord]:
-        stmt = select(SystemErrorRecord).where(SystemErrorRecord.is_resolved == False)
+        stmt = select(SystemErrorRecord).where(SystemErrorRecord.is_resolved.is_(False))
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 

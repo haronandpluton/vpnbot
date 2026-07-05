@@ -6,7 +6,6 @@ from app.services.subscription_meta_sync_service import SubscriptionMetaSyncServ
 from app.database.repositories.orders import OrderRepository
 from app.database.repositories.subscriptions import SubscriptionRepository
 from app.payment_core.enums.order_status import OrderStatus
-from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.vpn_access_service import VpnAccessService
 from sqlalchemy import select
 from app.database.models import Order
