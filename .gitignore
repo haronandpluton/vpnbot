@@ -37,3 +37,4 @@ dist/
 *.sql
 
 deploy/vpn-subscription/subscriptions_meta.generated.json
+volet_activation_audit.txt
