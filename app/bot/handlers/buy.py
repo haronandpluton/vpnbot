@@ -7,10 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.main_menu import payment_method_keyboard, tariff_keyboard
 from app.bot.keyboards.payment import payment_check_keyboard
-from app.common.enums import TariffCode
-from app.services.order_service import OrderService
-
+from app.common.enums import CurrencyCode, TariffCode
 from app.config.settings import get_settings
+from app.payment_adapters.cryptobot import CryptoBotAPIError
+from app.services.cryptobot_payment_service import CryptoBotPaymentService
+from app.services.order_service import OrderService
 
 router = Router()
 
@@ -74,8 +75,13 @@ async def select_payment_callback(
         await callback.answer("Этот тариф пока недоступен", show_alert=True)
         return
 
-    if payment_option_code != "usdt_trc20":
+    if payment_option_code != "cryptobot_usdt":
         await callback.answer("Этот способ оплаты пока недоступен", show_alert=True)
+        return
+
+    settings = get_settings()
+    if not settings.cryptobot_enabled:
+        await callback.answer("CryptoBot сейчас отключен", show_alert=True)
         return
 
     order_service = OrderService(session)
@@ -91,50 +97,40 @@ async def select_payment_callback(
     )
 
     order.expected_amount = Decimal("4.00")
-    order.expected_currency = "USDT"
-    order.expected_network = "TRC20"
+    order.expected_currency = CurrencyCode.USDT
+    order.expected_network = None
 
-    if order.destination_address is None:
-        order.destination_address = f"payment_receiver_order_{order.id}"
-
-    await session.commit()
-    settings = get_settings()
-
-    volet_payment_url = None
-    if settings.volet_sci_enabled and settings.volet_sci_payment_base_url.strip():
-        base_url = settings.volet_sci_payment_base_url.strip().rstrip("/")
-        volet_payment_url = f"{base_url}/volet/pay/{order.id}"
-
-    if volet_payment_url:
-        text = (
-            "Заказ создан.\n\n"
-            f"Order ID: {order.id}\n"
-            "Тариф: 1 устройство\n"
-            "Срок: 30 дней\n"
-            "Сумма: 4.00 USDT\n"
-            "Сеть: TRC20\n\n"
-            "Нажми «Оплатить через Volet», чтобы перейти на страницу оплаты.\n\n"
-            "После оплаты вернись в бот и нажми «Я оплатил / Проверить оплату»."
+    try:
+        invoice = await CryptoBotPaymentService(session).ensure_invoice_for_order(
+            order.id
         )
-    else:
-        text = (
-            "Заказ создан.\n\n"
-            f"Order ID: {order.id}\n"
-            "Тариф: 1 устройство\n"
-            "Срок: 30 дней\n"
-            "Сумма: 4.00 USDT\n"
-            "Сеть: TRC20\n\n"
-            "Адрес для оплаты:\n"
-            f"<code>{order.destination_address}</code>\n\n"
-            "После оплаты нажми кнопку ниже.\n\n"
-            "Важно: отправляй точную сумму и только в указанной сети."
+    except CryptoBotAPIError as exc:
+        await session.rollback()
+        await callback.message.answer(
+            "Не удалось создать счёт CryptoBot. Попробуй позже или обратись в поддержку."
         )
+        await callback.answer("Ошибка создания счёта", show_alert=True)
+        raise exc
+
+    payment_url = invoice.get("pay_url") or order.destination_address
+
+    text = (
+        "Заказ создан.\n\n"
+        f"Order ID: {order.id}\n"
+        "Тариф: 1 устройство\n"
+        "Срок: 30 дней\n"
+        "Сумма: 4.00 USDT\n"
+        "Оплата: CryptoBot\n\n"
+        "Нажми «Оплатить через CryptoBot» и подтверди оплату в CryptoBot.\n\n"
+        "После оплаты вернись в бот и нажми «Я оплатил / Проверить оплату»."
+    )
 
     await callback.message.edit_text(
         text,
         reply_markup=payment_check_keyboard(
             order.id,
-            payment_url=volet_payment_url,
+            payment_url=payment_url,
+            payment_url_text="Оплатить через CryptoBot",
             show_dev_button=settings.dev_mode,
         ),
         parse_mode="HTML",

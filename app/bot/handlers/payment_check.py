@@ -2,6 +2,8 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.payment_adapters.cryptobot import CryptoBotAPIError
+from app.services.cryptobot_payment_service import CryptoBotPaymentService
 from app.services.payment_check_service import PaymentCheckService
 
 router = Router()
@@ -18,13 +20,24 @@ async def check_payment_callback(
         await callback.answer("Некорректный заказ", show_alert=True)
         return
 
-    result = await PaymentCheckService(session).check_order_payment(int(order_id_raw))
+    order_id = int(order_id_raw)
+
+    try:
+        await CryptoBotPaymentService(session).sync_paid_invoice_and_activate(order_id)
+    except CryptoBotAPIError:
+        await callback.message.answer(
+            "Не удалось проверить оплату через CryptoBot. Попробуй еще раз через несколько секунд."
+        )
+        await callback.answer()
+        return
+
+    result = await PaymentCheckService(session).check_order_payment(order_id)
 
     if result.status == "waiting_payment":
         text = "Платеж пока не найден. Если ты уже оплатил, проверь еще раз через несколько секунд."
 
     elif result.status == "activated":
-        text = "Оплата подтверждена. VPN-доступ активирован."
+        text = "Оплата подтверждена. VPN-доступ активирован. Открой раздел «Моя подписка» и нажми «Подключить VPN»."
 
     elif result.status == "paid_waiting_activation":
         text = "Оплата подтверждена. Доступ активируется."

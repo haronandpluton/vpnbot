@@ -72,8 +72,8 @@ def payment_method_keyboard(tariff_code: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="USDT TRC20",
-                    callback_data=f"select_payment:{tariff_code}:usdt_trc20",
+                    text="CryptoBot — 4 USDT",
+                    callback_data=f"select_payment:{tariff_code}:cryptobot_usdt",
                 )
             ],
             [

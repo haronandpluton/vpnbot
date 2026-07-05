@@ -16,6 +16,15 @@ class PaymentOptionConfig:
 
 
 PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
+    "cryptobot_usdt": PaymentOptionConfig(
+        code="cryptobot_usdt",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.USDT,
+        network=None,
+        display_name="CryptoBot — USDT",
+        is_active=True,
+        sort_order=5,
+    ),
     "xrp_xrpl": PaymentOptionConfig(
         code="xrp_xrpl",
         payment_method=PaymentMethod.CRYPTO,

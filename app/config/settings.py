@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     )
     
 
+    cryptobot_enabled: bool = Field(default=False, alias="CRYPTOBOT_ENABLED")
+    cryptobot_api_url: str = Field(
+        default="https://pay.crypt.bot/api",
+        alias="CRYPTOBOT_API_URL",
+    )
+    cryptobot_api_token: str = Field(default="", alias="CRYPTOBOT_API_TOKEN")
+    cryptobot_asset: str = Field(default="USDT", alias="CRYPTOBOT_ASSET")
+    cryptobot_expires_in: int = Field(default=900, alias="CRYPTOBOT_EXPIRES_IN")
+
     xray_panel_url: str = Field(default="", alias="XRAY_PANEL_URL")
     xray_panel_username: str = Field(default="", alias="XRAY_PANEL_USERNAME")
     xray_panel_password: str = Field(default="", alias="XRAY_PANEL_PASSWORD")

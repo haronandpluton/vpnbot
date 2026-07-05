@@ -5,6 +5,7 @@ def payment_check_keyboard(
     order_id: int,
     *,
     payment_url: str | None = None,
+    payment_url_text: str = "Оплатить",
     show_dev_button: bool = True,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
@@ -13,7 +14,7 @@ def payment_check_keyboard(
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Оплатить через Volet",
+                    text=payment_url_text,
                     url=payment_url,
                 )
             ]
