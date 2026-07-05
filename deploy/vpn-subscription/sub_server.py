@@ -12,6 +12,7 @@ HOST = "0.0.0.0"
 PORT = 2097
 
 TOKENS_FILE = Path("/opt/vpn-subscription/tokens.txt")
+SUBSCRIPTIONS_META_FILE = Path("/opt/vpn-subscription/subscriptions_meta.json")
 
 CERT_FILE = "/root/.acme.sh/lab83607.hostkey.in_ecc/fullchain.cer"
 KEY_FILE = "/root/.acme.sh/lab83607.hostkey.in_ecc/lab83607.hostkey.in.key"
@@ -56,6 +57,59 @@ def is_uuid_token(token: str) -> bool:
 def is_allowed_token(token: str) -> bool:
     valid_tokens = load_tokens()
     return token in valid_tokens or is_uuid_token(token)
+
+def load_subscriptions_meta() -> dict:
+    if not SUBSCRIPTIONS_META_FILE.exists():
+        return {}
+
+    try:
+        data = json.loads(SUBSCRIPTIONS_META_FILE.read_text(encoding="utf-8"))
+    except Exception as error:
+        print(f"Failed to load subscriptions meta: {error}")
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    return data
+
+
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def get_subscription_meta(client_uuid: str) -> dict[str, int]:
+    data = load_subscriptions_meta()
+    raw_meta = data.get(client_uuid)
+
+    if not isinstance(raw_meta, dict):
+        return {
+            "upload": 0,
+            "download": 0,
+            "total": 0,
+            "expire": 0,
+        }
+
+    return {
+        "upload": _safe_int(raw_meta.get("upload")),
+        "download": _safe_int(raw_meta.get("download")),
+        "total": _safe_int(raw_meta.get("total")),
+        "expire": _safe_int(raw_meta.get("expire")),
+    }
+
+
+def build_subscription_userinfo(client_uuid: str) -> str:
+    meta = get_subscription_meta(client_uuid)
+
+    return (
+        f"upload={meta['upload']}; "
+        f"download={meta['download']}; "
+        f"total={meta['total']}; "
+        f"expire={meta['expire']}"
+    )
 
 
 def build_vless_link(client_uuid: str) -> str:
@@ -396,6 +450,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("profile-update-interval", "1")
+        self.send_header("subscription-userinfo", build_subscription_userinfo(token))
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Connection", "close")
@@ -425,6 +480,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("profile-update-interval", "1")
+        self.send_header("subscription-userinfo", build_subscription_userinfo(token))
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Connection", "close")
