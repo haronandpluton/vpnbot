@@ -1,9 +1,13 @@
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.main_menu import back_to_main_menu_keyboard
 from app.config.settings import get_settings
+from app.database.repositories.users import UserRepository
+from app.services.my_subscription_service import MySubscriptionService
 
 router = Router()
 
@@ -165,6 +169,129 @@ def support_back_keyboard() -> InlineKeyboardMarkup:
         ]
     )
 
+@router.message(Command("faq", "info"))
+async def faq_command(message: Message):
+    text = (
+        "FAQ\n\n"
+        "1. Как начать пользоваться VPN?\n"
+        "Установи Happ через раздел «Скачать VPN», купи подписку, затем открой «Моя подписка» "
+        "и нажми «Подключить VPN».\n\n"
+        "2. Где получить доступ после оплаты?\n"
+        "В разделе «Моя подписка». Там будет кнопка «Подключить VPN».\n\n"
+        "3. Нужно ли копировать VLESS-ключ вручную?\n"
+        "Обычно нет. Бот выдаёт страницу подключения, через которую Happ должен импортировать "
+        "подписку автоматически.\n\n"
+        "4. Что делать, если Happ не открылся автоматически?\n"
+        "На странице подключения нажми «Открыть вручную». Если не помогло — скопируй резервную "
+        "ссылку и добавь её в Happ как subscription.\n\n"
+        "5. Что делать, если оплатил, но доступ не появился?\n"
+        "Открой сообщение с заказом и нажми «Проверить оплату». Если платёж всё равно не найден, "
+        "обратись в поддержку и пришли Order ID, txid, сумму и сеть.\n\n"
+        "6. Что если отправил не ту сумму или не в той сети?\n"
+        "Автоматическая активация может не пройти. Такой платёж требует ручной проверки.\n\n"
+        "7. Как продлить подписку?\n"
+        "Открой «Моя подписка» и нажми «Продлить подписку». После оплаты срок будет добавлен "
+        "к текущей активной подписке.\n\n"
+        "8. Что будет после окончания подписки?\n"
+        "Доступ перестанет работать. Для восстановления нужно продлить подписку."
+    )
+
+    await message.answer(
+        text,
+        reply_markup=back_to_main_menu_keyboard(),
+    )
+
+
+@router.message(Command("help"))
+async def help_command(message: Message):
+    settings = get_settings()
+    support_username = settings.support_username.strip()
+
+    contact_text = (
+        f"Контакт поддержки: @{support_username.lstrip('@')}"
+        if support_username
+        else "Контакт поддержки пока не указан в настройках."
+    )
+
+    text = (
+        "Поддержка\n\n"
+        "Если возникла проблема, подготовь данные:\n\n"
+        "• Order ID;\n"
+        "• txid транзакции, если вопрос по оплате;\n"
+        "• сумму и сеть оплаты;\n"
+        "• модель устройства;\n"
+        "• скрин ошибки;\n"
+        "• время попытки подключения.\n\n"
+        f"{contact_text}"
+    )
+
+    await message.answer(
+        text,
+        reply_markup=support_keyboard(),
+    )
+
+
+@router.message(Command("profile"))
+async def profile_command(
+    message: Message,
+    session: AsyncSession,
+):
+    if message.from_user is None:
+        await message.answer("Не удалось определить пользователя.")
+        return
+
+    user = await UserRepository(session).get_by_telegram_id(message.from_user.id)
+    subscription = await MySubscriptionService(
+        session,
+    ).get_active_subscription_by_telegram_id(
+        telegram_id=message.from_user.id,
+    )
+
+    username = f"@{message.from_user.username}" if message.from_user.username else "—"
+    db_status = "создан" if user is not None else "не создан"
+
+    subscription_status_map = {
+        "active": "активна",
+        "user_not_found": "профиль не найден",
+        "subscription_not_found": "активная подписка не найдена",
+        "subscription_expired": "истекла",
+        "subscription_not_active": "не активна",
+    }
+
+    subscription_status = subscription_status_map.get(
+        subscription.status,
+        "не удалось определить",
+    )
+
+    text = (
+        "Профиль\n\n"
+        f"Telegram ID: {message.from_user.id}\n"
+        f"Username: {username}\n"
+        f"Профиль в БД: {db_status}\n"
+        "Баланс: пока не подключён\n"
+        f"Подписка: {subscription_status}"
+    )
+
+    await message.answer(
+        text,
+        reply_markup=back_to_main_menu_keyboard(),
+    )
+
+
+@router.message(Command("present"))
+async def present_command(message: Message):
+    text = (
+        "Подарочная программа\n\n"
+        "Раздел подготовлен для будущих подарочных подписок и приглашений.\n\n"
+        "Сейчас подарочная программа ещё не активна. "
+        "Купить VPN для себя можно через /buy."
+    )
+
+    await message.answer(
+        text,
+        reply_markup=back_to_main_menu_keyboard(),
+    )
+    
 
 @router.callback_query(F.data == "download_vpn")
 async def download_vpn_callback(callback: CallbackQuery):

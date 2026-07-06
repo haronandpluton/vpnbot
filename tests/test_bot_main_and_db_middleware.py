@@ -100,7 +100,12 @@ class FakeBot:
     def __init__(self, *, token: str) -> None:
         self.token = token
         self.__class__.instances.append(self)
+        self.commands = None
+        self.commands_scope = None
         CALLS.append(("bot", token))
+    async def set_my_commands(self, commands, scope=None):
+        self.commands = commands
+        self.commands_scope = scope
 
 
 class FakeTask:

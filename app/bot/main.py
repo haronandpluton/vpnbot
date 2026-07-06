@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from app.bot.commands import setup_bot_commands
 from aiogram import Bot, Dispatcher
 
 from app.bot.handlers.admin_subscription_meta_sync import (
@@ -58,6 +59,9 @@ async def main() -> None:
 
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
+
+    await setup_bot_commands(bot)
+    logger.info("Пользовательское меню команд загружено")
 
     dp.update.middleware(DbSessionMiddleware(SessionLocal))
 
