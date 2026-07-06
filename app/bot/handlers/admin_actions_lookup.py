@@ -1,3 +1,4 @@
+from html import escape
 from typing import Any
 
 from aiogram import Router
@@ -9,6 +10,10 @@ from app.config.settings import get_settings
 from app.services.admin_action_log_service import AdminActionLookupService
 
 router = Router()
+
+TELEGRAM_SAFE_MESSAGE_LIMIT = 3500
+MAX_ADMIN_ACTION_PAYLOAD_LENGTH = 700
+MAX_ADMIN_ACTION_REASON_LENGTH = 500
 
 
 def _is_admin(telegram_id: int) -> bool:
@@ -33,11 +38,16 @@ def _parse_id_from_command(message: Message) -> int | None:
     return int(raw_id)
 
 
-def _clean(value: Any) -> str:
+def _clean(value: Any, *, max_length: int | None = None) -> str:
     if value is None or value == "":
         return "—"
 
-    return str(value)
+    text = str(value)
+
+    if max_length is not None and len(text) > max_length:
+        text = f"{text[:max_length]}…"
+
+    return escape(text, quote=False)
 
 
 def _format_datetime(value: Any) -> str:
@@ -45,6 +55,43 @@ def _format_datetime(value: Any) -> str:
         return "—"
 
     return value.strftime("%d.%m.%Y %H:%M:%S")
+
+def _split_text(text: str, *, limit: int = TELEGRAM_SAFE_MESSAGE_LIMIT) -> list[str]:
+    if len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+
+    for block in text.split("\n\n"):
+        candidate = f"{current}\n\n{block}" if current else block
+
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+
+        if current:
+            chunks.append(current)
+
+        if len(block) <= limit:
+            current = block
+            continue
+
+        chunks.extend(
+            block[index : index + limit]
+            for index in range(0, len(block), limit)
+        )
+        current = ""
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+
+async def _answer_long_html(message: Message, text: str) -> None:
+    for chunk in _split_text(text):
+        await message.answer(chunk, parse_mode="HTML")
 
 
 def _format_actions(title: str, items) -> str:
@@ -57,7 +104,7 @@ def _format_actions(title: str, items) -> str:
     ]
 
     for item in items:
-        admin_username = f"@{item.admin_username}" if item.admin_username else "—"
+        admin_username = f"@{_clean(item.admin_username)}" if item.admin_username else "—"
 
         parts.append(
             f"<b>AdminAction #{item.action_id}</b>\n"
@@ -69,8 +116,8 @@ def _format_actions(title: str, items) -> str:
             f"Order ID: {_clean(item.order_id)}\n"
             f"Payment ID: {_clean(item.payment_id)}\n"
             f"Subscription ID: {_clean(item.subscription_id)}\n"
-            f"Reason: {_clean(item.reason)}\n"
-            f"Payload: <code>{_clean(item.payload)}</code>\n"
+            f"Reason: {_clean(item.reason, max_length=MAX_ADMIN_ACTION_REASON_LENGTH)}\n"
+            f"Payload: <code>{_clean(item.payload, max_length=MAX_ADMIN_ACTION_PAYLOAD_LENGTH)}</code>\n"
             f"Created: {_format_datetime(item.created_at)}\n\n"
         )
 
@@ -91,9 +138,9 @@ async def admin_actions_command(
 
     items = await AdminActionLookupService(session).get_last_actions(limit=20)
 
-    await message.answer(
+    await _answer_long_html(
+        message,
         _format_actions("Admin actions — последние 20", items),
-        parse_mode="HTML",
     )
 
 
@@ -124,12 +171,12 @@ async def admin_actions_subscription_command(
         limit=20,
     )
 
-    await message.answer(
+    await _answer_long_html(
+        message,
         _format_actions(
             f"Admin actions по Subscription #{subscription_id}",
             items,
         ),
-        parse_mode="HTML",
     )
 
 
@@ -160,10 +207,10 @@ async def admin_actions_user_command(
         limit=20,
     )
 
-    await message.answer(
+    await _answer_long_html(
+        message,
         _format_actions(
             f"Admin actions по User #{user_id}",
             items,
         ),
-        parse_mode="HTML",
     )
