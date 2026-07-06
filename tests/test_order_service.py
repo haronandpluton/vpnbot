@@ -6,10 +6,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.common.enums import CurrencyCode, NetworkCode, TariffCode
+from app.common.enums import CurrencyCode, NetworkCode
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.payment_method import PaymentMethod
 from app.services.order_service import OrderService
+from app.common.enums import TariffCode
+
 
 
 class FakeSession:

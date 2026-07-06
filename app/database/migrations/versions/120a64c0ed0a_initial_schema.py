@@ -30,8 +30,8 @@ def upgrade() -> None:
     sa.Column('display_name', sa.String(length=128), nullable=False),
     sa.Column('is_active', sa.Boolean(), server_default='true', nullable=False),
     sa.Column('sort_order', sa.Integer(), server_default='0', nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_payment_options_code'), 'payment_options', ['code'], unique=True)
@@ -48,8 +48,8 @@ def upgrade() -> None:
     sa.Column('retry_count', sa.Integer(), server_default='0', nullable=False),
     sa.Column('is_resolved', sa.Boolean(), server_default='false', nullable=False),
     sa.Column('resolved_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_system_errors_entity_id'), 'system_errors', ['entity_id'], unique=False)
@@ -65,8 +65,8 @@ def upgrade() -> None:
     sa.Column('language_code', sa.String(length=16), nullable=True),
     sa.Column('is_admin', sa.Boolean(), server_default='false', nullable=False),
     sa.Column('is_blocked', sa.Boolean(), server_default='false', nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_telegram_id'), 'users', ['telegram_id'], unique=True)
@@ -79,8 +79,8 @@ def upgrade() -> None:
     sa.Column('status', sa.String(length=32), server_default='active', nullable=False),
     sa.Column('capacity', sa.Integer(), nullable=True),
     sa.Column('current_load', sa.Integer(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_vpn_servers_name'), 'vpn_servers', ['name'], unique=True)
@@ -105,8 +105,8 @@ def upgrade() -> None:
     sa.Column('source', sa.String(length=32), server_default=sa.text("'bot'"), nullable=True),
     sa.Column('comment', sa.String(length=500), nullable=True),
     sa.Column('failure_reason', sa.String(length=500), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['payment_option_id'], ['payment_options.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -138,8 +138,8 @@ def upgrade() -> None:
     sa.Column('detected_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('confirmed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('raw_payload', sa.Text(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['payment_option_id'], ['payment_options.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
@@ -168,8 +168,8 @@ def upgrade() -> None:
     sa.Column('disabled_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('config_version', sa.Integer(), nullable=True),
     sa.Column('error_reason', sa.String(length=500), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['vpn_server_id'], ['vpn_servers.id'], ondelete='SET NULL'),
@@ -191,8 +191,8 @@ def upgrade() -> None:
     sa.Column('action_type', sa.String(length=64), nullable=False),
     sa.Column('reason', sa.String(length=500), nullable=True),
     sa.Column('payload', sa.Text(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['admin_user_id'], ['users.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['payment_id'], ['payments.id'], ondelete='SET NULL'),
@@ -219,8 +219,8 @@ def upgrade() -> None:
     sa.Column('processing_status', sa.String(length=64), nullable=True),
     sa.Column('error_message', sa.String(length=500), nullable=True),
     sa.Column('processed_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['payment_id'], ['payments.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')

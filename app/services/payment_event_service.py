@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from app.common.datetime_utils import is_due_or_past
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,15 +32,10 @@ class PaymentEventService:
         return existing_event, payment, order
 
     def _is_late_order(self, order) -> bool:
-        now = datetime.now(timezone.utc)
-
         if order.status == OrderStatus.EXPIRED:
             return True
 
-        if order.expires_at is not None and order.expires_at <= now:
-            return True
-
-        return False
+        return is_due_or_past(order.expires_at)
 
     async def _process_late_event(
         self,

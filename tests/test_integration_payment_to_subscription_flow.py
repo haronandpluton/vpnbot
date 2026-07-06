@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, UTC, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -9,7 +9,6 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
 import app.payment_polling.processor as polling_processor_module
-import app.services.payment_event_service as payment_event_service_module
 import app.services.subscription_service as subscription_service_module
 from app.common.enums import CurrencyCode, NetworkCode, TariffCode
 from app.database.base import Base
@@ -25,6 +24,7 @@ from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.payment_polling.processor import PaymentPollingProcessor
 from app.services.payment_activation_service import PaymentActivationService
 
+from app.services.order_service import OrderService
 
 class NaiveDateTime(datetime):
     @classmethod
@@ -149,7 +149,6 @@ def patch_external_vpn_and_meta_sync(monkeypatch):
         "SubscriptionMetaSyncService",
         FakeSubscriptionMetaSyncService,
     )
-    monkeypatch.setattr(payment_event_service_module, "datetime", NaiveDateTime)
     monkeypatch.setattr(subscription_service_module, "datetime", NaiveDateTime)
     monkeypatch.setattr(polling_processor_module, "datetime", NaiveDateTime)
 
@@ -404,7 +403,7 @@ async def test_late_payment_is_persisted_as_expired_without_activation(session_f
     async with session_factory() as session:
         _, _, order = await create_user_option_and_order(
             session,
-            expires_delta=timedelta(minutes=-1),
+            expires_delta=timedelta(days=-1),
         )
 
         event, payment, subscription, config_uri = await PaymentPollingProcessor(
@@ -495,3 +494,25 @@ async def test_second_paid_order_extends_existing_subscription_without_new_uuid(
         assert FakeVpnAccessService.extend_calls == [
             {"uuid": first_uuid, "device_limit": 2}
         ]
+
+@pytest.mark.asyncio
+async def test_order_service_does_not_reuse_expired_waiting_order(session_factory):
+    async with session_factory() as session:
+        user, payment_option, first_order = await create_user_option_and_order(
+            session,
+            expires_delta=timedelta(days=-1),
+        )
+
+        second_order = await OrderService(session).create_order(
+            telegram_id=user.telegram_id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            language_code=user.language_code,
+            tariff_code=TariffCode.DEVICES_1,
+            payment_option_code=payment_option.code,
+        )
+
+        assert second_order.id != first_order.id
+        assert second_order.status == OrderStatus.WAITING_PAYMENT
+        assert second_order.expires_at > datetime.now(UTC)

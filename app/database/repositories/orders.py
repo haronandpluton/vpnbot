@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -16,12 +16,20 @@ class OrderRepository(BaseRepository):
         return result.scalar_one_or_none()
 
     async def get_active_waiting_order_by_user(
-        self,
-        user_id: int,
+            self,
+            user_id: int,
     ) -> Order | None:
-        stmt = select(Order).where(
-            Order.user_id == user_id,
-            Order.status == OrderStatus.WAITING_PAYMENT,
+        now = datetime.now(UTC)
+
+        stmt = (
+            select(Order)
+            .where(
+                Order.user_id == user_id,
+                Order.status == OrderStatus.WAITING_PAYMENT,
+                Order.expires_at > now,
+            )
+            .order_by(Order.created_at.desc())
+            .limit(1)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

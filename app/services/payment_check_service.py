@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from app.common.datetime_utils import is_due_or_past
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -139,7 +139,7 @@ class PaymentCheckService:
                 )
 
         if order.status == OrderStatus.WAITING_PAYMENT:
-            if order.expires_at is not None and order.expires_at <= datetime.now(timezone.utc):
+            if is_due_or_past(order.expires_at):
                 return PaymentCheckResult(
                     status="expired",
                     order_id=order.id,

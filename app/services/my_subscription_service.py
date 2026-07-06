@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
-
+from datetime import datetime
+from app.common.datetime_utils import is_due_or_past, utc_now
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import Subscription
@@ -152,7 +152,7 @@ class MySubscriptionService:
         subscription: Subscription,
         user_id: int,
     ) -> MySubscriptionResult:
-        now = datetime.now(timezone.utc)
+        now = utc_now()
 
         if subscription.status != SubscriptionStatus.ACTIVE:
             return MySubscriptionResult(
@@ -165,7 +165,7 @@ class MySubscriptionService:
                 message="Подписка не активна.",
             )
 
-        if subscription.expires_at <= now:
+        if is_due_or_past(subscription.expires_at, now=now):
             return MySubscriptionResult(
                 status="subscription_expired",
                 user_id=user_id,

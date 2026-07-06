@@ -38,3 +38,5 @@ dist/
 
 deploy/vpn-subscription/subscriptions_meta.generated.json
 volet_activation_audit.txt
+
+local_vpnbot.db*
