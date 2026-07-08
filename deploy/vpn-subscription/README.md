@@ -1,181 +1,78 @@
-# VPN Subscription Server
+# PresentVPN subscription gateway
 
-Отдельный HTTPS-сервер для Happ-compatible выдачи VPN-подписки.
+Отдельный публичный gateway в Южной Африке для Happ-compatible выдачи подписок.
+Он не является VPN-нодой и не принимает пользовательский VPN-трафик.
 
-Сервер отвечает за:
-
-* страницу подключения `/connect/<uuid>`
-* основной subscription endpoint `/<uuid>`
-* технический fallback endpoint `/sub/<uuid>`
-* автообновление подписки в Happ
-* отображение срока подписки в Happ
-* заглушку при истёкшей подписке
-
----
-
-## 1. Основная схема
-
-Рабочий пользовательский flow:
+## Архитектура
 
 ```text
-Telegram bot
-→ https://DOMAIN:PORT/connect/<uuid>?device=android|ios
-→ setup-страница
-→ happ://add/https://DOMAIN:PORT/<uuid>
-→ Happ VPN
-→ автоматический импорт подписки
-→ автообновление подписки раз в час
+Telegram bot / EU backend
+    -> создаёт UUID в 3x-ui на EU VPN-ноде
+    -> сохраняет subscription в БД
+    -> экспортирует subscriptions_meta.json на ZA gateway
+    -> отправляет пользователю connect URL
+
+Пользователь
+    -> https://connect.presentvpn.click/connect/<uuid>
+    -> Nginx :443 на ZA gateway
+    -> subscription service 127.0.0.1:2097
+    -> проверка UUID по subscriptions_meta.json
+    -> Happ получает VLESS-профиль EU VPN-ноды
 ```
 
-Основной Happ deep link:
+Разделение ролей обязательно:
 
 ```text
-happ://add/https://DOMAIN:PORT/<uuid>
+PUBLIC gateway: https://connect.presentvpn.click
+VPN upstream:    lab83607.hostkey.in:443
 ```
 
-Не использовать как основной deep link:
+Публичный домен не должен автоматически подставляться в VLESS-профиль.
 
-```text
-happ://add/https://DOMAIN:PORT/sub/<uuid>
-```
-
-`/sub/<uuid>` оставлен только как технический fallback.
-
----
-
-## 2. Endpoints
-
-### `GET /<uuid>`
-
-Основной Happ-compatible subscription endpoint.
-
-Возвращает base64-encoded subscription body с VLESS-ссылкой.
-
-Пример:
-
-```text
-https://lab83607.hostkey.in:2097/62486a8e-b420-44af-8bd8-fb8cc061a93b
-```
-
----
-
-### `GET /sub/<uuid>`
-
-Технический fallback endpoint.
-
-Пример:
-
-```text
-https://lab83607.hostkey.in:2097/sub/62486a8e-b420-44af-8bd8-fb8cc061a93b
-```
-
-Для Happ как основной endpoint не использовать.
-
----
+## Endpoints
 
 ### `GET /connect/<uuid>?device=android|ios`
 
-Пользовательская страница подключения.
-
-Пример:
+Страница подключения. Пытается открыть:
 
 ```text
-https://lab83607.hostkey.in:2097/connect/62486a8e-b420-44af-8bd8-fb8cc061a93b?device=android
+happ://add/https://connect.presentvpn.click/<uuid>
 ```
 
-Страница:
+### `GET /<uuid>`
 
-* автоматически пытается открыть Happ
-* использует `happ://add/https://DOMAIN:PORT/<uuid>`
-* содержит кнопку `Открыть вручную`
-* содержит fallback-кнопку `Копировать`
-* копирует именно `https://DOMAIN:PORT/<uuid>`, а не `/sub/<uuid>`
+Основной subscription endpoint для Happ. Возвращает base64 body с VLESS-ссылкой.
 
----
+### `GET /sub/<uuid>`
 
-## 3. Обязательные HTTP-заголовки
+Технический fallback. Основным endpoint остаётся `/<uuid>`.
 
-Для `/<uuid>` и `/sub/<uuid>` должны быть:
+### `GET /healthz`
 
-```http
-Content-Type: text/plain; charset=utf-8
-Cache-Control: no-store
-profile-update-interval: 1
-subscription-userinfo: upload=0; download=0; total=0; expire=<unix_timestamp>
-Content-Length: ...
-Connection: close
-```
-
----
-
-## 4. Автообновление Happ
-
-Заголовок:
-
-```http
-profile-update-interval: 1
-```
-
-означает, что Happ будет обновлять subscription URL раз в 1 час.
-
-Это нужно для:
-
-* обновления срока подписки
-* будущей подмены серверов
-* будущей выдачи нескольких серверов
-* будущей заглушки при окончании подписки
-
----
-
-## 5. Срок подписки в Happ
-
-Заголовок:
-
-```http
-subscription-userinfo: upload=0; download=0; total=0; expire=<unix_timestamp>
-```
-
-Пример:
-
-```http
-subscription-userinfo: upload=0; download=0; total=0; expire=1782000000
-```
-
-Поля:
+Liveness endpoint:
 
 ```text
-upload   — использованный upload в байтах
-download — использованный download в байтах
-total    — общий лимит трафика в байтах
-expire   — дата окончания подписки в Unix timestamp
+HTTP 200
+ok
 ```
 
-На текущем временном сервере:
+## Авторизация UUID
 
-```text
-upload=0
-download=0
-total=0
-```
-
-`total=0` используется как отсутствие отображаемого лимита трафика. В Happ это отображается как `∞`.
-
----
-
-## 6. Временный источник срока подписки
-
-Пока срок подписки берётся из локального JSON-файла:
+Источник разрешённых UUID:
 
 ```text
 /opt/vpn-subscription/subscriptions_meta.json
 ```
 
-Пример:
+Любой UUID, отсутствующий в этом JSON, получает `403 Forbidden`.
+Просто корректный формат UUID больше не даёт доступ.
+
+Файл содержит активные, истёкшие и отключённые подписки:
 
 ```json
 {
   "62486a8e-b420-44af-8bd8-fb8cc061a93b": {
-    "expire": 1782000000,
+    "expire": 1784603873,
     "upload": 0,
     "download": 0,
     "total": 0
@@ -183,397 +80,168 @@ total=0
 }
 ```
 
-Это временная схема.
+При временно повреждённом JSON процесс продолжает использовать последнюю успешно
+прочитанную версию. При отсутствии файла gateway работает fail-closed и не разрешает
+ни одного UUID.
 
-В production источник истины должен быть:
+## Активная и истёкшая подписка
 
-```text
-БД бота / backend API
-```
+При `expire > now` возвращается VLESS-профиль EU VPN-ноды.
 
-а не локальный JSON-файл.
-
----
-
-## 7. Поведение при активной подписке
-
-Если:
-
-```text
-expire > now
-```
-
-сервер отдаёт рабочий VLESS-профиль:
-
-```text
-vless://<uuid>@DOMAIN:443?...#vpn-<uuid-prefix>
-```
-
-Пример:
-
-```text
-vless://62486a8e-b420-44af-8bd8-fb8cc061a93b@lab83607.hostkey.in:443?alpn=http%2F1.1&encryption=none&fp=chrome&host=lab83607.hostkey.in&path=%2Fws-test&security=tls&sni=lab83607.hostkey.in&type=ws#vpn-62486a8e
-```
-
----
-
-## 8. Поведение при истёкшей подписке
-
-Если:
-
-```text
-expire <= now
-```
-
-сервер отдаёт один нерабочий VLESS-профиль с названием:
+При `expire <= now` возвращается нерабочая локальная заглушка с названием:
 
 ```text
 ❌ Подписка закончилась — продлите в Telegram
 ```
 
-Технически это выглядит как VLESS-ссылка на нерабочий локальный адрес:
+Happ обновляет subscription URL раз в час за счёт заголовка:
 
-```text
-vless://<uuid>@127.0.0.1:9?encryption=none&security=none&type=tcp#...
-```
-
-Это нужно, чтобы в Happ пользователь видел понятную заглушку, а не просто пустую подписку или ошибку импорта.
-
----
-
-## 9. Runtime files на сервере
-
-Рабочая директория:
-
-```text
-/opt/vpn-subscription
-```
-
-Файлы:
-
-```text
-/opt/vpn-subscription/sub_server.py
-/opt/vpn-subscription/tokens.txt
-/opt/vpn-subscription/subscriptions_meta.json
-```
-
----
-
-## 10. Systemd service
-
-Файл:
-
-```text
-/etc/systemd/system/vpn-subscription.service
-```
-
-Содержимое:
-
-```ini
-[Unit]
-Description=VPN Subscription Server
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/vpn-subscription
-ExecStart=/usr/bin/python3 /opt/vpn-subscription/sub_server.py
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-```
-
----
-
-## 11. Проверка после изменений
-
-Проверка синтаксиса:
-
-```bash
-python3 -m py_compile /opt/vpn-subscription/sub_server.py
-```
-
-Рестарт:
-
-```bash
-systemctl restart vpn-subscription
-sleep 2
-systemctl status vpn-subscription --no-pager -l
-```
-
-Проверка порта:
-
-```bash
-ss -ltnp | grep ':2097'
-```
-
----
-
-## 12. Проверка root subscription endpoint
-
-```bash
-UUID="62486a8e-b420-44af-8bd8-fb8cc061a93b"
-
-curl -k -sS -D /tmp/sub_root_headers.txt \
-  -o /tmp/sub_root_body.txt \
-  "https://127.0.0.1:2097/$UUID"
-
-cat /tmp/sub_root_headers.txt | grep -Ei "HTTP/|content-type|content-length|connection|profile-update|subscription-userinfo"
-
-base64 -d /tmp/sub_root_body.txt
-```
-
-Ожидаемо для активной подписки:
-
-```text
+```http
 profile-update-interval: 1
-subscription-userinfo: upload=0; download=0; total=0; expire=<future_timestamp>
-
-vless://<uuid>@lab83607.hostkey.in:443...
 ```
 
----
+## Сетевой контур
 
-## 13. Проверка fallback `/sub/<uuid>`
+```text
+Internet -> Nginx :443 -> 127.0.0.1:2097
+```
+
+Python-сервис не поднимает TLS самостоятельно и по умолчанию слушает только
+`127.0.0.1`. Порт `2097` не нужно открывать в UFW.
+
+Публично разрешены только:
+
+```text
+22/tcp  SSH
+80/tcp  ACME + redirect
+443/tcp HTTPS
+```
+
+## Переменные standalone gateway
+
+Шаблон: `vpn-subscription.env.example`.
+
+```dotenv
+VPN_SUBSCRIPTION_BIND_HOST=127.0.0.1
+VPN_SUBSCRIPTION_BIND_PORT=2097
+VPN_SUBSCRIPTION_META_FILE=/opt/vpn-subscription/subscriptions_meta.json
+VPN_SUBSCRIPTION_PUBLIC_BASE_URL=https://connect.presentvpn.click
+
+VPN_UPSTREAM_HOST=lab83607.hostkey.in
+VPN_UPSTREAM_PORT=443
+VPN_UPSTREAM_WS_PATH=/ws-test
+VPN_UPSTREAM_WS_HOST=lab83607.hostkey.in
+VPN_UPSTREAM_SNI=lab83607.hostkey.in
+```
+
+## Файлы deployment
+
+```text
+sub_server.py
+vpn-subscription.env.example
+vpn-subscription.service
+nginx-connect.presentvpn.click.conf
+subscriptions_meta.example.json
+```
+
+## Установка на ZA gateway
+
+Создать отдельного системного пользователя:
 
 ```bash
-UUID="62486a8e-b420-44af-8bd8-fb8cc061a93b"
-
-curl -k -sS -D /tmp/sub_legacy_headers.txt \
-  -o /tmp/sub_legacy_body.txt \
-  "https://127.0.0.1:2097/sub/$UUID"
-
-cat /tmp/sub_legacy_headers.txt | grep -Ei "HTTP/|content-type|content-length|connection|profile-update|subscription-userinfo"
-
-base64 -d /tmp/sub_legacy_body.txt
+sudo useradd --system --home /opt/vpn-subscription \
+  --shell /usr/sbin/nologin vpnsubscription
+sudo install -d -o root -g vpnsubscription -m 2770 /opt/vpn-subscription
+sudo usermod -aG vpnsubscription vpnadmin
 ```
 
-Ожидаемо то же поведение, что у `/<uuid>`.
-
----
-
-## 14. Проверка `/connect`
+Скопировать файлы:
 
 ```bash
-UUID="62486a8e-b420-44af-8bd8-fb8cc061a93b"
-
-curl -k -sS \
-  "https://127.0.0.1:2097/connect/$UUID?device=android" \
-  -o /tmp/connect_test.html
-
-grep -E "happ://add|sessionStorage|setTimeout|Открыть вручную|Копировать" -n /tmp/connect_test.html
+sudo install -o root -g vpnsubscription -m 0750 \
+  sub_server.py /opt/vpn-subscription/sub_server.py
+sudo install -o root -g vpnsubscription -m 0640 \
+  subscriptions_meta.example.json \
+  /opt/vpn-subscription/subscriptions_meta.json
+sudo install -o root -g root -m 0600 \
+  vpn-subscription.env.example /etc/vpn-subscription.env
+sudo install -o root -g root -m 0644 \
+  vpn-subscription.service /etc/systemd/system/vpn-subscription.service
 ```
 
-Ожидаемо:
-
-```text
-happ://add/https://lab83607.hostkey.in:2097/<uuid>
-sessionStorage
-setTimeout
-Открыть вручную
-Копировать
-```
-
----
-
-## 15. Проверка истёкшей подписки
-
-Временно поставить `expire` в прошлое:
+После изменения групп переподключиться по SSH, затем проверить запись metadata:
 
 ```bash
-python3 - <<'PY'
-from pathlib import Path
-import json
-import time
-
-uuid = "62486a8e-b420-44af-8bd8-fb8cc061a93b"
-path = Path("/opt/vpn-subscription/subscriptions_meta.json")
-
-data = json.loads(path.read_text(encoding="utf-8"))
-data.setdefault(uuid, {})
-data[uuid]["expire"] = int(time.time()) - 60
-data[uuid]["upload"] = 0
-data[uuid]["download"] = 0
-data[uuid]["total"] = 0
-
-path.write_text(
-    json.dumps(data, ensure_ascii=False, indent=2),
-    encoding="utf-8",
-)
-
-print(json.dumps(data[uuid], ensure_ascii=False, indent=2))
-PY
+id vpnadmin
+ls -l /opt/vpn-subscription/subscriptions_meta.json
 ```
 
-Проверить:
+Запустить сервис:
 
 ```bash
-UUID="62486a8e-b420-44af-8bd8-fb8cc061a93b"
-
-curl -k -sS -D /tmp/expired_headers.txt \
-  -o /tmp/expired_body.txt \
-  "https://127.0.0.1:2097/$UUID"
-
-cat /tmp/expired_headers.txt | grep -Ei "HTTP/|profile-update|subscription-userinfo"
-
-base64 -d /tmp/expired_body.txt
+sudo systemctl daemon-reload
+sudo systemctl enable --now vpn-subscription
+sudo systemctl status vpn-subscription --no-pager -l
+curl -i http://127.0.0.1:2097/healthz
 ```
 
-Ожидаемо:
-
-```text
-subscription-userinfo: upload=0; download=0; total=0; expire=<past_timestamp>
-
-vless://<uuid>@127.0.0.1:9?encryption=none&security=none&type=tcp#...
-```
-
-В Happ должен появиться профиль:
-
-```text
-❌ Подписка закончилась — продлите в Telegram
-```
-
----
-
-## 16. Вернуть подписку активной
-
-После теста вернуть дату в будущее:
+Установить Nginx-конфигурацию:
 
 ```bash
-python3 - <<'PY'
-from pathlib import Path
-import json
-import time
-
-uuid = "62486a8e-b420-44af-8bd8-fb8cc061a93b"
-path = Path("/opt/vpn-subscription/subscriptions_meta.json")
-
-data = json.loads(path.read_text(encoding="utf-8"))
-data.setdefault(uuid, {})
-data[uuid]["expire"] = int(time.time()) + 30 * 24 * 60 * 60
-data[uuid]["upload"] = 0
-data[uuid]["download"] = 0
-data[uuid]["total"] = 0
-
-path.write_text(
-    json.dumps(data, ensure_ascii=False, indent=2),
-    encoding="utf-8",
-)
-
-print(json.dumps(data[uuid], ensure_ascii=False, indent=2))
-PY
+sudo install -o root -g root -m 0644 \
+  nginx-connect.presentvpn.click.conf \
+  /etc/nginx/sites-available/connect.presentvpn.click
+sudo ln -sfn \
+  /etc/nginx/sites-available/connect.presentvpn.click \
+  /etc/nginx/sites-enabled/connect.presentvpn.click
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-Проверить:
+Проверка снаружи:
 
 ```bash
-UUID="62486a8e-b420-44af-8bd8-fb8cc061a93b"
-
-curl -k -sS -o /tmp/active_body.txt \
-  "https://127.0.0.1:2097/$UUID"
-
-base64 -d /tmp/active_body.txt
+curl -i https://connect.presentvpn.click/healthz
 ```
 
-Ожидаемо:
+## Настройки бота/backend
 
-```text
-vless://<uuid>@lab83607.hostkey.in:443...
+В `.env` backend:
+
+```dotenv
+VPN_SUBSCRIPTION_PUBLIC_BASE_URL=https://connect.presentvpn.click
+SUBSCRIPTION_META_REMOTE_TARGET=vpnadmin@139.84.251.197:/opt/vpn-subscription/subscriptions_meta.json
+SUBSCRIPTION_META_SSH_KEY=C:\\Users\\User\\.ssh\\presentvpn_za_admin
 ```
 
----
+`SUBSCRIPTION_META_SSH_KEY` должен указывать на приватный ключ локально. Сам ключ
+никогда не копируется в репозиторий.
 
-## 17. Важные технические требования
+## Логи и диагностика
 
-Subscription server должен использовать:
-
-```text
-ThreadingHTTPServer
-request_queue_size = 256
-daemon_threads = True
-TLS-handshake в worker-потоке
+```bash
+sudo journalctl -u vpn-subscription -n 100 --no-pager
+sudo journalctl -u vpn-subscription -f
+sudo nginx -t
+sudo tail -n 100 /var/log/nginx/error.log
+ss -ltnp | grep -E ':443|:2097'
 ```
 
-Не использовать:
+Ожидаемо `2097` слушает только `127.0.0.1`.
 
-```python
-httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
+## Тесты
+
+```powershell
+C:\Users\User\PycharmProjects\pythonProject\.venv\Scripts\python.exe -m ruff check .
+C:\Users\User\PycharmProjects\pythonProject\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Потому что это может блокировать главный accept-поток и вызывать вечную загрузку.
+Критические сценарии:
 
----
-
-## 18. Production note
-
-Текущая схема с `subscriptions_meta.json` — временная.
-
-В production нужно заменить JSON на:
-
-```text
-subscription-server → backend API / database
-```
-
-Источник истины:
-
-```text
-users
-orders
-payments
-subscriptions
-vpn_servers
-```
-
-Тогда subscription-server сможет отдавать:
-
-* актуальный `expires_at`
-* статус подписки
-* несколько серверов
-* заглушку при истёкшей подписке
-* реальные upload/download/total
-
----
-
-## 19. Что не входит в текущую временную версию
-
-Пока не реализовано:
-
-* реальный upload/download
-* реальный лимит трафика
-* блокировка по превышению трафика
-* несколько VPN-серверов
-* автоматическая подмена серверов
-* RU front-gateway на 443
-* чтение подписок из БД
-
-Эти пункты относятся к следующему production-этапу.
-
----
-
-## 20. Текущий тестовый сервер
-
-```text
-DOMAIN=lab83607.hostkey.in
-IP=151.243.212.64
-VPN_PORT=443
-WS_PATH=/ws-test
-SUB_PORT=2097
-```
-
-Рабочие URL:
-
-```text
-Happ subscription:
-https://lab83607.hostkey.in:2097/<uuid>
-
-Happ deep link:
-happ://add/https://lab83607.hostkey.in:2097/<uuid>
-
-Setup page:
-https://lab83607.hostkey.in:2097/connect/<uuid>?device=android
-
-Technical fallback:
-https://lab83607.hostkey.in:2097/sub/<uuid>
-```
+- публичный gateway и EU VPN host не смешиваются;
+- неизвестный UUID получает `403`;
+- валидный UUID из metadata получает subscription;
+- истёкшая подписка получает Happ-заглушку;
+- приложение слушает локальный HTTP, а TLS завершает Nginx;
+- повреждённый metadata-файл не обнуляет последнюю валидную конфигурацию.

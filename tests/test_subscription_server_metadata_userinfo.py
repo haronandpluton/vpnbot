@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import types
 from pathlib import Path
 
@@ -13,7 +14,7 @@ VALID_UUID = "22222222-2222-4222-8222-222222222222"
 
 def load_sub_server_without_startup():
     source = SUB_SERVER_PATH.read_text(encoding="utf-8")
-    prefix = source.split("\ncontext = ssl.SSLContext", 1)[0]
+    prefix = source.split('\nif __name__ == "__main__":', 1)[0]
     module = types.ModuleType("sub_server_metadata_under_test")
     exec(compile(prefix, str(SUB_SERVER_PATH), "exec"), module.__dict__)
     return module
@@ -70,6 +71,29 @@ def test_load_subscriptions_meta_returns_empty_dict_for_invalid_json(tmp_path):
     module.SUBSCRIPTIONS_META_FILE = meta_file
 
     assert module.load_subscriptions_meta() == {}
+
+
+def test_load_subscriptions_meta_keeps_last_good_data_during_partial_write(tmp_path):
+    module = load_sub_server_without_startup()
+    meta_file = tmp_path / "subscriptions_meta.json"
+    expected = {
+        VALID_UUID: {
+            "upload": 0,
+            "download": 0,
+            "total": 0,
+            "expire": 1784603873,
+        }
+    }
+    meta_file.write_text(json.dumps(expected), encoding="utf-8")
+    module.SUBSCRIPTIONS_META_FILE = meta_file
+
+    assert module.load_subscriptions_meta() == expected
+
+    previous_mtime = meta_file.stat().st_mtime_ns
+    meta_file.write_text("{partial", encoding="utf-8")
+    os.utime(meta_file, ns=(previous_mtime + 1_000_000, previous_mtime + 1_000_000))
+
+    assert module.load_subscriptions_meta() == expected
 
 
 def test_subscription_userinfo_uses_exported_metadata_values(tmp_path):
@@ -131,7 +155,9 @@ def test_subscription_userinfo_sanitizes_invalid_metadata_values(tmp_path):
 
 def test_root_subscription_endpoint_sends_subscription_userinfo_header(tmp_path):
     module = load_sub_server_without_startup()
-    module.DOMAIN = "vpn.example.com"
+    module.VPN_HOST = "vpn.example.com"
+    module.VPN_WS_HOST = "vpn.example.com"
+    module.VPN_SNI = "vpn.example.com"
     module.SUBSCRIPTIONS_META_FILE = tmp_path / "subscriptions_meta.json"
     module.SUBSCRIPTIONS_META_FILE.write_text(
         json.dumps(
@@ -162,7 +188,9 @@ def test_root_subscription_endpoint_sends_subscription_userinfo_header(tmp_path)
 
 def test_sub_fallback_endpoint_sends_subscription_userinfo_header(tmp_path):
     module = load_sub_server_without_startup()
-    module.DOMAIN = "vpn.example.com"
+    module.VPN_HOST = "vpn.example.com"
+    module.VPN_WS_HOST = "vpn.example.com"
+    module.VPN_SNI = "vpn.example.com"
     module.SUBSCRIPTIONS_META_FILE = tmp_path / "subscriptions_meta.json"
     module.SUBSCRIPTIONS_META_FILE.write_text(
         json.dumps(

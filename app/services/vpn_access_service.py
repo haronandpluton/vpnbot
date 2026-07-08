@@ -1,12 +1,12 @@
 from dataclasses import dataclass
+from urllib.parse import quote, urlencode
 from uuid import uuid4
 
 from app.config.settings import get_settings
 from app.services.xui_client import make_xui_client_from_settings
 
 
-SUBSCRIPTION_BASE_URL = "https://lab83607.hostkey.in:2097/sub"
-CONNECT_BASE_URL = "https://lab83607.hostkey.in:2097/connect"
+DEFAULT_PUBLIC_BASE_URL = "https://connect.presentvpn.click"
 
 
 @dataclass(slots=True)
@@ -16,12 +16,28 @@ class VpnAccessResult:
     config_uri: str
 
 
-def build_subscription_url(token: str) -> str:
-    return f"{SUBSCRIPTION_BASE_URL}/{token}"
+def _normalize_public_base_url(public_base_url: str) -> str:
+    return public_base_url.rstrip("/")
 
 
-def build_connect_url(token: str, device: str = "android") -> str:
-    return f"{CONNECT_BASE_URL}/{token}?device={device}"
+def build_subscription_url(
+    token: str,
+    *,
+    public_base_url: str = DEFAULT_PUBLIC_BASE_URL,
+) -> str:
+    base_url = _normalize_public_base_url(public_base_url)
+    return f"{base_url}/{quote(token, safe='')}"
+
+
+def build_connect_url(
+    token: str,
+    device: str = "android",
+    *,
+    public_base_url: str = DEFAULT_PUBLIC_BASE_URL,
+) -> str:
+    base_url = _normalize_public_base_url(public_base_url)
+    query = urlencode({"device": device})
+    return f"{base_url}/connect/{quote(token, safe='')}?{query}"
 
 
 def build_client_email(user_id: int, client_uuid: str) -> str:
@@ -30,18 +46,20 @@ def build_client_email(user_id: int, client_uuid: str) -> str:
 
 class VpnAccessService:
     """
-    Создаёт VPN-доступ в 3x-ui и возвращает пользователю страницу подключения.
+    Создаёт VPN-доступ на EU VPN-ноде через 3x-ui и возвращает
+    пользовательскую страницу подключения на отдельном ZA gateway.
 
-    Техническая подписка:
-    https://lab83607.hostkey.in:2097/sub/<uuid>
+    Основная подписка:
+    https://connect.presentvpn.click/<uuid>
 
     Пользовательская страница подключения:
-    https://lab83607.hostkey.in:2097/connect/<uuid>?device=android
+    https://connect.presentvpn.click/connect/<uuid>?device=android
     """
 
     def __init__(self) -> None:
         settings = get_settings()
         self.xui_client = make_xui_client_from_settings(settings)
+        self.public_base_url = settings.vpn_subscription_public_base_url
 
     async def create_access(
         self,
@@ -58,7 +76,10 @@ class VpnAccessService:
             comment=f"telegram user {user_id}",
         )
 
-        config_uri = build_connect_url(access_uuid)
+        config_uri = build_connect_url(
+            access_uuid,
+            public_base_url=self.public_base_url,
+        )
 
         return VpnAccessResult(
             uuid=access_uuid,
@@ -71,7 +92,10 @@ class VpnAccessService:
         uuid: str,
         device_limit: int,
     ) -> VpnAccessResult:
-        config_uri = build_connect_url(uuid)
+        config_uri = build_connect_url(
+            uuid,
+            public_base_url=self.public_base_url,
+        )
 
         return VpnAccessResult(
             uuid=uuid,
@@ -84,4 +108,7 @@ class VpnAccessService:
         uuid: str,
         device_limit: int,
     ) -> str:
-        return build_connect_url(uuid)
+        return build_connect_url(
+            uuid,
+            public_base_url=self.public_base_url,
+        )

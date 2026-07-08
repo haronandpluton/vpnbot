@@ -94,7 +94,7 @@ DEV_MODE=true
 - `.env.example` не содержит настоящих секретов
 - `DEV_MODE=false`
 - `BOT_TOKEN` настоящий и валидный
-- `AADMIN_IDS` содержит корректные Telegram ID администраторов
+- `ADMIN_IDS` содержит корректные Telegram ID администраторов
 - PostgreSQL доступен
 - Alembic-миграции применены
 - Бот запускается командой `python -m app.bot.main`
@@ -102,3 +102,40 @@ DEV_MODE=true
 - `/admin` работает для администратора
 - `/start` работает для пользователя
 - `/my_subscription` работает для пользователя
+## Надёжная синхронизация ZA subscription metadata
+
+Рабочий поток после изменения подписки:
+
+```text
+commit платежа/подписки
+→ немедленная попытка полного metadata snapshot
+→ атомарная загрузка во временный файл на ZA
+→ проверка JSON
+→ atomic mv в subscriptions_meta.json
+→ при ошибке: один unresolved system_errors marker
+→ фоновый retry scheduler
+→ после успешного snapshot все старые sync markers закрываются
+```
+
+Обязательные production-настройки:
+
+```env
+VPN_SUBSCRIPTION_PUBLIC_BASE_URL=https://connect.presentvpn.click
+SUBSCRIPTION_META_OUTPUT_PATH=deploy/vpn-subscription/subscriptions_meta.generated.json
+SUBSCRIPTION_META_REMOTE_TARGET=vpnadmin@139.84.251.197:/opt/vpn-subscription/subscriptions_meta.json
+SUBSCRIPTION_META_SSH_KEY=C:/Users/User/.ssh/presentvpn_za_admin
+SUBSCRIPTION_META_SYNC_TIMEOUT_SECONDS=60
+SUBSCRIPTION_META_RETRY_SCHEDULER_ENABLED=true
+SUBSCRIPTION_META_RETRY_INTERVAL_SECONDS=120
+SUBSCRIPTION_META_RETRY_INITIAL_DELAY_SECONDS=60
+```
+
+Сбой SSH/SCP не откатывает уже подтверждённый платёж, статус заказа или подписку. Ошибка фиксируется как `subscription_meta_sync_failed` в `system_errors` и повторяется отдельным scheduler-процессом внутри бота.
+
+Проверки после запуска:
+
+- в логах есть `Subscription metadata retry scheduler started`;
+- не создаются новые дубли `subscription_meta_sync_failed` при каждом retry;
+- `retry_count` увеличивается у существующей unresolved-записи;
+- после успешной синхронизации запись получает `is_resolved=true` и `resolved_at`;
+- рабочий JSON на ZA заменяется только после успешной серверной валидации.

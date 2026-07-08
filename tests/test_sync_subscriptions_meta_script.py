@@ -19,12 +19,22 @@ def test_sync_subscriptions_meta_script_does_not_hardcode_local_python_path():
     assert 'return "python"' in text
 
 
-def test_sync_subscriptions_meta_script_supports_remote_target_override():
+def test_sync_subscriptions_meta_script_reads_remote_target_from_env_or_dotenv():
     text = script_text()
 
     assert "$env:VPN_SUBSCRIPTIONS_META_REMOTE_TARGET" in text
-    assert 'return "root@151.243.212.64:/opt/vpn-subscription/subscriptions_meta.json"' in text
+    assert 'Read-DotEnvValue "SUBSCRIPTION_META_REMOTE_TARGET"' in text
+    assert "151.243.212.64" not in text
+    assert "Set SUBSCRIPTION_META_REMOTE_TARGET in .env" in text
     assert "$RemoteTarget = Resolve-RemoteTarget" in text
+
+
+def test_sync_subscriptions_meta_script_supports_optional_ssh_key():
+    text = script_text()
+
+    assert "$env:VPN_SUBSCRIPTIONS_META_SSH_KEY" in text
+    assert 'Read-DotEnvValue "SUBSCRIPTION_META_SSH_KEY"' in text
+    assert '$CommonSshArgs += @("-i", $SshKey)' in text
 
 
 def test_sync_subscriptions_meta_script_uses_project_relative_paths():
@@ -36,6 +46,7 @@ def test_sync_subscriptions_meta_script_uses_project_relative_paths():
         'Join-Path $ProjectRoot "deploy\\vpn-subscription\\subscriptions_meta.generated.json"'
         in text
     )
+    assert '$EnvFile = Join-Path $ProjectRoot ".env"' in text
 
 
 def test_sync_subscriptions_meta_script_fails_fast_when_export_script_is_missing():
@@ -54,11 +65,17 @@ def test_sync_subscriptions_meta_script_checks_export_exit_code_and_generated_fi
     assert 'throw "Generated metadata file not found: $GeneratedFile"' in text
 
 
-def test_sync_subscriptions_meta_script_checks_scp_exit_code():
+def test_sync_subscriptions_meta_script_publishes_atomically_and_checks_exit_codes():
     text = script_text()
 
-    assert "scp $GeneratedFile $RemoteTarget" in text
+    assert "& scp @CommonSshArgs $GeneratedFile $RemoteTempTarget" in text
     assert 'throw "SCP upload failed with exit code $LASTEXITCODE"' in text
+    assert "python3 -m json.tool '$RemoteTempPath' >/dev/null" in text
+    assert "chmod 0660 '$RemoteTempPath'" in text
+    assert "mv -f '$RemoteTempPath' '$($Remote.Path)'" in text
+    assert "& ssh @CommonSshArgs $Remote.Host $PublishCommand" in text
+    assert 'throw "Remote atomic publish failed with exit code $LASTEXITCODE"' in text
+    assert '$CleanupCommand = "rm -f \'$RemoteTempPath\'"' in text
 
 
 def test_sync_subscriptions_meta_script_prints_operational_context():
@@ -69,3 +86,19 @@ def test_sync_subscriptions_meta_script_prints_operational_context():
     assert 'Write-Host "Export script: $ExportScript"' in text
     assert 'Write-Host "Generated file: $GeneratedFile"' in text
     assert 'Write-Host "Remote target: $RemoteTarget"' in text
+
+
+def test_sync_subscriptions_meta_script_validates_local_json_before_upload():
+    text = script_text()
+
+    assert 'Write-Host "Validating generated JSON..."' in text
+    assert "ConvertFrom-Json | Out-Null" in text
+    assert 'throw "Generated metadata is not valid JSON: $GeneratedFile"' in text
+
+
+def test_sync_subscriptions_meta_script_validates_remote_target_format():
+    text = script_text()
+
+    assert "function Parse-RemoteTarget" in text
+    assert "Remote target must look like user@host:/absolute/path" in text
+    assert "$RemoteTempPath" in text

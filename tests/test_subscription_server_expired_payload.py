@@ -13,7 +13,7 @@ VALID_UUID = "33333333-3333-4333-8333-333333333333"
 
 def load_sub_server_without_startup():
     source = SUB_SERVER_PATH.read_text(encoding="utf-8")
-    prefix = source.split("\ncontext = ssl.SSLContext", 1)[0]
+    prefix = source.split('\nif __name__ == "__main__":', 1)[0]
     module = types.ModuleType("sub_server_expired_payload_under_test")
     exec(compile(prefix, str(SUB_SERVER_PATH), "exec"), module.__dict__)
     return module
@@ -112,7 +112,9 @@ def test_expired_payload_contains_clear_happ_stub_profile(tmp_path):
 
 def test_active_payload_contains_real_vless_profile(tmp_path):
     module = load_sub_server_without_startup()
-    module.DOMAIN = "vpn.example.com"
+    module.VPN_HOST = "vpn.example.com"
+    module.VPN_WS_HOST = "vpn.example.com"
+    module.VPN_SNI = "vpn.example.com"
     write_meta(module, tmp_path, expire=9999999999)
 
     payload = module.build_subscription_payload(VALID_UUID)
@@ -126,7 +128,9 @@ def test_active_payload_contains_real_vless_profile(tmp_path):
 
 def test_root_endpoint_returns_expired_stub_when_metadata_expired(tmp_path):
     module = load_sub_server_without_startup()
-    module.DOMAIN = "vpn.example.com"
+    module.VPN_HOST = "vpn.example.com"
+    module.VPN_WS_HOST = "vpn.example.com"
+    module.VPN_SNI = "vpn.example.com"
     write_meta(module, tmp_path, expire=100)
 
     harness = HandlerHarness(module, path=f"/{VALID_UUID}").do_get()
@@ -144,7 +148,9 @@ def test_root_endpoint_returns_expired_stub_when_metadata_expired(tmp_path):
 
 def test_sub_fallback_endpoint_returns_expired_stub_when_metadata_expired(tmp_path):
     module = load_sub_server_without_startup()
-    module.DOMAIN = "vpn.example.com"
+    module.VPN_HOST = "vpn.example.com"
+    module.VPN_WS_HOST = "vpn.example.com"
+    module.VPN_SNI = "vpn.example.com"
     write_meta(module, tmp_path, expire=100)
 
     harness = HandlerHarness(module, path=f"/sub/{VALID_UUID}").do_get()

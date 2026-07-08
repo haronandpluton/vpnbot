@@ -95,8 +95,18 @@ class Settings(BaseSettings):
     xui_password: str = Field(default="", alias="XUI_PASSWORD")
     xui_inbound_id: int = Field(default=9, alias="XUI_INBOUND_ID")
 
-    vpn_default_server_name: str = Field(default="default-node", alias="VPN_DEFAULT_SERVER_NAME")
-    vpn_default_inbound_id: int = Field(default=1, alias="VPN_DEFAULT_INBOUND_ID")
+    vpn_default_server_name: str = Field(
+        default="default-node",
+        alias="VPN_DEFAULT_SERVER_NAME",
+    )
+    vpn_default_inbound_id: int = Field(
+        default=1,
+        alias="VPN_DEFAULT_INBOUND_ID",
+    )
+    vpn_subscription_public_base_url: str = Field(
+        default="https://connect.presentvpn.click",
+        alias="VPN_SUBSCRIPTION_PUBLIC_BASE_URL",
+    )
 
     support_username: str = Field(default="", alias="SUPPORT_USERNAME")
 
@@ -105,7 +115,7 @@ class Settings(BaseSettings):
         alias="SUBSCRIPTION_META_OUTPUT_PATH",
     )
     subscription_meta_remote_target: str = Field(
-        default="root@151.243.212.64:/opt/vpn-subscription/subscriptions_meta.json",
+        default="",
         alias="SUBSCRIPTION_META_REMOTE_TARGET",
     )
     subscription_meta_ssh_key: str = Field(
@@ -117,6 +127,18 @@ class Settings(BaseSettings):
         alias="SUBSCRIPTION_META_SYNC_TIMEOUT_SECONDS",
     )
 
+    subscription_meta_retry_scheduler_enabled: bool = Field(
+        default=True,
+        alias="SUBSCRIPTION_META_RETRY_SCHEDULER_ENABLED",
+    )
+    subscription_meta_retry_interval_seconds: int = Field(
+        default=120,
+        alias="SUBSCRIPTION_META_RETRY_INTERVAL_SECONDS",
+    )
+    subscription_meta_retry_initial_delay_seconds: int = Field(
+        default=60,
+        alias="SUBSCRIPTION_META_RETRY_INITIAL_DELAY_SECONDS",
+    )
 
     subscription_expiration_scheduler_enabled: bool = Field(
         default=True,
@@ -143,6 +165,14 @@ class Settings(BaseSettings):
         default=45,
         alias="ORDER_EXPIRATION_INITIAL_DELAY_SECONDS",
     )
+
+    @field_validator("vpn_subscription_public_base_url")
+    @classmethod
+    def validate_vpn_subscription_public_base_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if not normalized.startswith(("https://", "http://")):
+            raise ValueError("VPN_SUBSCRIPTION_PUBLIC_BASE_URL must be an HTTP(S) URL")
+        return normalized
 
     @field_validator("log_level")
     @classmethod

@@ -176,13 +176,14 @@ class FakeVpnAccessService:
 
 class FakeSubscriptionMetaSyncService:
     calls: list[dict] = []
+    result = SimpleNamespace(ok=True, error=None)
 
     def __init__(self, session) -> None:
         self.session = session
 
     async def sync_safely(self, **kwargs):
         self.__class__.calls.append(kwargs)
-        return SimpleNamespace(ok=True)
+        return self.__class__.result
 
 
 def make_order(
@@ -255,6 +256,7 @@ async def _return_order(order, order_id: int):
 @pytest.fixture(autouse=True)
 def patch_meta_sync(monkeypatch):
     FakeSubscriptionMetaSyncService.calls = []
+    FakeSubscriptionMetaSyncService.result = SimpleNamespace(ok=True, error=None)
 
     monkeypatch.setattr(
         subscription_module,
@@ -546,3 +548,26 @@ async def test_vpn_create_error_rolls_back_and_does_not_mark_order_activated():
     assert service.session.commit_count == 0
     assert service.session.rollback_count == 1
     assert FakeSubscriptionMetaSyncService.calls == []
+
+@pytest.mark.asyncio
+async def test_metadata_sync_failure_after_commit_does_not_rollback_paid_activation():
+    order = make_order(order_id=23, user_id=7, status=OrderStatus.PAID)
+    repository = FakeSubscriptionRepository(active_subscription=None)
+    service = make_service(
+        order=order,
+        subscription_repository=repository,
+        vpn_access_service=FakeVpnAccessService(),
+    )
+    FakeSubscriptionMetaSyncService.result = SimpleNamespace(
+        ok=False,
+        error="scp unavailable",
+    )
+
+    subscription, config_uri = await service.activate_or_extend_by_order(order.id)
+
+    assert subscription.status == SubscriptionStatus.ACTIVE
+    assert order.status == OrderStatus.ACTIVATED
+    assert config_uri == "https://connect/new-vpn-uuid"
+    assert service.session.commit_count == 1
+    assert service.session.rollback_count == 0
+    assert len(FakeSubscriptionMetaSyncService.calls) == 1

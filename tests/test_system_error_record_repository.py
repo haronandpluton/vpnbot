@@ -164,6 +164,7 @@ async def test_mark_resolved_sets_flag_flushes_and_returns_same_record():
 
     assert result is error
     assert error.is_resolved is True
+    assert error.resolved_at is not None
     assert session.flush_count == 1
 
 
@@ -195,3 +196,68 @@ def test_system_error_record_repr_contains_core_diagnostics():
         "SystemErrorRecord(id=900, entity_type='subscription', "
         "error_type='subscription_meta_sync_failed', is_resolved=False)"
     )
+
+@pytest.mark.asyncio
+async def test_get_unresolved_by_error_type_returns_query_records():
+    first = make_error_record(error_id=1)
+    second = make_error_record(error_id=2)
+    session = FakeSession(items=[first, second])
+    repository = SystemErrorRecordRepository(session)
+
+    result = await repository.get_unresolved_by_error_type(
+        "subscription_meta_sync_failed"
+    )
+
+    assert result == [first, second]
+    assert len(session.execute_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_pending_failure_reuses_record_and_increments_retry_count():
+    error = make_error_record(retry_count=2)
+    session = FakeSession()
+    repository = SystemErrorRecordRepository(session)
+
+    result = await repository.update_pending_failure(
+        error,
+        entity_type="order",
+        entity_id=25,
+        error_message="still unavailable",
+        payload='{"reason":"background_retry"}',
+    )
+
+    assert result is error
+    assert error.entity_type == "order"
+    assert error.entity_id == 25
+    assert error.error_message == "still unavailable"
+    assert error.payload == '{"reason":"background_retry"}'
+    assert error.retry_count == 3
+    assert session.flush_count == 1
+
+
+@pytest.mark.asyncio
+async def test_mark_many_resolved_sets_same_timestamp_and_flushes_once():
+    first = make_error_record(error_id=1)
+    second = make_error_record(error_id=2)
+    session = FakeSession()
+    repository = SystemErrorRecordRepository(session)
+
+    result = await repository.mark_many_resolved([first, second])
+
+    assert result == [first, second]
+    assert first.is_resolved is True
+    assert second.is_resolved is True
+    assert first.resolved_at is not None
+    assert second.resolved_at == first.resolved_at
+    assert session.flush_count == 1
+
+
+@pytest.mark.asyncio
+async def test_mark_many_resolved_empty_list_does_not_flush():
+    session = FakeSession()
+    repository = SystemErrorRecordRepository(session)
+
+    result = await repository.mark_many_resolved([])
+
+    assert result == []
+    assert session.flush_count == 0

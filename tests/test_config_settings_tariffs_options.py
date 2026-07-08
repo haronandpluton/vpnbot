@@ -50,6 +50,13 @@ def test_settings_required_aliases_and_safe_defaults_are_stable():
     assert settings.xui_inbound_id == 9
     assert settings.vpn_default_server_name == "default-node"
     assert settings.vpn_default_inbound_id == 1
+    assert (
+        settings.vpn_subscription_public_base_url
+        == "https://connect.presentvpn.click"
+    )
+    assert settings.subscription_meta_retry_scheduler_enabled is True
+    assert settings.subscription_meta_retry_interval_seconds == 120
+    assert settings.subscription_meta_retry_initial_delay_seconds == 60
     assert settings.subscription_expiration_scheduler_enabled is True
     assert settings.order_expiration_scheduler_enabled is True
 
@@ -66,6 +73,23 @@ def test_settings_required_aliases_and_safe_defaults_are_stable():
 )
 def test_settings_log_level_is_normalized(raw_level, expected):
     assert make_settings(LOG_LEVEL=raw_level).log_level == expected
+
+
+def test_settings_normalizes_vpn_subscription_public_base_url():
+    settings = make_settings(
+        VPN_SUBSCRIPTION_PUBLIC_BASE_URL=" https://gateway.example.com/ ",
+    )
+
+    assert settings.vpn_subscription_public_base_url == "https://gateway.example.com"
+
+
+def test_settings_rejects_vpn_subscription_public_base_url_without_scheme():
+    with pytest.raises(ValidationError) as exc_info:
+        make_settings(VPN_SUBSCRIPTION_PUBLIC_BASE_URL="gateway.example.com")
+
+    assert "VPN_SUBSCRIPTION_PUBLIC_BASE_URL must be an HTTP(S) URL" in str(
+        exc_info.value
+    )
 
 
 def test_settings_rejects_invalid_log_level():

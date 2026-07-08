@@ -1,79 +1,96 @@
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import ssl
 import base64
 import html
 import json
+import logging
+import os
+import time
 import urllib.parse
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from uuid import UUID
-import time
 
-HOST = "0.0.0.0"
-PORT = 2097
 
-TOKENS_FILE = Path("/opt/vpn-subscription/tokens.txt")
-SUBSCRIPTIONS_META_FILE = Path("/opt/vpn-subscription/subscriptions_meta.json")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("vpn-subscription")
 
-CERT_FILE = "/root/.acme.sh/lab83607.hostkey.in_ecc/fullchain.cer"
-KEY_FILE = "/root/.acme.sh/lab83607.hostkey.in_ecc/lab83607.hostkey.in.key"
+HOST = os.getenv("VPN_SUBSCRIPTION_BIND_HOST", "127.0.0.1")
+PORT = int(os.getenv("VPN_SUBSCRIPTION_BIND_PORT", "2097"))
 
-DOMAIN = "lab83607.hostkey.in"
-PUBLIC_BASE_URL = f"https://{DOMAIN}:{PORT}"
+SUBSCRIPTIONS_META_FILE = Path(
+    os.getenv(
+        "VPN_SUBSCRIPTION_META_FILE",
+        "/opt/vpn-subscription/subscriptions_meta.json",
+    )
+)
 
-VPN_PORT = 443
-WS_PATH = "/ws-test"
+PUBLIC_BASE_URL = os.getenv(
+    "VPN_SUBSCRIPTION_PUBLIC_BASE_URL",
+    "https://connect.presentvpn.click",
+).rstrip("/")
+
+VPN_HOST = os.getenv("VPN_UPSTREAM_HOST", "lab83607.hostkey.in")
+VPN_PORT = int(os.getenv("VPN_UPSTREAM_PORT", "443"))
+VPN_WS_PATH = os.getenv("VPN_UPSTREAM_WS_PATH", "/ws-test")
+VPN_WS_HOST = os.getenv("VPN_UPSTREAM_WS_HOST", VPN_HOST)
+VPN_SNI = os.getenv("VPN_UPSTREAM_SNI", VPN_HOST)
 
 HAPP_CRYPTO_API_URL = "https://crypto.happ.su/api-v2.php"
 
-
-def load_tokens() -> set[str]:
-    if not TOKENS_FILE.exists():
-        return set()
-
-    tokens: set[str] = set()
-
-    for line in TOKENS_FILE.read_text(encoding="utf-8").splitlines():
-        token = line.strip()
-
-        if not token:
-            continue
-
-        if token.startswith("#"):
-            continue
-
-        tokens.add(token)
-
-    return tokens
+_subscriptions_meta_cache: dict = {}
+_subscriptions_meta_last_seen_mtime_ns: int | None = None
 
 
 def is_uuid_token(token: str) -> bool:
     try:
         UUID(token)
         return True
-    except ValueError:
+    except (TypeError, ValueError, AttributeError):
         return False
 
 
-def is_allowed_token(token: str) -> bool:
-    valid_tokens = load_tokens()
-    return token in valid_tokens or is_uuid_token(token)
-
 def load_subscriptions_meta() -> dict:
-    if not SUBSCRIPTIONS_META_FILE.exists():
+    global _subscriptions_meta_cache
+    global _subscriptions_meta_last_seen_mtime_ns
+
+    try:
+        mtime_ns = SUBSCRIPTIONS_META_FILE.stat().st_mtime_ns
+    except FileNotFoundError:
+        _subscriptions_meta_cache = {}
+        _subscriptions_meta_last_seen_mtime_ns = None
         return {}
+    except OSError as error:
+        logger.error("Failed to stat subscriptions metadata: %s", error)
+        return dict(_subscriptions_meta_cache)
+
+    if mtime_ns == _subscriptions_meta_last_seen_mtime_ns:
+        return dict(_subscriptions_meta_cache)
+
+    _subscriptions_meta_last_seen_mtime_ns = mtime_ns
 
     try:
         data = json.loads(SUBSCRIPTIONS_META_FILE.read_text(encoding="utf-8"))
-    except Exception as error:
-        print(f"Failed to load subscriptions meta: {error}")
-        return {}
+    except (OSError, json.JSONDecodeError) as error:
+        logger.error("Failed to load subscriptions metadata: %s", error)
+        return dict(_subscriptions_meta_cache)
 
     if not isinstance(data, dict):
-        return {}
+        logger.error("Subscriptions metadata root must be a JSON object")
+        return dict(_subscriptions_meta_cache)
 
-    return data
+    _subscriptions_meta_cache = data
+    return dict(data)
 
+
+def is_allowed_token(token: str) -> bool:
+    if not is_uuid_token(token):
+        return False
+
+    return token in load_subscriptions_meta()
 
 def _safe_int(value, default: int = 0) -> int:
     try:
@@ -114,16 +131,23 @@ def build_subscription_userinfo(client_uuid: str) -> str:
 
 
 def build_vless_link(client_uuid: str) -> str:
+    query = urllib.parse.urlencode(
+        [
+            ("alpn", "http/1.1"),
+            ("encryption", "none"),
+            ("fp", "chrome"),
+            ("host", VPN_WS_HOST),
+            ("path", VPN_WS_PATH),
+            ("security", "tls"),
+            ("sni", VPN_SNI),
+            ("type", "ws"),
+        ],
+        quote_via=urllib.parse.quote,
+    )
+
     return (
-        f"vless://{client_uuid}@{DOMAIN}:{VPN_PORT}"
-        f"?alpn=http%2F1.1"
-        f"&encryption=none"
-        f"&fp=chrome"
-        f"&host={DOMAIN}"
-        f"&path=%2Fws-test"
-        f"&security=tls"
-        f"&sni={DOMAIN}"
-        f"&type=ws"
+        f"vless://{client_uuid}@{VPN_HOST}:{VPN_PORT}"
+        f"?{query}"
         f"#vpn-{client_uuid[:8]}"
     )
 
@@ -453,8 +477,20 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_connect(path, parsed.query)
             return
 
+        if path == "/healthz":
+            body = b"ok\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            self.close_connection = True
+            return
+
         token = path.strip("/")
-        if token and "/" not in token and is_allowed_token(token):
+        if token and "/" not in token and is_uuid_token(token):
             self.handle_root_subscription(token)
             return
 
@@ -558,9 +594,11 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def log_message(self, format, *args):
-        print(
-            "%s - - [%s] %s"
-            % (self.client_address[0], self.log_date_time_string(), format % args)
+        logger.info(
+            "%s - - [%s] %s",
+            self.client_address[0],
+            self.log_date_time_string(),
+            format % args,
         )
 
 
@@ -568,43 +606,30 @@ class BetterThreadingHTTPServer(ThreadingHTTPServer):
     request_queue_size = 256
     daemon_threads = True
 
-
-class ThreadedHTTPSServer(BetterThreadingHTTPServer):
-    def __init__(self, server_address, RequestHandlerClass, ssl_context):
-        super().__init__(server_address, RequestHandlerClass)
-        self.ssl_context = ssl_context
-
     def get_request(self):
-        sock, addr = self.socket.accept()
-        sock.settimeout(10)
-        return sock, addr
-
-    def process_request_thread(self, request, client_address):
-        ssl_request = None
-        try:
-            ssl_request = self.ssl_context.wrap_socket(
-                request,
-                server_side=True,
-                do_handshake_on_connect=True,
-            )
-            ssl_request.settimeout(15)
-            self.finish_request(ssl_request, client_address)
-            self.shutdown_request(ssl_request)
-        except Exception as exc:
-            print(f"Client connection error from {client_address}: {exc}")
-            try:
-                if ssl_request is not None:
-                    self.shutdown_request(ssl_request)
-                else:
-                    self.shutdown_request(request)
-            except Exception:
-                pass
+        request, client_address = super().get_request()
+        request.settimeout(15)
+        return request, client_address
 
 
-context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-context.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
+def main() -> None:
+    httpd = BetterThreadingHTTPServer((HOST, PORT), Handler)
+    logger.info(
+        "VPN subscription server started on http://%s:%s; public=%s; vpn_upstream=%s:%s",
+        HOST,
+        PORT,
+        PUBLIC_BASE_URL,
+        VPN_HOST,
+        VPN_PORT,
+    )
 
-httpd = ThreadedHTTPSServer((HOST, PORT), Handler, context)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        logger.info("VPN subscription server stopping")
+    finally:
+        httpd.server_close()
 
-print(f"VPN subscription server started on port {PORT}")
-httpd.serve_forever()
+
+if __name__ == "__main__":
+    main()

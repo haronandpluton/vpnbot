@@ -143,6 +143,17 @@ class FakeOrderExpirationScheduler:
         CALLS.append(("order_scheduler_run",))
 
 
+class FakeSubscriptionMetaRetryScheduler:
+    instances: list["FakeSubscriptionMetaRetryScheduler"] = []
+
+    def __init__(self, session_factory) -> None:
+        self.session_factory = session_factory
+        self.__class__.instances.append(self)
+
+    async def run_forever(self) -> None:
+        CALLS.append(("subscription_meta_retry_scheduler_run",))
+
+
 class FakeVoletSciWebServer:
     instances: list["FakeVoletSciWebServer"] = []
 
@@ -175,6 +186,7 @@ def patch_bot_main(monkeypatch):
     FakeTask.instances = []
     FakeSubscriptionExpirationScheduler.instances = []
     FakeOrderExpirationScheduler.instances = []
+    FakeSubscriptionMetaRetryScheduler.instances = []
     FakeVoletSciWebServer.instances = []
 
     monkeypatch.setattr(bot_main_module, "Bot", FakeBot)
@@ -199,6 +211,11 @@ def patch_bot_main(monkeypatch):
         bot_main_module,
         "OrderExpirationScheduler",
         FakeOrderExpirationScheduler,
+    )
+    monkeypatch.setattr(
+        bot_main_module,
+        "SubscriptionMetaRetryScheduler",
+        FakeSubscriptionMetaRetryScheduler,
     )
     monkeypatch.setattr(bot_main_module, "VoletSciWebServer", FakeVoletSciWebServer)
 
@@ -289,8 +306,13 @@ async def test_bot_main_registers_middlewares_schedulers_and_base_routers_when_d
         == "SESSION_FACTORY"
     )
     assert FakeOrderExpirationScheduler.instances[0].session_factory == "SESSION_FACTORY"
+    assert (
+        FakeSubscriptionMetaRetryScheduler.instances[0].session_factory
+        == "SESSION_FACTORY"
+    )
     assert ("create_task", "subscription-expiration-scheduler") in CALLS
     assert ("create_task", "order-expiration-scheduler") in CALLS
+    assert ("create_task", "subscription-meta-retry-scheduler") in CALLS
     assert ("start_polling", "bot-token") in CALLS
 
 
@@ -350,10 +372,15 @@ async def test_bot_main_cancels_scheduler_tasks_in_finally(monkeypatch):
     await bot_main_module.main()
 
     tasks_by_name = {task.name: task for task in FakeTask.instances}
-    assert tasks_by_name["subscription-expiration-scheduler"].cancel_count >= 1
-    assert tasks_by_name["order-expiration-scheduler"].cancel_count >= 1
+    assert tasks_by_name["subscription-expiration-scheduler"].cancel_count == 1
+    assert tasks_by_name["order-expiration-scheduler"].cancel_count == 1
+    assert tasks_by_name["subscription-meta-retry-scheduler"].cancel_count == 1
     assert (
         "gather",
-        ["subscription-expiration-scheduler", "order-expiration-scheduler"],
+        [
+            "subscription-expiration-scheduler",
+            "order-expiration-scheduler",
+            "subscription-meta-retry-scheduler",
+        ],
         True,
     ) in CALLS

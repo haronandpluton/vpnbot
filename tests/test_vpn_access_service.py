@@ -41,31 +41,50 @@ class FakeXuiClient:
             raise XuiClientError("3x-ui client creation failed: test failure")
 
 
-def make_service(*, xui_client: FakeXuiClient | None = None) -> VpnAccessService:
+def make_service(
+    *,
+    xui_client: FakeXuiClient | None = None,
+    public_base_url: str = "https://connect.presentvpn.click",
+) -> VpnAccessService:
     service = VpnAccessService.__new__(VpnAccessService)
     service.xui_client = xui_client or FakeXuiClient()
+    service.public_base_url = public_base_url
     return service
 
 
-def test_build_subscription_url_uses_stable_sub_endpoint():
+def test_build_subscription_url_uses_public_root_endpoint():
     assert (
         build_subscription_url("abc-123")
-        == "https://lab83607.hostkey.in:2097/sub/abc-123"
+        == "https://connect.presentvpn.click/abc-123"
     )
 
 
 def test_build_connect_url_uses_android_by_default():
     assert (
         build_connect_url("abc-123")
-        == "https://lab83607.hostkey.in:2097/connect/abc-123?device=android"
+        == "https://connect.presentvpn.click/connect/abc-123?device=android"
     )
 
 
 def test_build_connect_url_allows_explicit_device():
     assert (
         build_connect_url("abc-123", device="ios")
-        == "https://lab83607.hostkey.in:2097/connect/abc-123?device=ios"
+        == "https://connect.presentvpn.click/connect/abc-123?device=ios"
     )
+
+
+
+
+def test_build_urls_allow_explicit_public_gateway_and_strip_trailing_slash():
+    assert build_subscription_url(
+        "abc-123",
+        public_base_url="https://gateway.example.com/",
+    ) == "https://gateway.example.com/abc-123"
+    assert build_connect_url(
+        "abc-123",
+        device="ios beta",
+        public_base_url="https://gateway.example.com/",
+    ) == "https://gateway.example.com/connect/abc-123?device=ios+beta"
 
 
 def test_build_client_email_is_stable_and_uses_uuid_prefix():
@@ -95,7 +114,7 @@ async def test_create_access_generates_uuid_creates_xui_client_once_and_returns_
     assert result.vpn_server_id is None
     assert (
         result.config_uri
-        == "https://lab83607.hostkey.in:2097/connect/12345678-1234-5678-1234-567812345678?device=android"
+        == "https://connect.presentvpn.click/connect/12345678-1234-5678-1234-567812345678?device=android"
     )
     assert xui_client.create_calls == [
         {
@@ -168,7 +187,7 @@ async def test_extend_access_preserves_existing_uuid_and_does_not_create_xui_cli
     assert result == VpnAccessResult(
         uuid="existing-uuid",
         vpn_server_id=None,
-        config_uri="https://lab83607.hostkey.in:2097/connect/existing-uuid?device=android",
+        config_uri="https://connect.presentvpn.click/connect/existing-uuid?device=android",
     )
     assert xui_client.create_calls == []
 
@@ -183,5 +202,5 @@ async def test_get_config_returns_existing_connect_url_without_creating_or_exten
         device_limit=3,
     )
 
-    assert config_uri == "https://lab83607.hostkey.in:2097/connect/existing-uuid?device=android"
+    assert config_uri == "https://connect.presentvpn.click/connect/existing-uuid?device=android"
     assert xui_client.create_calls == []

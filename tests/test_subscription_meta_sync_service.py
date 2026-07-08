@@ -67,6 +67,9 @@ class FakeSession:
 
 class FakeSystemErrorRecordRepository:
     calls: list[dict] = []
+    update_calls: list[dict] = []
+    resolved_calls: list[list] = []
+    pending: list = []
     fail_create = False
 
     def __init__(self, session) -> None:
@@ -78,7 +81,37 @@ class FakeSystemErrorRecordRepository:
         if self.__class__.fail_create:
             raise RuntimeError("system error create failed")
 
-        return SimpleNamespace(id=900, **kwargs)
+        record = SimpleNamespace(
+            id=900,
+            retry_count=0,
+            is_resolved=False,
+            resolved_at=None,
+            **kwargs,
+        )
+        self.__class__.pending.append(record)
+        return record
+
+    async def get_unresolved_by_error_type(self, error_type):
+        return [
+            item
+            for item in self.__class__.pending
+            if item.error_type == error_type and not item.is_resolved
+        ]
+
+    async def update_pending_failure(self, error, **kwargs):
+        self.__class__.update_calls.append({"error": error, **kwargs})
+        error.entity_type = kwargs["entity_type"]
+        error.entity_id = kwargs["entity_id"]
+        error.error_message = kwargs["error_message"]
+        error.payload = kwargs["payload"]
+        error.retry_count += 1
+        return error
+
+    async def mark_many_resolved(self, errors):
+        self.__class__.resolved_calls.append(list(errors))
+        for error in errors:
+            error.is_resolved = True
+        return errors
 
 
 class FakeProcess:
@@ -157,6 +190,9 @@ def make_service(
 @pytest.fixture(autouse=True)
 def reset_system_error_repo(monkeypatch):
     FakeSystemErrorRecordRepository.calls = []
+    FakeSystemErrorRecordRepository.update_calls = []
+    FakeSystemErrorRecordRepository.resolved_calls = []
+    FakeSystemErrorRecordRepository.pending = []
     FakeSystemErrorRecordRepository.fail_create = False
 
     monkeypatch.setattr(
@@ -333,7 +369,7 @@ async def test_sync_safely_success_returns_ok_and_rolls_back_read_transaction(tm
     async def fake_sync():
         return sync_result
 
-    service.sync = fake_sync
+    service._sync_and_resolve_pending_errors = fake_sync
 
     result = await service.sync_safely(
         entity_type="subscription",
@@ -364,7 +400,7 @@ async def test_sync_safely_success_ignores_rollback_failure_after_select_transac
     async def fake_sync():
         return sync_result
 
-    service.sync = fake_sync
+    service._sync_and_resolve_pending_errors = fake_sync
 
     result = await service.sync_safely(
         entity_type="subscription",
@@ -391,7 +427,7 @@ async def test_sync_safely_failure_records_system_error_and_commits():
     async def failing_sync():
         raise RuntimeError("scp unavailable")
 
-    service.sync = failing_sync
+    service._sync_and_resolve_pending_errors = failing_sync
 
     result = await service.sync_safely(
         entity_type="subscription",
@@ -429,7 +465,7 @@ async def test_sync_safely_failure_truncates_error_message_for_system_error_reco
     async def failing_sync():
         raise RuntimeError(long_error)
 
-    service.sync = failing_sync
+    service._sync_and_resolve_pending_errors = failing_sync
 
     result = await service.sync_safely(
         entity_type="subscription",
@@ -454,7 +490,7 @@ async def test_sync_safely_failure_still_returns_error_when_error_recording_fail
     async def failing_sync():
         raise RuntimeError("scp unavailable")
 
-    service.sync = failing_sync
+    service._sync_and_resolve_pending_errors = failing_sync
 
     result = await service.sync_safely(
         entity_type="subscription",
@@ -470,27 +506,30 @@ async def test_sync_safely_failure_still_returns_error_when_error_recording_fail
 
 
 @pytest.mark.asyncio
-async def test_upload_with_empty_remote_target_does_not_call_scp(tmp_path):
+async def test_upload_with_empty_remote_target_fails_closed(tmp_path):
     output_path = tmp_path / "subscriptions_meta.json"
     service = make_service(
         settings=make_settings(remote_target="   "),
     )
 
-    stdout, stderr = await service._upload(output_path)
-
-    assert stdout == f"Local metadata file written: {output_path}"
-    assert stderr == ""
+    with pytest.raises(
+        RuntimeError,
+        match="SUBSCRIPTION_META_REMOTE_TARGET is not configured",
+    ):
+        await service._upload(output_path)
 
 
 @pytest.mark.asyncio
 async def test_upload_builds_scp_command_with_ssh_key_and_returns_decoded_output(monkeypatch, tmp_path):
     output_path = tmp_path / "subscriptions_meta.json"
-    process = FakeProcess(stdout=b"done\n", stderr=b"warn\n")
+    scp_process = FakeProcess(stdout=b"uploaded\n", stderr=b"")
+    publish_process = FakeProcess(stdout=b"published\n", stderr=b"warn\n")
+    processes = iter([scp_process, publish_process])
     calls = []
 
     async def fake_create_subprocess_exec(*args, stdout, stderr):
         calls.append({"args": args, "stdout": stdout, "stderr": stderr})
-        return process
+        return next(processes)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
 
@@ -504,35 +543,62 @@ async def test_upload_builds_scp_command_with_ssh_key_and_returns_decoded_output
 
     stdout, stderr = await service._upload(output_path)
 
-    assert stdout == "done"
+    assert stdout == "uploaded\npublished"
     assert stderr == "warn"
-    assert process.communicate_count == 1
-    assert calls == [
-        {
-            "args": (
-                "scp",
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "StrictHostKeyChecking=accept-new",
-                "-i",
-                "/root/.ssh/id_ed25519",
-                str(output_path),
-                "root@example:/opt/subscriptions.json",
-            ),
-            "stdout": asyncio.subprocess.PIPE,
-            "stderr": asyncio.subprocess.PIPE,
-        }
-    ]
+    assert scp_process.communicate_count == 1
+    assert publish_process.communicate_count == 1
+    assert len(calls) == 2
+
+    scp_args = calls[0]["args"]
+    assert scp_args[:9] == (
+        "scp",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "ConnectTimeout=10",
+        "-i",
+        "/root/.ssh/id_ed25519",
+    )
+    assert scp_args[9] == str(output_path)
+    assert scp_args[10].startswith(
+        "root@example:/opt/.subscriptions.json."
+    )
+    assert scp_args[10].endswith(".tmp")
+
+    ssh_args = calls[1]["args"]
+    assert ssh_args[:9] == (
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "ConnectTimeout=10",
+        "-i",
+        "/root/.ssh/id_ed25519",
+    )
+    assert ssh_args[9] == "root@example"
+    assert "python3 -m json.tool" in ssh_args[10]
+    assert "chmod 0660" in ssh_args[10]
+    assert "mv -f" in ssh_args[10]
+    assert "/opt/subscriptions.json" in ssh_args[10]
 
 
 @pytest.mark.asyncio
 async def test_upload_raises_when_scp_returns_nonzero(monkeypatch, tmp_path):
     output_path = tmp_path / "subscriptions_meta.json"
-    process = FakeProcess(returncode=1, stdout=b"", stderr=b"permission denied\n")
+    scp_process = FakeProcess(
+        returncode=1,
+        stdout=b"",
+        stderr=b"permission denied\n",
+    )
+    cleanup_process = FakeProcess()
+    processes = iter([scp_process, cleanup_process])
 
     async def fake_create_subprocess_exec(*args, stdout, stderr):
-        return process
+        return next(processes)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
 
@@ -550,10 +616,12 @@ async def test_upload_raises_when_scp_returns_nonzero(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_upload_timeout_kills_process_and_raises_runtime_error(monkeypatch, tmp_path):
     output_path = tmp_path / "subscriptions_meta.json"
-    process = FakeProcess(hang=True)
+    scp_process = FakeProcess(hang=True)
+    cleanup_process = FakeProcess()
+    processes = iter([scp_process, cleanup_process])
 
     async def fake_create_subprocess_exec(*args, stdout, stderr):
-        return process
+        return next(processes)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
 
@@ -567,5 +635,189 @@ async def test_upload_timeout_kills_process_and_raises_runtime_error(monkeypatch
     with pytest.raises(RuntimeError, match="SCP upload timeout"):
         await service._upload(output_path)
 
-    assert process.kill_count == 1
-    assert process.wait_count == 1
+    assert scp_process.kill_count == 1
+    assert scp_process.wait_count == 1
+
+@pytest.mark.asyncio
+async def test_sync_safely_reuses_existing_pending_error_instead_of_creating_duplicate():
+    existing = SimpleNamespace(
+        id=1,
+        entity_type="subscription",
+        entity_id=10,
+        error_type="subscription_meta_sync_failed",
+        error_message="first failure",
+        payload=None,
+        retry_count=0,
+        is_resolved=False,
+        resolved_at=None,
+    )
+    FakeSystemErrorRecordRepository.pending = [existing]
+    session = FakeSession()
+    service = make_service(session=session)
+
+    async def failing_sync():
+        raise RuntimeError("second failure")
+
+    service._sync_and_resolve_pending_errors = failing_sync
+
+    result = await service.sync_safely(
+        entity_type="order",
+        entity_id=25,
+        reason="post_payment_subscription_change",
+        payload={"order_id": 25},
+    )
+
+    assert result.ok is False
+    assert FakeSystemErrorRecordRepository.calls == []
+    assert len(FakeSystemErrorRecordRepository.update_calls) == 1
+    assert existing.entity_type == "order"
+    assert existing.entity_id == 25
+    assert existing.error_message == "second failure"
+    assert existing.retry_count == 1
+    assert session.commit_count == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_success_marks_all_pending_sync_errors_resolved(tmp_path):
+    first = SimpleNamespace(
+        id=1,
+        error_type="subscription_meta_sync_failed",
+        is_resolved=False,
+    )
+    second = SimpleNamespace(
+        id=2,
+        error_type="subscription_meta_sync_failed",
+        is_resolved=False,
+    )
+    FakeSystemErrorRecordRepository.pending = [first, second]
+    session = FakeSession()
+    output_path = tmp_path / "subscriptions_meta.json"
+    service = make_service(
+        session=session,
+        settings=make_settings(output_path=str(output_path)),
+    )
+
+    async def fake_build_metadata():
+        return {}, 0
+
+    async def fake_upload(path):
+        assert path == output_path
+        return "ok", ""
+
+    service._build_metadata = fake_build_metadata
+    service._upload = fake_upload
+
+    result = await service.sync()
+
+    assert result.exported_count == 0
+    assert first.is_resolved is True
+    assert second.is_resolved is True
+    assert FakeSystemErrorRecordRepository.resolved_calls == [[first, second]]
+    assert session.commit_count == 1
+
+
+@pytest.mark.asyncio
+async def test_retry_pending_skips_when_no_unresolved_sync_error():
+    session = FakeSession()
+    service = make_service(session=session)
+
+    result = await service.retry_pending()
+
+    assert result.pending_count == 0
+    assert result.attempted is False
+    assert result.ok is True
+
+
+@pytest.mark.asyncio
+async def test_retry_pending_success_returns_resolved_count():
+    pending = SimpleNamespace(
+        id=1,
+        error_type="subscription_meta_sync_failed",
+        is_resolved=False,
+    )
+    FakeSystemErrorRecordRepository.pending = [pending]
+    session = FakeSession()
+    service = make_service(session=session)
+    sync_result = SubscriptionMetaSyncResult(
+        exported_count=3,
+        skipped_count=0,
+        output_path="meta.json",
+        remote_target="root@example:/opt/meta.json",
+        stdout="ok",
+        stderr="",
+    )
+
+    async def fake_sync():
+        pending.is_resolved = True
+        return sync_result
+
+    service._sync_and_resolve_pending_errors = fake_sync
+
+    result = await service.retry_pending()
+
+    assert result.pending_count == 1
+    assert result.attempted is True
+    assert result.ok is True
+    assert result.resolved_count == 1
+    assert result.sync_result is sync_result
+
+
+@pytest.mark.asyncio
+async def test_retry_pending_failure_updates_existing_error_without_duplicate():
+    pending = SimpleNamespace(
+        id=1,
+        entity_type="subscription",
+        entity_id=10,
+        error_type="subscription_meta_sync_failed",
+        error_message="first",
+        payload=None,
+        retry_count=2,
+        is_resolved=False,
+        resolved_at=None,
+    )
+    FakeSystemErrorRecordRepository.pending = [pending]
+    session = FakeSession()
+    service = make_service(session=session)
+
+    async def failing_sync():
+        raise RuntimeError("still unavailable")
+
+    service._sync_and_resolve_pending_errors = failing_sync
+
+    result = await service.retry_pending()
+
+    assert result.pending_count == 1
+    assert result.attempted is True
+    assert result.ok is False
+    assert result.error == "still unavailable"
+    assert FakeSystemErrorRecordRepository.calls == []
+    assert len(FakeSystemErrorRecordRepository.update_calls) == 1
+    assert pending.retry_count == 3
+    assert pending.entity_type == "subscription_metadata"
+    assert pending.entity_id is None
+
+
+def test_parse_remote_target_accepts_expected_target():
+    target = SubscriptionMetaSyncService._parse_remote_target(
+        "vpnadmin@139.84.251.197:/opt/vpn-subscription/subscriptions_meta.json"
+    )
+
+    assert target.host == "vpnadmin@139.84.251.197"
+    assert target.path == "/opt/vpn-subscription/subscriptions_meta.json"
+    assert target.directory == "/opt/vpn-subscription"
+    assert target.filename == "subscriptions_meta.json"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "missing-colon",
+        "host:relative/path.json",
+        "host:/path with space/meta.json",
+        "host;touch-pwned:/opt/meta.json",
+        "host:/opt/meta.json\nextra",
+    ],
+)
+def test_parse_remote_target_rejects_unsafe_or_invalid_target(value):
+    with pytest.raises(ValueError):
+        SubscriptionMetaSyncService._parse_remote_target(value)
