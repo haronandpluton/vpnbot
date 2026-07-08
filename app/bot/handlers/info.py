@@ -222,7 +222,8 @@ async def help_command(message: Message):
         "• модель устройства;\n"
         "• скрин ошибки;\n"
         "• время попытки подключения.\n\n"
-        f"{contact_text}"
+        f"{contact_text}\n\n"
+        "Правила сервиса: /rules"
     )
 
     await message.answer(

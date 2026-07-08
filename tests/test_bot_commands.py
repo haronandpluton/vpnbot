@@ -23,6 +23,7 @@ def test_user_command_menu_contains_expected_public_commands():
         ("my_subscription", "📱 Моя подписка и устройства"),
         ("faq", "📘 FAQ"),
         ("help", "🆘 Поддержка"),
+        ("rules", "📄 Правила сервиса"),
         ("profile", "👤 Профиль"),
         ("present", "🎁 Подарочная программа"),
     ]

@@ -31,6 +31,7 @@ from app.bot.handlers.buy import router as buy_router
 from app.bot.handlers.dev_payment import router as dev_payment_router
 from app.bot.handlers.dev_subscription import router as dev_subscription_router
 from app.bot.handlers.info import router as info_router
+from app.bot.handlers.legal import router as legal_router
 from app.bot.handlers.my_subscription import router as my_subscription_router
 from app.bot.handlers.payment_check import router as payment_check_router
 from app.bot.handlers.start import router as start_router
@@ -46,7 +47,6 @@ from app.services.subscription_meta_retry_scheduler import (
     SubscriptionMetaRetryScheduler,
 )
 from app.web.volet_sci_server import VoletSciWebServer
-
 logger = logging.getLogger(__name__)
 
 
@@ -70,6 +70,7 @@ async def main() -> None:
     dp.include_router(start_router)
     dp.include_router(buy_router)
     dp.include_router(info_router)
+    dp.include_router(legal_router)
     dp.include_router(my_subscription_router)
     dp.include_router(vpn_access_router)
     dp.include_router(payment_check_router)
