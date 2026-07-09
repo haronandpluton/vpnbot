@@ -16,12 +16,18 @@ class OrderRepository(BaseRepository):
         return result.scalar_one_or_none()
 
     async def get_active_waiting_order_by_user(
-            self,
-            user_id: int,
-            tariff_code: TariffCode,
-            payment_option_id: int,
+        self,
+        user_id: int,
+        tariff_code: TariffCode,
+        payment_option_id: int,
+        target_subscription_id: int | None = None,
     ) -> Order | None:
         now = datetime.now(UTC)
+
+        if target_subscription_id is None:
+            target_filter = Order.target_subscription_id.is_(None)
+        else:
+            target_filter = Order.target_subscription_id == target_subscription_id
 
         stmt = (
             select(Order)
@@ -31,6 +37,7 @@ class OrderRepository(BaseRepository):
                 Order.payment_option_id == payment_option_id,
                 Order.status == OrderStatus.WAITING_PAYMENT,
                 Order.expires_at > now,
+                target_filter,
             )
             .order_by(Order.created_at.desc())
             .limit(1)
@@ -53,6 +60,7 @@ class OrderRepository(BaseRepository):
         destination_address: str | None,
         destination_memo_tag: str | None,
         expires_at: datetime,
+        target_subscription_id: int | None = None,
         source: str = "bot",
         comment: str | None = None,
     ) -> Order:
@@ -62,6 +70,8 @@ class OrderRepository(BaseRepository):
             tariff_code=tariff_code,
             device_limit=device_limit,
             duration_days=duration_days,
+            target_subscription_id=target_subscription_id,
+            activated_subscription_id=None,
             price_usd=price_usd,
             payment_method=payment_method,
             payment_option_id=payment_option_id,

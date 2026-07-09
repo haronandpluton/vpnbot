@@ -1,18 +1,18 @@
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
+from app.database.models import Order
 from app.database.repositories.orders import OrderRepository
 from app.database.repositories.subscriptions import SubscriptionRepository
 from app.payment_core.enums.order_status import OrderStatus
+from app.payment_core.enums.subscription_status import SubscriptionStatus
+from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
 from app.services.vpn_access_service import VpnAccessService
-from sqlalchemy import select
-from app.database.models import Order
 
 
 class SubscriptionService:
-
     def __init__(
         self,
         session: AsyncSession,
@@ -25,32 +25,68 @@ class SubscriptionService:
 
     async def activate_or_extend_by_order(self, order_id: int):
         """
-        Идемпотентный post-payment flow:
+        Идемпотентный post-payment flow.
 
         paid order ->
-        create new subscription OR extend existing subscription ->
+        create new subscription OR renew selected subscription ->
+        save activated_subscription_id ->
         order activated
 
         Защита:
-        - повторная обработка того же order не создает новый UUID;
-        - повторная обработка того же order не продлевает подписку второй раз;
-        - concurrent activation одного order сериализуется через SELECT FOR UPDATE.
+        - один order применяется не более одного раза;
+        - повторная обработка возвращает уже применённую подписку;
+        - один order блокируется через SELECT FOR UPDATE;
+        - целевая подписка при продлении тоже блокируется;
+        - subscriptions.order_id при продлении не перезаписывается.
         """
         try:
             order = await self._get_order_for_activation(order_id)
             if order is None:
                 raise ValueError(f"Order not found: {order_id}")
 
-            existing_subscription_for_order = (
-                await self.subscription_repository.get_by_order_id(order.id)
+            activated_subscription_id = getattr(
+                order,
+                "activated_subscription_id",
+                None,
+            )
+            target_subscription_id = getattr(
+                order,
+                "target_subscription_id",
+                None,
             )
 
-            if existing_subscription_for_order is not None:
+            if activated_subscription_id is not None:
+                subscription = await self.subscription_repository.get_by_id(
+                    activated_subscription_id
+                )
+                if subscription is None:
+                    raise ValueError(
+                        f"Order {order.id} references missing activated "
+                        f"subscription {activated_subscription_id}"
+                    )
+
                 return await self._return_existing_subscription_for_order(
                     order=order,
-                    subscription=existing_subscription_for_order,
+                    subscription=subscription,
                     sync_reason="idempotent_order_activation_reuse",
                 )
+
+            # Совместимость со старыми заказами создания подписки.
+            # Для renewal-заказов этот fallback намеренно не используется.
+            if target_subscription_id is None:
+                existing_subscription_for_order = (
+                    await self.subscription_repository.get_by_order_id(order.id)
+                )
+
+                if existing_subscription_for_order is not None:
+                    order.activated_subscription_id = (
+                        existing_subscription_for_order.id
+                    )
+                    return await self._return_existing_subscription_for_order(
+                        order=order,
+                        subscription=existing_subscription_for_order,
+                        sync_reason="idempotent_order_activation_reuse",
+                    )
 
             if order.status == OrderStatus.ACTIVATED:
                 raise ValueError(
@@ -60,32 +96,45 @@ class SubscriptionService:
 
             if order.status != OrderStatus.PAID:
                 raise ValueError(
-                    f"Order must be paid before subscription activation. "
+                    "Order must be paid before subscription activation. "
                     f"order_id={order.id}, status={order.status}"
                 )
 
-            subscription, config_uri = await self._create_new_subscription(order)
+            if target_subscription_id is None:
+                subscription, config_uri = await self._create_new_subscription(
+                    order
+                )
+                activation_mode = "created"
+            else:
+                target_subscription = (
+                    await self.subscription_repository.get_by_id_for_update(
+                        target_subscription_id
+                    )
+                )
+                self._validate_renewal_target(
+                    order=order,
+                    subscription=target_subscription,
+                )
+                subscription, config_uri = (
+                    await self._renew_existing_subscription(
+                        subscription=target_subscription,
+                        order=order,
+                    )
+                )
+                activation_mode = "renewed"
 
+            order.activated_subscription_id = subscription.id
             order.status = OrderStatus.ACTIVATED
             order.activated_at = datetime.now(timezone.utc)
 
             await self.session.flush()
             await self.session.commit()
 
-            await SubscriptionMetaSyncService(self.session).sync_safely(
-                entity_type="order",
-                entity_id=order.id,
+            await self._sync_order_activation(
+                order=order,
+                subscription=subscription,
+                activation_mode=activation_mode,
                 reason="post_payment_subscription_change",
-                payload={
-                    "order_id": order.id,
-                    "user_id": subscription.user_id,
-                    "subscription_id": subscription.id,
-                    "uuid": subscription.uuid,
-                    "expires_at": None
-                    if subscription.expires_at is None
-                    else subscription.expires_at.isoformat(),
-                    "status": str(subscription.status.value),
-                },
             )
 
             await self.session.refresh(subscription)
@@ -112,16 +161,21 @@ class SubscriptionService:
         sync_reason: str,
     ):
         """
-        Идемпотентный возврат уже созданного доступа.
+        Идемпотентный возврат результата уже применённого заказа.
 
-        Не создает новый UUID.
-        Не продлевает expires_at.
-        Не вызывает create_access / extend_access.
+        Не создаёт UUID и не изменяет expires_at.
         """
         if order.status == OrderStatus.PAID:
             order.status = OrderStatus.ACTIVATED
             order.activated_at = order.activated_at or datetime.now(timezone.utc)
-            await self.session.flush()
+        elif order.status != OrderStatus.ACTIVATED:
+            raise ValueError(
+                "Order with activated subscription must be paid or activated. "
+                f"order_id={order.id}, status={order.status}"
+            )
+
+        order.activated_subscription_id = subscription.id
+        await self.session.flush()
 
         config_uri = await self.vpn_access_service.get_config(
             uuid=subscription.uuid,
@@ -130,20 +184,11 @@ class SubscriptionService:
 
         await self.session.commit()
 
-        await SubscriptionMetaSyncService(self.session).sync_safely(
-            entity_type="order",
-            entity_id=order.id,
+        await self._sync_order_activation(
+            order=order,
+            subscription=subscription,
+            activation_mode="reused",
             reason=sync_reason,
-            payload={
-                "order_id": order.id,
-                "user_id": subscription.user_id,
-                "subscription_id": subscription.id,
-                "uuid": subscription.uuid,
-                "expires_at": None
-                if subscription.expires_at is None
-                else subscription.expires_at.isoformat(),
-                "status": str(subscription.status.value),
-            },
         )
 
         await self.session.refresh(subscription)
@@ -152,11 +197,10 @@ class SubscriptionService:
 
     async def resend_access(self, user_id: int):
         """
-        Повторная выдача доступа.
+        Legacy-повторная выдача доступа по пользователю.
 
-        Не создает новый UUID.
-        Не продлевает срок.
-        Не создает новую подписку.
+        Пользовательский интерфейс нескольких подписок использует
+        MySubscriptionService и конкретный subscription_id.
         """
         try:
             subscription = (
@@ -186,11 +230,7 @@ class SubscriptionService:
 
     async def _create_new_subscription(self, order):
         now = datetime.now(timezone.utc)
-        if order.duration_days <= 0:
-            raise ValueError(
-                f"Invalid order duration: "
-                f"order_id={order.id}, duration_days={order.duration_days}"
-            )
+        self._validate_order_duration(order)
 
         expires_at = now + timedelta(days=order.duration_days)
 
@@ -210,38 +250,111 @@ class SubscriptionService:
         )
 
         subscription = await self.subscription_repository.activate(subscription)
-        subscription = await self.subscription_repository.mark_access_sent(subscription)
+        subscription = await self.subscription_repository.mark_access_sent(
+            subscription
+        )
 
         return subscription, access.config_uri
 
-    async def _extend_existing_subscription(
+    async def _renew_existing_subscription(
         self,
-        active_subscription,
+        subscription,
         order,
     ):
         now = datetime.now(timezone.utc)
+        self._validate_order_duration(order)
 
-        base_time = max(active_subscription.expires_at, now)
-        if order.duration_days <= 0:
-            raise ValueError(
-                f"Invalid order duration: "
-                f"order_id={order.id}, duration_days={order.duration_days}"
-            )
-
+        base_time = max(subscription.expires_at, now)
         new_expires_at = base_time + timedelta(days=order.duration_days)
 
         access = await self.vpn_access_service.extend_access(
-            uuid=active_subscription.uuid,
-            device_limit=order.device_limit,
+            uuid=subscription.uuid,
+            device_limit=subscription.device_limit,
         )
 
-        subscription = await self.subscription_repository.extend(
-            subscription=active_subscription,
-            order_id=order.id,
+        subscription = await self.subscription_repository.renew(
+            subscription=subscription,
             expires_at=new_expires_at,
-            device_limit=order.device_limit,
+            device_limit=subscription.device_limit,
         )
 
-        subscription = await self.subscription_repository.mark_access_sent(subscription)
+        subscription = await self.subscription_repository.mark_access_sent(
+            subscription
+        )
 
         return subscription, access.config_uri
+
+    def _validate_renewal_target(
+        self,
+        *,
+        order,
+        subscription,
+    ) -> None:
+        target_subscription_id = order.target_subscription_id
+
+        if subscription is None:
+            raise ValueError(
+                f"Target subscription not found: {target_subscription_id}"
+            )
+
+        if subscription.user_id != order.user_id:
+            raise ValueError(
+                f"Target subscription not found: {target_subscription_id}"
+            )
+
+        if subscription.status not in {
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.EXPIRED,
+        }:
+            raise ValueError(
+                "Target subscription is not renewable. "
+                f"subscription_id={subscription.id}, "
+                f"status={subscription.status.value}"
+            )
+
+        if subscription.device_limit != order.device_limit:
+            raise ValueError(
+                "Target subscription device limit does not match order. "
+                f"subscription_id={subscription.id}, "
+                f"subscription_device_limit={subscription.device_limit}, "
+                f"order_device_limit={order.device_limit}"
+            )
+
+    @staticmethod
+    def _validate_order_duration(order) -> None:
+        if order.duration_days <= 0:
+            raise ValueError(
+                "Invalid order duration: "
+                f"order_id={order.id}, duration_days={order.duration_days}"
+            )
+
+    async def _sync_order_activation(
+        self,
+        *,
+        order,
+        subscription,
+        activation_mode: str,
+        reason: str,
+    ) -> None:
+        await SubscriptionMetaSyncService(self.session).sync_safely(
+            entity_type="order",
+            entity_id=order.id,
+            reason=reason,
+            payload={
+                "order_id": order.id,
+                "user_id": subscription.user_id,
+                "target_subscription_id": getattr(
+                    order,
+                    "target_subscription_id",
+                    None,
+                ),
+                "activated_subscription_id": subscription.id,
+                "subscription_id": subscription.id,
+                "activation_mode": activation_mode,
+                "uuid": subscription.uuid,
+                "expires_at": None
+                if subscription.expires_at is None
+                else subscription.expires_at.isoformat(),
+                "status": str(subscription.status.value),
+            },
+        )

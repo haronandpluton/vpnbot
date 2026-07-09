@@ -132,6 +132,7 @@ async def test_my_subscription_sends_separate_card_for_each_active_subscription(
     assert row_callbacks(first_message["reply_markup"]) == [
         ["vpn_access:show_config:50"],
         ["vpn_access:show_config:50"],
+        ["renew_subscription:50"],
         ["buy_vpn"],
         ["vpn_access:happ_android", "vpn_access:happ_ios"],
         ["vpn_access:happ_fallback"],
@@ -164,7 +165,7 @@ async def test_my_subscription_sends_separate_card_for_each_active_subscription(
         (
             "subscription_expired",
             "Срок всех подписок истек.\n\n"
-            "Создай новый заказ, чтобы получить новый доступ.",
+            "Открой подписку и нажми «Продлить подписку».",
         ),
         (
             "unknown",

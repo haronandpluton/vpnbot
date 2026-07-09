@@ -184,6 +184,7 @@ def test_vpn_access_keyboard_binds_actions_to_selected_subscription():
     assert row_texts(markup) == [
         ["Подключить VPN"],
         ["Отправить доступ снова"],
+        ["Продлить подписку"],
         ["Купить ещё подписку"],
         ["Happ VPN: Android", "Happ VPN: iPhone"],
         ["Если Happ не открывается"],
@@ -191,6 +192,7 @@ def test_vpn_access_keyboard_binds_actions_to_selected_subscription():
     assert row_callbacks(markup) == [
         ["vpn_access:show_config:303"],
         ["vpn_access:show_config:303"],
+        ["renew_subscription:303"],
         ["buy_vpn"],
         ["vpn_access:happ_android", "vpn_access:happ_ios"],
         ["vpn_access:happ_fallback"],

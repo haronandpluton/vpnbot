@@ -29,6 +29,16 @@ class Order(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
+    target_subscription_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    activated_subscription_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     status: Mapped[OrderStatus] = mapped_column(
         order_status_enum,

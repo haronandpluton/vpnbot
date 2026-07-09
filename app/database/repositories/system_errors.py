@@ -52,6 +52,32 @@ class SystemErrorRecordRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_unresolved_by_entity_and_error_type(
+        self,
+        *,
+        entity_type: str,
+        entity_id: int | None,
+        error_type: str,
+    ) -> SystemErrorRecord | None:
+        if entity_id is None:
+            entity_id_filter = SystemErrorRecord.entity_id.is_(None)
+        else:
+            entity_id_filter = SystemErrorRecord.entity_id == entity_id
+
+        stmt = (
+            select(SystemErrorRecord)
+            .where(
+                SystemErrorRecord.is_resolved.is_(False),
+                SystemErrorRecord.entity_type == entity_type,
+                entity_id_filter,
+                SystemErrorRecord.error_type == error_type,
+            )
+            .order_by(SystemErrorRecord.id.asc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def update_pending_failure(
         self,
         error: SystemErrorRecord,

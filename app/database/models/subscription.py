@@ -73,7 +73,11 @@ class Subscription(Base, TimestampMixin):
     )
 
     user = relationship("User", backref="subscriptions")
-    order = relationship("Order", backref="subscriptions")
+    order = relationship(
+        "Order",
+        backref="subscriptions",
+        foreign_keys=[order_id],
+    )
     vpn_server = relationship("VPNServer", backref="subscriptions")
 
     def __repr__(self) -> str:

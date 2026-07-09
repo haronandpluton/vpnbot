@@ -22,6 +22,23 @@ def format_vpn_access_text(
     )
 
 
+
+def format_expired_vpn_subscription_text(
+    *,
+    device_limit: int | None,
+    expires_at,
+) -> str:
+    expires_at_text = format_datetime(expires_at)
+
+    return (
+        "Срок VPN-подписки истёк.\n\n"
+        f"Устройств: {device_limit or '—'}\n"
+        f"Была активна до: {expires_at_text}\n\n"
+        "Нажми «Продлить подписку», чтобы возобновить доступ "
+        "с тем же VPN-ключом."
+    )
+
+
 def format_vpn_config_text(config_uri: str) -> str:
     return (
         "Страница подключения VPN:\n\n"

@@ -20,6 +20,12 @@ def vpn_access_keyboard(subscription_id: int) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(
+                    text="Продлить подписку",
+                    callback_data=f"renew_subscription:{subscription_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="Купить ещё подписку",
                     callback_data="buy_vpn",
                 )
@@ -40,5 +46,22 @@ def vpn_access_keyboard(subscription_id: int) -> InlineKeyboardMarkup:
                     callback_data="vpn_access:happ_fallback",
                 )
             ],
+        ]
+    )
+
+
+def expired_subscription_keyboard(
+    subscription_id: int,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Продлить подписку",
+                    callback_data=(
+                        f"renew_subscription:{subscription_id}"
+                    ),
+                )
+            ]
         ]
     )

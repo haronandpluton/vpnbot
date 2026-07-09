@@ -58,11 +58,11 @@ class MySubscriptionService:
         telegram_id: int,
     ) -> MySubscriptionsResult:
         """
-        Возвращает все действующие активные подписки пользователя.
+        Return all subscriptions visible in the user account.
 
-        Не генерирует config_uri.
-        Не обновляет last_access_sent_at.
-        Не делает commit.
+        ACTIVE subscriptions are shown with access controls.
+        EXPIRED subscriptions are shown with renewal controls only.
+        DISABLED and INACTIVE subscriptions are excluded.
         """
         user = await self.user_repository.get_by_telegram_id(telegram_id)
 
@@ -72,17 +72,21 @@ class MySubscriptionService:
                 message="Пользователь не найден.",
             )
 
-        subscriptions = await self.subscription_repository.get_active_by_user(user.id)
+        subscriptions = (
+            await self.subscription_repository.get_renewable_by_user(
+                user.id
+            )
+        )
 
         if not subscriptions:
             return MySubscriptionsResult(
                 status="subscription_not_found",
                 user_id=user.id,
-                message="Активные подписки не найдены.",
+                message="Подписки не найдены.",
             )
 
-        valid_results: list[MySubscriptionResult] = []
-        has_expired = False
+        active_results: list[MySubscriptionResult] = []
+        expired_results: list[MySubscriptionResult] = []
 
         for subscription in subscriptions:
             result = self._validate_subscription(
@@ -91,35 +95,44 @@ class MySubscriptionService:
             )
 
             if result.status == "active":
-                valid_results.append(result)
+                active_results.append(result)
             elif result.status == "subscription_expired":
-                has_expired = True
+                expired_results.append(result)
 
-        if valid_results:
-            valid_results.sort(
-                key=lambda item: (
-                    item.expires_at or datetime.min,
-                    item.subscription_id or 0,
-                )
+        active_results.sort(
+            key=lambda item: (
+                item.expires_at.timestamp()
+                if item.expires_at is not None
+                else float("-inf"),
+                item.subscription_id or 0,
             )
+        )
+        expired_results.sort(
+            key=lambda item: (
+                item.expires_at.timestamp()
+                if item.expires_at is not None
+                else float("-inf"),
+                item.subscription_id or 0,
+            ),
+            reverse=True,
+        )
+
+        visible_results = active_results + expired_results
+
+        if not visible_results:
             return MySubscriptionsResult(
-                status="active",
+                status="subscription_not_found",
                 user_id=user.id,
-                subscriptions=tuple(valid_results),
-                message="Активные подписки найдены.",
+                message="Подписки не найдены.",
             )
 
-        if has_expired:
-            return MySubscriptionsResult(
-                status="subscription_expired",
-                user_id=user.id,
-                message="Срок всех подписок истёк.",
-            )
-
+        # Keep the existing aggregate status for handler compatibility.
+        # Individual entries carry either active or subscription_expired.
         return MySubscriptionsResult(
-            status="subscription_not_found",
+            status="active",
             user_id=user.id,
-            message="Активные подписки не найдены.",
+            subscriptions=tuple(visible_results),
+            message="Подписки найдены.",
         )
 
     async def get_access_by_subscription_id(
@@ -266,6 +279,23 @@ class MySubscriptionService:
     ) -> MySubscriptionResult:
         now = utc_now()
 
+        if (
+            subscription.status == SubscriptionStatus.EXPIRED
+            or (
+                subscription.status == SubscriptionStatus.ACTIVE
+                and is_due_or_past(subscription.expires_at, now=now)
+            )
+        ):
+            return MySubscriptionResult(
+                status="subscription_expired",
+                user_id=user_id,
+                subscription_id=subscription.id,
+                subscription_status=subscription.status.value,
+                expires_at=subscription.expires_at,
+                device_limit=subscription.device_limit,
+                message="Срок подписки истек.",
+            )
+
         if subscription.status != SubscriptionStatus.ACTIVE:
             return MySubscriptionResult(
                 status="subscription_not_active",
@@ -275,17 +305,6 @@ class MySubscriptionService:
                 expires_at=subscription.expires_at,
                 device_limit=subscription.device_limit,
                 message="Подписка не активна.",
-            )
-
-        if is_due_or_past(subscription.expires_at, now=now):
-            return MySubscriptionResult(
-                status="subscription_expired",
-                user_id=user_id,
-                subscription_id=subscription.id,
-                subscription_status=subscription.status.value,
-                expires_at=subscription.expires_at,
-                device_limit=subscription.device_limit,
-                message="Срок подписки истек.",
             )
 
         return MySubscriptionResult(

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -206,6 +206,7 @@ async def test_dev_create_active_subscription_sends_activation_summary_and_vpn_k
     assert row_callbacks(message.answer_calls[2]["reply_markup"]) == [
         ["vpn_access:show_config:303"],
         ["vpn_access:show_config:303"],
+        ["renew_subscription:303"],
         ["buy_vpn"],
         ["vpn_access:happ_android", "vpn_access:happ_ios"],
         ["vpn_access:happ_fallback"],

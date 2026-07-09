@@ -6,7 +6,9 @@ from app.config.settings import get_settings
 from app.config.tariffs import get_tariff
 from app.database.repositories.orders import OrderRepository
 from app.database.repositories.payment_options import PaymentOptionRepository
+from app.database.repositories.subscriptions import SubscriptionRepository
 from app.database.repositories.users import UserRepository
+from app.payment_core.enums.subscription_status import SubscriptionStatus
 
 
 class OrderService:
@@ -16,6 +18,7 @@ class OrderService:
         self.user_repository = UserRepository(session)
         self.order_repository = OrderRepository(session)
         self.payment_option_repository = PaymentOptionRepository(session)
+        self.subscription_repository = SubscriptionRepository(session)
 
     async def get_or_create_user(
         self,
@@ -49,14 +52,15 @@ class OrderService:
         return user
 
     async def create_order(
-            self,
-            telegram_id: int,
-            tariff_code,
-            payment_option_code: str,
-            username: str | None = None,
-            first_name: str | None = None,
-            last_name: str | None = None,
-            language_code: str | None = None,
+        self,
+        telegram_id: int,
+        tariff_code,
+        payment_option_code: str,
+        target_subscription_id: int | None = None,
+        username: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        language_code: str | None = None,
     ):
         try:
             user = await self.get_or_create_user(
@@ -69,6 +73,12 @@ class OrderService:
 
             tariff = get_tariff(tariff_code)
 
+            await self._validate_target_subscription(
+                user_id=user.id,
+                target_subscription_id=target_subscription_id,
+                tariff_device_limit=tariff.device_limit,
+            )
+
             payment_option = await self.payment_option_repository.get_by_code(
                 payment_option_code
             )
@@ -77,11 +87,19 @@ class OrderService:
                     f"Payment option not found in DB: {payment_option_code}"
                 )
 
+            waiting_order_kwargs = {
+                "user_id": user.id,
+                "tariff_code": tariff.code,
+                "payment_option_id": payment_option.id,
+            }
+            if target_subscription_id is not None:
+                waiting_order_kwargs["target_subscription_id"] = (
+                    target_subscription_id
+                )
+
             existing_order = (
                 await self.order_repository.get_active_waiting_order_by_user(
-                    user_id=user.id,
-                    tariff_code=tariff.code,
-                    payment_option_id=payment_option.id,
+                    **waiting_order_kwargs
                 )
             )
             if existing_order is not None:
@@ -92,22 +110,30 @@ class OrderService:
                 minutes=self.settings.order_ttl_minutes,
             )
 
+            create_order_kwargs = {
+                "user_id": user.id,
+                "tariff_code": tariff.code,
+                "device_limit": tariff.device_limit,
+                "duration_days": tariff.duration_days,
+                "price_usd": tariff.price_usd,
+                "payment_method": payment_option.payment_method,
+                "payment_option_id": payment_option.id,
+                "expected_amount": None,
+                "expected_currency": payment_option.currency,
+                "expected_network": payment_option.network,
+                "destination_address": None,
+                "destination_memo_tag": None,
+                "expires_at": expires_at,
+                "source": "bot",
+                "comment": None,
+            }
+            if target_subscription_id is not None:
+                create_order_kwargs["target_subscription_id"] = (
+                    target_subscription_id
+                )
+
             order = await self.order_repository.create(
-                user_id=user.id,
-                tariff_code=tariff.code,
-                device_limit=tariff.device_limit,
-                duration_days=tariff.duration_days,
-                price_usd=tariff.price_usd,
-                payment_method=payment_option.payment_method,
-                payment_option_id=payment_option.id,
-                expected_amount=None,
-                expected_currency=payment_option.currency,
-                expected_network=payment_option.network,
-                destination_address=None,
-                destination_memo_tag=None,
-                expires_at=expires_at,
-                source="bot",
-                comment=None,
+                **create_order_kwargs
             )
 
             await self.session.commit()
@@ -116,6 +142,48 @@ class OrderService:
         except Exception:
             await self.session.rollback()
             raise
+
+    async def _validate_target_subscription(
+        self,
+        *,
+        user_id: int,
+        target_subscription_id: int | None,
+        tariff_device_limit: int,
+    ) -> None:
+        if target_subscription_id is None:
+            return
+
+        if target_subscription_id <= 0:
+            raise ValueError(
+                f"Target subscription not found: {target_subscription_id}"
+            )
+
+        subscription = await self.subscription_repository.get_by_id(
+            target_subscription_id
+        )
+
+        if subscription is None or subscription.user_id != user_id:
+            raise ValueError(
+                f"Target subscription not found: {target_subscription_id}"
+            )
+
+        if subscription.status not in {
+            SubscriptionStatus.ACTIVE,
+            SubscriptionStatus.EXPIRED,
+        }:
+            raise ValueError(
+                "Target subscription is not renewable. "
+                f"subscription_id={subscription.id}, "
+                f"status={subscription.status.value}"
+            )
+
+        if subscription.device_limit != tariff_device_limit:
+            raise ValueError(
+                "Target subscription device limit does not match tariff. "
+                f"subscription_id={subscription.id}, "
+                f"subscription_device_limit={subscription.device_limit}, "
+                f"tariff_device_limit={tariff_device_limit}"
+            )
 
     async def expire_order(self, order_id: int):
         try:
