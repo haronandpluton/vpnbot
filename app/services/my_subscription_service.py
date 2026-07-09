@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime
-from app.common.datetime_utils import is_due_or_past, utc_now
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.datetime_utils import is_due_or_past, utc_now
 from app.database.models import Subscription
 from app.database.repositories.subscriptions import SubscriptionRepository
 from app.database.repositories.users import UserRepository
@@ -22,14 +23,23 @@ class MySubscriptionResult:
     message: str | None = None
 
 
+@dataclass
+class MySubscriptionsResult:
+    status: str
+    user_id: int | None = None
+    subscriptions: tuple[MySubscriptionResult, ...] = ()
+    message: str | None = None
+
+
 class MySubscriptionService:
     """
     User-facing subscription service.
 
     Важно:
-    - просмотр подписки не должен обновлять last_access_sent_at;
-    - выдача / повторная выдача доступа не должна создавать новый UUID;
-    - выдача / повторная выдача доступа не должна продлевать expires_at;
+    - просмотр подписок не обновляет last_access_sent_at;
+    - выдача доступа не создаёт новый UUID;
+    - выдача доступа не продлевает expires_at;
+    - доступ выдаётся только владельцу выбранной подписки;
     - единственная мутация при выдаче доступа: last_access_sent_at.
     """
 
@@ -43,57 +53,112 @@ class MySubscriptionService:
         self.subscription_repository = SubscriptionRepository(session)
         self.vpn_access_service = vpn_access_service or VpnAccessService()
 
-    async def get_active_subscription_by_telegram_id(
+    async def get_active_subscriptions_by_telegram_id(
         self,
         telegram_id: int,
-    ) -> MySubscriptionResult:
+    ) -> MySubscriptionsResult:
         """
-        Только просмотр состояния подписки.
+        Возвращает все действующие активные подписки пользователя.
 
         Не генерирует config_uri.
         Не обновляет last_access_sent_at.
         Не делает commit.
         """
-        subscription_result = await self._get_valid_active_subscription_result(
-            telegram_id=telegram_id,
+        user = await self.user_repository.get_by_telegram_id(telegram_id)
+
+        if user is None:
+            return MySubscriptionsResult(
+                status="user_not_found",
+                message="Пользователь не найден.",
+            )
+
+        subscriptions = await self.subscription_repository.get_active_by_user(user.id)
+
+        if not subscriptions:
+            return MySubscriptionsResult(
+                status="subscription_not_found",
+                user_id=user.id,
+                message="Активные подписки не найдены.",
+            )
+
+        valid_results: list[MySubscriptionResult] = []
+        has_expired = False
+
+        for subscription in subscriptions:
+            result = self._validate_subscription(
+                subscription=subscription,
+                user_id=user.id,
+            )
+
+            if result.status == "active":
+                valid_results.append(result)
+            elif result.status == "subscription_expired":
+                has_expired = True
+
+        if valid_results:
+            valid_results.sort(
+                key=lambda item: (
+                    item.expires_at or datetime.min,
+                    item.subscription_id or 0,
+                )
+            )
+            return MySubscriptionsResult(
+                status="active",
+                user_id=user.id,
+                subscriptions=tuple(valid_results),
+                message="Активные подписки найдены.",
+            )
+
+        if has_expired:
+            return MySubscriptionsResult(
+                status="subscription_expired",
+                user_id=user.id,
+                message="Срок всех подписок истёк.",
+            )
+
+        return MySubscriptionsResult(
+            status="subscription_not_found",
+            user_id=user.id,
+            message="Активные подписки не найдены.",
         )
 
-        if subscription_result.status != "active":
-            return subscription_result
-
-        return subscription_result
-
-    async def get_access_by_telegram_id(
+    async def get_access_by_subscription_id(
         self,
         telegram_id: int,
+        subscription_id: int,
     ) -> MySubscriptionResult:
         """
-        Выдача или повторная выдача существующего доступа.
+        Возвращает доступ только для выбранной подписки пользователя.
 
-        Безопасно:
-        - не создает новый VPN-доступ;
-        - не создает новый UUID;
-        - не продлевает подписку;
-        - только возвращает существующий connect_url;
-        - обновляет last_access_sent_at.
+        Защита:
+        - чужая подписка не раскрывается;
+        - неактивная или истёкшая подписка не выдаётся;
+        - UUID и expires_at не изменяются.
         """
-        subscription_result = await self._get_valid_active_subscription_result(
-            telegram_id=telegram_id,
+        user = await self.user_repository.get_by_telegram_id(telegram_id)
+
+        if user is None:
+            return MySubscriptionResult(
+                status="user_not_found",
+                message="Пользователь не найден.",
+            )
+
+        subscription = await self.subscription_repository.get_by_id(subscription_id)
+
+        if subscription is None or subscription.user_id != user.id:
+            return MySubscriptionResult(
+                status="subscription_not_found",
+                user_id=user.id,
+                message="Активная подписка не найдена.",
+            )
+
+        subscription_result = self._validate_subscription(
+            subscription=subscription,
+            user_id=user.id,
         )
 
         if subscription_result.status != "active":
             return subscription_result
-
-        subscription = await self.subscription_repository.get_by_id(
-            subscription_result.subscription_id
-        )
-
-        if subscription is None:
-            return MySubscriptionResult(
-                status="subscription_not_found",
-                user_id=subscription_result.user_id,
-                message="Активная подписка не найдена.",
-            )
 
         config_uri = await self.vpn_access_service.get_config(
             uuid=subscription.uuid,
@@ -115,6 +180,53 @@ class MySubscriptionService:
             device_limit=subscription.device_limit,
             config_uri=config_uri,
             message="Доступ отправлен повторно.",
+        )
+
+    async def get_active_subscription_by_telegram_id(
+        self,
+        telegram_id: int,
+    ) -> MySubscriptionResult:
+        """
+        Legacy-просмотр одной подписки.
+
+        Оставлен для совместимости со старым кодом и тестами.
+        """
+        subscription_result = await self._get_valid_active_subscription_result(
+            telegram_id=telegram_id,
+        )
+
+        if subscription_result.status != "active":
+            return subscription_result
+
+        return subscription_result
+
+    async def get_access_by_telegram_id(
+        self,
+        telegram_id: int,
+    ) -> MySubscriptionResult:
+        """
+        Legacy-выдача одной подписки.
+
+        Новый пользовательский интерфейс должен вызывать
+        get_access_by_subscription_id().
+        """
+        subscription_result = await self._get_valid_active_subscription_result(
+            telegram_id=telegram_id,
+        )
+
+        if subscription_result.status != "active":
+            return subscription_result
+
+        if subscription_result.subscription_id is None:
+            return MySubscriptionResult(
+                status="subscription_not_found",
+                user_id=subscription_result.user_id,
+                message="Активная подписка не найдена.",
+            )
+
+        return await self.get_access_by_subscription_id(
+            telegram_id=telegram_id,
+            subscription_id=subscription_result.subscription_id,
         )
 
     async def _get_valid_active_subscription_result(

@@ -103,7 +103,12 @@ async def admin_resend_config_command(
         )
         return
 
-    if result.status != "ready" or result.config_uri is None or result.telegram_id is None:
+    if (
+            result.status != "ready"
+            or result.config_uri is None
+            or result.telegram_id is None
+            or result.subscription_id is None
+    ):
         await message.answer(
             "Не удалось подготовить конфиг для отправки.\n\n"
             f"Order ID: {result.order_id}\n"
@@ -124,7 +129,9 @@ async def admin_resend_config_command(
             chat_id=result.telegram_id,
             text=user_text,
             parse_mode="HTML",
-            reply_markup=vpn_access_keyboard(),
+            reply_markup=vpn_access_keyboard(
+                subscription_id=result.subscription_id,
+            ),
         )
     except Exception as exc:
         await message.answer(

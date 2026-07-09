@@ -26,8 +26,14 @@ class FakeMessage:
 
 
 class FakeCallback:
-    def __init__(self, *, from_user=None) -> None:
+    def __init__(
+        self,
+        *,
+        from_user=None,
+        data: str = "vpn_access:show_config:50",
+    ) -> None:
         self.from_user = from_user
+        self.data = data
         self.message = FakeMessage()
         self.answer_calls: list[dict] = []
 
@@ -36,29 +42,39 @@ class FakeCallback:
 
 
 class FakeMySubscriptionService:
-    active_result = None
+    subscriptions_result = None
     access_result = None
     instances: list["FakeMySubscriptionService"] = []
 
     def __init__(self, session) -> None:
         self.session = session
-        self.active_calls: list[int] = []
-        self.access_calls: list[int] = []
+        self.subscriptions_calls: list[int] = []
+        self.access_calls: list[dict] = []
         self.__class__.instances.append(self)
 
-    async def get_active_subscription_by_telegram_id(self, *, telegram_id: int):
-        self.active_calls.append(telegram_id)
-        return self.__class__.active_result
+    async def get_active_subscriptions_by_telegram_id(self, *, telegram_id: int):
+        self.subscriptions_calls.append(telegram_id)
+        return self.__class__.subscriptions_result
 
-    async def get_access_by_telegram_id(self, *, telegram_id: int):
-        self.access_calls.append(telegram_id)
+    async def get_access_by_subscription_id(
+        self,
+        *,
+        telegram_id: int,
+        subscription_id: int,
+    ):
+        self.access_calls.append(
+            {
+                "telegram_id": telegram_id,
+                "subscription_id": subscription_id,
+            }
+        )
         return self.__class__.access_result
 
 
 @pytest.fixture(autouse=True)
 def patch_service(monkeypatch):
     FakeMySubscriptionService.instances = []
-    FakeMySubscriptionService.active_result = None
+    FakeMySubscriptionService.subscriptions_result = None
     FakeMySubscriptionService.access_result = None
     monkeypatch.setattr(
         my_subscription_module,
@@ -81,12 +97,23 @@ def row_urls(markup):
 
 
 @pytest.mark.asyncio
-async def test_my_subscription_active_sends_access_text_and_vpn_keyboard():
-    expires_at = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
-    FakeMySubscriptionService.active_result = SimpleNamespace(
+async def test_my_subscription_sends_separate_card_for_each_active_subscription():
+    first_expires_at = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    second_expires_at = datetime(2026, 9, 5, 18, 30, tzinfo=timezone.utc)
+    FakeMySubscriptionService.subscriptions_result = SimpleNamespace(
         status="active",
-        device_limit=3,
-        expires_at=expires_at,
+        subscriptions=(
+            SimpleNamespace(
+                subscription_id=50,
+                device_limit=1,
+                expires_at=first_expires_at,
+            ),
+            SimpleNamespace(
+                subscription_id=77,
+                device_limit=1,
+                expires_at=second_expires_at,
+            ),
+        ),
     )
     message = FakeMessage(from_user=SimpleNamespace(id=777))
 
@@ -94,16 +121,28 @@ async def test_my_subscription_active_sends_access_text_and_vpn_keyboard():
 
     service = FakeMySubscriptionService.instances[0]
     assert service.session == "session"
-    assert service.active_calls == [777]
-    assert "Твоя VPN-подписка активна." in message.answer_calls[0]["text"]
-    assert "Устройств: 3" in message.answer_calls[0]["text"]
-    assert "Активна до: 01.08.2026 12:00" in message.answer_calls[0]["text"]
-    assert row_callbacks(message.answer_calls[0]["reply_markup"]) == [
-        ["vpn_access:show_config"],
-        ["vpn_access:show_config"],
+    assert service.subscriptions_calls == [777]
+    assert len(message.answer_calls) == 2
+
+    first_message = message.answer_calls[0]
+    assert "Подписка №1" in first_message["text"]
+    assert "ID подписки: 50" in first_message["text"]
+    assert "Устройств: 1" in first_message["text"]
+    assert "Активна до: 01.08.2026 12:00" in first_message["text"]
+    assert row_callbacks(first_message["reply_markup"]) == [
+        ["vpn_access:show_config:50"],
+        ["vpn_access:show_config:50"],
         ["buy_vpn"],
         ["vpn_access:happ_android", "vpn_access:happ_ios"],
         ["vpn_access:happ_fallback"],
+    ]
+
+    second_message = message.answer_calls[1]
+    assert "Подписка №2" in second_message["text"]
+    assert "ID подписки: 77" in second_message["text"]
+    assert "Активна до: 05.09.2026 18:30" in second_message["text"]
+    assert row_callbacks(second_message["reply_markup"])[0] == [
+        "vpn_access:show_config:77"
     ]
 
 
@@ -118,21 +157,19 @@ async def test_my_subscription_active_sends_access_text_and_vpn_keyboard():
         ),
         (
             "subscription_not_found",
-            "Активная подписка не найдена.\n\n"
-            "Если ты уже оплатил заказ, нажми «Проверить оплату» в сообщении с заказом.",
+            "Активные подписки не найдены.\n\n"
+            "Если ты уже оплатил заказ, нажми «Проверить оплату» "
+            "в сообщении с заказом.",
         ),
         (
             "subscription_expired",
-            "Срок подписки истек.\n\nСоздай новый заказ, чтобы продлить доступ.",
-        ),
-        (
-            "subscription_not_active",
-            "Подписка найдена, но сейчас она не активна.\n\n"
-            "Если считаешь, что это ошибка — обратись в поддержку.",
+            "Срок всех подписок истек.\n\n"
+            "Создай новый заказ, чтобы получить новый доступ.",
         ),
         (
             "unknown",
-            "Не удалось определить состояние подписки.\n\nОбратись в поддержку.",
+            "Не удалось определить состояние подписок.\n\n"
+            "Обратись в поддержку.",
         ),
     ],
 )
@@ -140,13 +177,13 @@ async def test_my_subscription_non_active_statuses_send_clear_user_message(
     status,
     expected_text,
 ):
-    FakeMySubscriptionService.active_result = SimpleNamespace(status=status)
+    FakeMySubscriptionService.subscriptions_result = SimpleNamespace(status=status)
     message = FakeMessage(from_user=SimpleNamespace(id=123))
 
     await my_subscription_command(message, session="session")
 
     assert message.answer_calls == [{"text": expected_text}]
-    assert FakeMySubscriptionService.instances[0].active_calls == [123]
+    assert FakeMySubscriptionService.instances[0].subscriptions_calls == [123]
 
 
 @pytest.mark.asyncio
@@ -164,6 +201,27 @@ async def test_show_vpn_config_callback_blocks_missing_user():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    "data",
+    [
+        "vpn_access:show_config:not-a-number",
+        "vpn_access:show_config:0",
+        "vpn_access:show_config:-1",
+    ],
+)
+async def test_show_vpn_config_callback_rejects_invalid_subscription_id(data):
+    callback = FakeCallback(from_user=SimpleNamespace(id=123), data=data)
+
+    await show_vpn_config_callback(callback, session="session")
+
+    assert callback.answer_calls == [
+        {"text": "Некорректная подписка.", "show_alert": True}
+    ]
+    assert callback.message.answer_calls == []
+    assert FakeMySubscriptionService.instances == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "result",
     [
         SimpleNamespace(status="subscription_not_found", config_uri=None),
@@ -172,11 +230,16 @@ async def test_show_vpn_config_callback_blocks_missing_user():
 )
 async def test_show_vpn_config_callback_blocks_missing_active_access(result):
     FakeMySubscriptionService.access_result = result
-    callback = FakeCallback(from_user=SimpleNamespace(id=123))
+    callback = FakeCallback(
+        from_user=SimpleNamespace(id=123),
+        data="vpn_access:show_config:50",
+    )
 
     await show_vpn_config_callback(callback, session="session")
 
-    assert FakeMySubscriptionService.instances[0].access_calls == [123]
+    assert FakeMySubscriptionService.instances[0].access_calls == [
+        {"telegram_id": 123, "subscription_id": 50}
+    ]
     assert callback.answer_calls == [
         {"text": "Активная подписка не найдена.", "show_alert": True}
     ]
@@ -184,24 +247,61 @@ async def test_show_vpn_config_callback_blocks_missing_active_access(result):
 
 
 @pytest.mark.asyncio
-async def test_show_vpn_config_callback_sends_config_text_and_open_button():
+@pytest.mark.parametrize(
+    ("status", "expected_text"),
+    [
+        ("subscription_expired", "Срок выбранной подписки истек."),
+        ("subscription_not_active", "Выбранная подписка не активна."),
+    ],
+)
+async def test_show_vpn_config_callback_reports_unavailable_selected_subscription(
+    status,
+    expected_text,
+):
     FakeMySubscriptionService.access_result = SimpleNamespace(
-        status="active",
-        config_uri="https://connect.example/sub-uuid",
+        status=status,
+        config_uri=None,
     )
-    callback = FakeCallback(from_user=SimpleNamespace(id=123))
+    callback = FakeCallback(
+        from_user=SimpleNamespace(id=123),
+        data="vpn_access:show_config:77",
+    )
 
     await show_vpn_config_callback(callback, session="session")
 
-    assert FakeMySubscriptionService.instances[0].access_calls == [123]
+    assert FakeMySubscriptionService.instances[0].access_calls == [
+        {"telegram_id": 123, "subscription_id": 77}
+    ]
+    assert callback.answer_calls == [
+        {"text": expected_text, "show_alert": True}
+    ]
+    assert callback.message.answer_calls == []
+
+
+@pytest.mark.asyncio
+async def test_show_vpn_config_callback_sends_selected_subscription_config():
+    FakeMySubscriptionService.access_result = SimpleNamespace(
+        status="active",
+        config_uri="https://connect.example/sub-uuid-77",
+    )
+    callback = FakeCallback(
+        from_user=SimpleNamespace(id=123),
+        data="vpn_access:show_config:77",
+    )
+
+    await show_vpn_config_callback(callback, session="session")
+
+    assert FakeMySubscriptionService.instances[0].access_calls == [
+        {"telegram_id": 123, "subscription_id": 77}
+    ]
     assert "Страница подключения VPN:" in callback.message.answer_calls[0]["text"]
     assert (
-        "<code>https://connect.example/sub-uuid</code>"
+        "<code>https://connect.example/sub-uuid-77</code>"
         in callback.message.answer_calls[0]["text"]
     )
     assert callback.message.answer_calls[0]["parse_mode"] == "HTML"
     assert row_urls(callback.message.answer_calls[0]["reply_markup"]) == [
-        ["https://connect.example/sub-uuid"]
+        ["https://connect.example/sub-uuid-77"]
     ]
     assert callback.answer_calls == [{"text": None}]
 

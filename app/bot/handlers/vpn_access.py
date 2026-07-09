@@ -14,6 +14,14 @@ router = Router()
 
 
 @router.callback_query(F.data == "vpn_access:show_config")
+async def legacy_show_vpn_config_callback(callback: CallbackQuery):
+    await callback.answer(
+        "Открой /my_subscription и выбери нужную подписку.",
+        show_alert=True,
+    )
+
+
+@router.callback_query(F.data.startswith("vpn_access:show_config:"))
 async def show_vpn_config_callback(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -22,9 +30,30 @@ async def show_vpn_config_callback(
         await callback.answer("Не удалось определить пользователя.", show_alert=True)
         return
 
-    result = await MySubscriptionService(session).get_access_by_telegram_id(
+    try:
+        subscription_id = int(callback.data.rsplit(":", maxsplit=1)[1])
+    except (AttributeError, IndexError, ValueError):
+        await callback.answer("Некорректная подписка.", show_alert=True)
+        return
+
+    if subscription_id <= 0:
+        await callback.answer("Некорректная подписка.", show_alert=True)
+        return
+
+    result = await MySubscriptionService(
+        session
+    ).get_access_by_subscription_id(
         telegram_id=callback.from_user.id,
+        subscription_id=subscription_id,
     )
+
+    if result.status == "subscription_expired":
+        await callback.answer("Срок выбранной подписки истек.", show_alert=True)
+        return
+
+    if result.status == "subscription_not_active":
+        await callback.answer("Выбранная подписка не активна.", show_alert=True)
+        return
 
     if result.status != "active" or result.config_uri is None:
         await callback.answer("Активная подписка не найдена.", show_alert=True)

@@ -77,5 +77,7 @@ async def dev_create_active_subscription_command(
             device_limit=subscription.device_limit,
             expires_at=subscription.expires_at,
         ),
-        reply_markup=vpn_access_keyboard(),
+        reply_markup=vpn_access_keyboard(
+            subscription_id=subscription.id,
+        ),
     )

@@ -1,24 +1,26 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def vpn_access_keyboard() -> InlineKeyboardMarkup:
+def vpn_access_keyboard(subscription_id: int) -> InlineKeyboardMarkup:
+    show_config_callback = f"vpn_access:show_config:{subscription_id}"
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="Подключить VPN",
-                    callback_data="vpn_access:show_config",
+                    callback_data=show_config_callback,
                 )
             ],
             [
                 InlineKeyboardButton(
                     text="Отправить доступ снова",
-                    callback_data="vpn_access:show_config",
+                    callback_data=show_config_callback,
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Продлить подписку",
+                    text="Купить ещё подписку",
                     callback_data="buy_vpn",
                 )
             ],

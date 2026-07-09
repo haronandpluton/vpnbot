@@ -204,8 +204,8 @@ async def test_dev_create_active_subscription_sends_activation_summary_and_vpn_k
     assert "Устройств: 1" in message.answer_calls[2]["text"]
     assert "Активна до: 01.08.2026 12:00" in message.answer_calls[2]["text"]
     assert row_callbacks(message.answer_calls[2]["reply_markup"]) == [
-        ["vpn_access:show_config"],
-        ["vpn_access:show_config"],
+        ["vpn_access:show_config:303"],
+        ["vpn_access:show_config:303"],
         ["buy_vpn"],
         ["vpn_access:happ_android", "vpn_access:happ_ios"],
         ["vpn_access:happ_fallback"],

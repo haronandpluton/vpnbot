@@ -178,19 +178,19 @@ def test_payment_check_keyboard_with_payment_url_puts_pay_button_first_and_can_h
     assert row_urls(markup) == [["https://pay.example/invoice"], [None]]
 
 
-def test_vpn_access_keyboard_keeps_config_resend_extend_and_instruction_callbacks():
-    markup = vpn_access_keyboard()
+def test_vpn_access_keyboard_binds_actions_to_selected_subscription():
+    markup = vpn_access_keyboard(subscription_id=303)
 
     assert row_texts(markup) == [
         ["Подключить VPN"],
         ["Отправить доступ снова"],
-        ["Продлить подписку"],
+        ["Купить ещё подписку"],
         ["Happ VPN: Android", "Happ VPN: iPhone"],
         ["Если Happ не открывается"],
     ]
     assert row_callbacks(markup) == [
-        ["vpn_access:show_config"],
-        ["vpn_access:show_config"],
+        ["vpn_access:show_config:303"],
+        ["vpn_access:show_config:303"],
         ["buy_vpn"],
         ["vpn_access:happ_android", "vpn_access:happ_ios"],
         ["vpn_access:happ_fallback"],

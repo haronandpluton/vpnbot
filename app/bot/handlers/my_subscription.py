@@ -9,24 +9,34 @@ from app.services.my_subscription_service import MySubscriptionService
 
 router = Router()
 
-
-@router.message(Command("my_subscription"))
-async def my_subscription_command(
+async def send_my_subscriptions(
     message: Message,
     session: AsyncSession,
-):
-    result = await MySubscriptionService(session).get_active_subscription_by_telegram_id(
-        telegram_id=message.from_user.id,
+    telegram_id: int,
+) -> None:
+    result = (
+        await MySubscriptionService(
+            session
+        ).get_active_subscriptions_by_telegram_id(
+            telegram_id=telegram_id,
+        )
     )
 
     if result.status == "active":
-        await message.answer(
-            format_vpn_access_text(
-                device_limit=result.device_limit,
-                expires_at=result.expires_at,
-            ),
-            reply_markup=vpn_access_keyboard(),
-        )
+        for position, subscription in enumerate(result.subscriptions, start=1):
+            await message.answer(
+                (
+                    f"Подписка №{position}\n"
+                    f"ID подписки: {subscription.subscription_id}\n\n"
+                    f"{format_vpn_access_text(
+                        device_limit=subscription.device_limit,
+                        expires_at=subscription.expires_at,
+                    )}"
+                ),
+                reply_markup=vpn_access_keyboard(
+                    subscription_id=subscription.subscription_id,
+                ),
+            )
         return
 
     if result.status == "user_not_found":
@@ -38,26 +48,31 @@ async def my_subscription_command(
 
     if result.status == "subscription_not_found":
         await message.answer(
-            "Активная подписка не найдена.\n\n"
-            "Если ты уже оплатил заказ, нажми «Проверить оплату» в сообщении с заказом."
+            "Активные подписки не найдены.\n\n"
+            "Если ты уже оплатил заказ, нажми «Проверить оплату» "
+            "в сообщении с заказом."
         )
         return
 
     if result.status == "subscription_expired":
         await message.answer(
-            "Срок подписки истек.\n\n"
-            "Создай новый заказ, чтобы продлить доступ."
-        )
-        return
-
-    if result.status == "subscription_not_active":
-        await message.answer(
-            "Подписка найдена, но сейчас она не активна.\n\n"
-            "Если считаешь, что это ошибка — обратись в поддержку."
+            "Срок всех подписок истек.\n\n"
+            "Создай новый заказ, чтобы получить новый доступ."
         )
         return
 
     await message.answer(
-        "Не удалось определить состояние подписки.\n\n"
+        "Не удалось определить состояние подписок.\n\n"
         "Обратись в поддержку."
+    )
+
+@router.message(Command("my_subscription"))
+async def my_subscription_command(
+    message: Message,
+    session: AsyncSession,
+):
+    await send_my_subscriptions(
+        message=message,
+        session=session,
+        telegram_id=message.from_user.id,
     )
