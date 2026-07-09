@@ -46,6 +46,10 @@ class Order(Base, TimestampMixin):
     device_limit: Mapped[int] = mapped_column(
         nullable=False,
     )
+    duration_days: Mapped[int] = mapped_column(
+        nullable=False,
+        server_default=text("30"),
+    )
 
     price_usd: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),

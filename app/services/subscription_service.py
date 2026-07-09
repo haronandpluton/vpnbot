@@ -12,7 +12,6 @@ from app.database.models import Order
 
 
 class SubscriptionService:
-    SUBSCRIPTION_DAYS = 30
 
     def __init__(
         self,
@@ -54,20 +53,9 @@ class SubscriptionService:
                 )
 
             if order.status == OrderStatus.ACTIVATED:
-                active_subscription = (
-                    await self.subscription_repository.get_active_subscription_by_user_id(
-                        order.user_id
-                    )
-                )
-                if active_subscription is None:
-                    raise ValueError(
-                        f"Order {order.id} is activated, but active subscription not found"
-                    )
-
-                return await self._return_existing_subscription_for_order(
-                    order=order,
-                    subscription=active_subscription,
-                    sync_reason="activated_order_resync",
+                raise ValueError(
+                    f"Order {order.id} is activated, "
+                    "but subscription linked to this order was not found"
                 )
 
             if order.status != OrderStatus.PAID:
@@ -76,19 +64,7 @@ class SubscriptionService:
                     f"order_id={order.id}, status={order.status}"
                 )
 
-            active_subscription = (
-                await self.subscription_repository.get_active_subscription_by_user_id(
-                    order.user_id
-                )
-            )
-
-            if active_subscription is None:
-                subscription, config_uri = await self._create_new_subscription(order)
-            else:
-                subscription, config_uri = await self._extend_existing_subscription(
-                    active_subscription=active_subscription,
-                    order=order,
-                )
+            subscription, config_uri = await self._create_new_subscription(order)
 
             order.status = OrderStatus.ACTIVATED
             order.activated_at = datetime.now(timezone.utc)
@@ -210,7 +186,13 @@ class SubscriptionService:
 
     async def _create_new_subscription(self, order):
         now = datetime.now(timezone.utc)
-        expires_at = now + timedelta(days=self.SUBSCRIPTION_DAYS)
+        if order.duration_days <= 0:
+            raise ValueError(
+                f"Invalid order duration: "
+                f"order_id={order.id}, duration_days={order.duration_days}"
+            )
+
+        expires_at = now + timedelta(days=order.duration_days)
 
         access = await self.vpn_access_service.create_access(
             user_id=order.user_id,
@@ -240,7 +222,13 @@ class SubscriptionService:
         now = datetime.now(timezone.utc)
 
         base_time = max(active_subscription.expires_at, now)
-        new_expires_at = base_time + timedelta(days=self.SUBSCRIPTION_DAYS)
+        if order.duration_days <= 0:
+            raise ValueError(
+                f"Invalid order duration: "
+                f"order_id={order.id}, duration_days={order.duration_days}"
+            )
+
+        new_expires_at = base_time + timedelta(days=order.duration_days)
 
         access = await self.vpn_access_service.extend_access(
             uuid=active_subscription.uuid,

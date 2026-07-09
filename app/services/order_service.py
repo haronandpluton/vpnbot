@@ -49,14 +49,14 @@ class OrderService:
         return user
 
     async def create_order(
-        self,
-        telegram_id: int,
-        tariff_code,
-        payment_option_code: str,
-        username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
-        language_code: str | None = None,
+            self,
+            telegram_id: int,
+            tariff_code,
+            payment_option_code: str,
+            username: str | None = None,
+            first_name: str | None = None,
+            last_name: str | None = None,
+            language_code: str | None = None,
     ):
         try:
             user = await self.get_or_create_user(
@@ -66,13 +66,6 @@ class OrderService:
                 last_name=last_name,
                 language_code=language_code,
             )
-
-            existing_order = await self.order_repository.get_active_waiting_order_by_user(
-                user_id=user.id,
-            )
-            if existing_order is not None:
-                await self.session.commit()
-                return existing_order
 
             tariff = get_tariff(tariff_code)
 
@@ -84,6 +77,17 @@ class OrderService:
                     f"Payment option not found in DB: {payment_option_code}"
                 )
 
+            existing_order = (
+                await self.order_repository.get_active_waiting_order_by_user(
+                    user_id=user.id,
+                    tariff_code=tariff.code,
+                    payment_option_id=payment_option.id,
+                )
+            )
+            if existing_order is not None:
+                await self.session.commit()
+                return existing_order
+
             expires_at = datetime.now(UTC) + timedelta(
                 minutes=self.settings.order_ttl_minutes,
             )
@@ -92,6 +96,7 @@ class OrderService:
                 user_id=user.id,
                 tariff_code=tariff.code,
                 device_limit=tariff.device_limit,
+                duration_days=tariff.duration_days,
                 price_usd=tariff.price_usd,
                 payment_method=payment_option.payment_method,
                 payment_option_id=payment_option.id,

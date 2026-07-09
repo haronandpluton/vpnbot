@@ -17,7 +17,7 @@ from app.bot.handlers.start import (
     main_menu_text,
     start_command,
 )
-from app.common.enums import CurrencyCode, TariffCode
+from app.common.enums import TariffCode
 from app.payment_adapters.cryptobot import CryptoBotAPIError
 
 
@@ -120,9 +120,9 @@ async def test_buy_command_sends_tariff_keyboard():
     assert_callback_rows(
         message.answer_calls[0]["reply_markup"],
         [
-            ["select_tariff:devices_1"],
-            ["select_tariff:devices_2"],
-            ["select_tariff:devices_3"],
+            ["select_tariff:period_1_month"],
+            ["select_tariff:period_2_months"],
+            ["select_tariff:period_3_months"],
             ["back_to_main_menu"],
         ],
     )
@@ -138,9 +138,9 @@ async def test_buy_vpn_callback_edits_to_tariff_keyboard_and_answers_callback():
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
         [
-            ["select_tariff:devices_1"],
-            ["select_tariff:devices_2"],
-            ["select_tariff:devices_3"],
+            ["select_tariff:period_1_month"],
+            ["select_tariff:period_2_months"],
+            ["select_tariff:period_3_months"],
             ["back_to_main_menu"],
         ],
     )
@@ -156,23 +156,26 @@ async def test_select_tariff_blocks_unavailable_tariff_without_editing_message()
     assert callback.message.edit_text_calls == []
     assert callback.answer_calls == [
         {
-            "text": "Этот тариф пока недоступен. Сейчас активен тариф на 1 устройство.",
+            "text": "Этот тариф недоступен.",
             "show_alert": True,
         }
     ]
 
 
 @pytest.mark.asyncio
-async def test_select_tariff_devices_1_edits_to_payment_method_keyboard():
-    callback = FakeCallback(data="select_tariff:devices_1")
+async def test_select_tariff_period_1_month_edits_to_payment_method_keyboard():
+    callback = FakeCallback(data="select_tariff:period_1_month")
 
     await select_tariff_callback(callback)
 
-    assert "Тариф: 1 устройство" in callback.message.edit_text_calls[0]["text"]
-    assert "Стоимость: 4 USDT" in callback.message.edit_text_calls[0]["text"]
+    text = callback.message.edit_text_calls[0]["text"]
+    assert "Тариф: 1 месяц + 3 дня в подарок" in text
+    assert "Устройств: 1" in text
+    assert "Срок доступа: 33 дня" in text
+    assert "Стоимость: 4 USDT" in text
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
-        [["select_payment:devices_1:cryptobot_usdt"], ["buy_vpn"]],
+        [["select_payment:period_1_month:cryptobot_usdt"], ["buy_vpn"]],
     )
     assert callback.answer_calls == [{"text": None}]
 
@@ -205,7 +208,7 @@ async def test_select_payment_rejects_unavailable_tariff_before_order_creation(
     await select_payment_callback(callback, session=FakeSession())
 
     assert callback.answer_calls == [
-        {"text": "Этот тариф пока недоступен", "show_alert": True}
+        {"text": "Этот тариф недоступен", "show_alert": True}
     ]
     assert order_service_calls == []
 
@@ -221,7 +224,7 @@ async def test_select_payment_rejects_unsupported_payment_option_before_order_cr
             order_service_calls.append(session)
 
     monkeypatch.setattr(buy_module, "OrderService", FakeOrderService)
-    callback = FakeCallback(data="select_payment:devices_1:usdt_trc20")
+    callback = FakeCallback(data="select_payment:period_1_month:usdt_trc20")
 
     await select_payment_callback(callback, session=FakeSession())
 
@@ -247,7 +250,7 @@ async def test_select_payment_rejects_cryptobot_when_disabled_before_order_creat
         lambda: SimpleNamespace(cryptobot_enabled=False),
     )
     monkeypatch.setattr(buy_module, "OrderService", FakeOrderService)
-    callback = FakeCallback(data="select_payment:devices_1:cryptobot_usdt")
+    callback = FakeCallback(data="select_payment:period_1_month:cryptobot_usdt")
 
     await select_payment_callback(callback, session=FakeSession())
 
@@ -262,7 +265,13 @@ async def test_select_payment_happy_path_creates_order_invoice_and_payment_keybo
     monkeypatch,
 ):
     session = FakeSession()
-    order = SimpleNamespace(id=23, destination_address=None)
+    order = SimpleNamespace(
+        id=23,
+        destination_address=None,
+        device_limit=1,
+        duration_days=66,
+        price_usd=Decimal("7.50"),
+    )
     created_order_kwargs = []
     invoice_order_ids = []
 
@@ -294,14 +303,14 @@ async def test_select_payment_happy_path_creates_order_invoice_and_payment_keybo
         FakeCryptoBotPaymentService,
     )
 
-    callback = FakeCallback(data="select_payment:devices_1:cryptobot_usdt")
+    callback = FakeCallback(data="select_payment:period_2_months:cryptobot_usdt")
 
     await select_payment_callback(callback, session=session)
 
     assert created_order_kwargs == [
         {
             "telegram_id": 123,
-            "tariff_code": TariffCode.DEVICES_1,
+            "tariff_code": TariffCode.PERIOD_2_MONTHS,
             "payment_option_code": "cryptobot_usdt",
             "username": "ivan",
             "first_name": "Ivan",
@@ -309,11 +318,12 @@ async def test_select_payment_happy_path_creates_order_invoice_and_payment_keybo
             "language_code": "ru",
         }
     ]
-    assert order.expected_amount == Decimal("4.00")
-    assert order.expected_currency == CurrencyCode.USDT
-    assert order.expected_network is None
     assert invoice_order_ids == [23]
-    assert "Order ID: 23" in callback.message.edit_text_calls[0]["text"]
+    text = callback.message.edit_text_calls[0]["text"]
+    assert "Order ID: 23" in text
+    assert "Тариф: 2 месяца + 6 дней в подарок" in text
+    assert "Срок доступа: 66 дней" in text
+    assert "Сумма: 7.50 USDT" in text
     assert callback.message.edit_text_calls[0]["parse_mode"] == "HTML"
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
@@ -362,7 +372,7 @@ async def test_select_payment_rolls_back_and_notifies_user_when_cryptobot_invoic
         FakeCryptoBotPaymentService,
     )
 
-    callback = FakeCallback(data="select_payment:devices_1:cryptobot_usdt")
+    callback = FakeCallback(data="select_payment:period_1_month:cryptobot_usdt")
 
     with pytest.raises(CryptoBotAPIError, match="createInvoice failed"):
         await select_payment_callback(callback, session=session)

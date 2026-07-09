@@ -189,8 +189,9 @@ async def create_user_option_and_order(
     address: str = "receiver-wallet",
     expires_delta: timedelta = timedelta(minutes=15),
     device_limit: int = 1,
-    tariff_code=TariffCode.DEVICES_1,
+    tariff_code=TariffCode.PERIOD_1_MONTH,
     price_usd: Decimal = Decimal("4.00"),
+    duration_days: int = 33,
 ):
     user_repo = UserRepository(session)
     option_repo = PaymentOptionRepository(session)
@@ -217,6 +218,7 @@ async def create_user_option_and_order(
         user_id=user.id,
         tariff_code=tariff_code,
         device_limit=device_limit,
+        duration_days=duration_days,
         price_usd=price_usd,
         payment_method=PaymentMethod.CRYPTO,
         payment_option_id=option.id,
@@ -426,7 +428,7 @@ async def test_late_payment_is_persisted_as_expired_without_activation(session_f
 
 
 @pytest.mark.asyncio
-async def test_second_paid_order_extends_existing_subscription_without_new_uuid(
+async def test_second_paid_order_creates_independent_subscription_with_new_uuid(
     session_factory,
 ):
     async with session_factory() as session:
@@ -435,6 +437,9 @@ async def test_second_paid_order_extends_existing_subscription_without_new_uuid(
             telegram_id=777000,
             amount=Decimal("4.00"),
             device_limit=1,
+            tariff_code=TariffCode.PERIOD_1_MONTH,
+            price_usd=Decimal("4.00"),
+            duration_days=33,
         )
         processor = PaymentPollingProcessor(session)
 
@@ -448,27 +453,28 @@ async def test_second_paid_order_extends_existing_subscription_without_new_uuid(
         order_repo = OrderRepository(session)
         second_order = await order_repo.create(
             user_id=user.id,
-            tariff_code=TariffCode.DEVICES_2,
-            device_limit=2,
-            price_usd=Decimal("7.00"),
+            tariff_code=TariffCode.PERIOD_3_MONTHS,
+            device_limit=1,
+            duration_days=100,
+            price_usd=Decimal("11.00"),
             payment_method=PaymentMethod.CRYPTO,
             payment_option_id=first_order.payment_option_id,
-            expected_amount=Decimal("7.00"),
+            expected_amount=Decimal("11.00"),
             expected_currency=CurrencyCode.USDT,
             expected_network=NetworkCode.TRC20,
             destination_address="receiver-wallet-2",
             destination_memo_tag=None,
             expires_at=NaiveDateTime.now() + timedelta(minutes=15),
             source="bot",
-            comment="renewal",
+            comment="second independent subscription",
         )
         await session.commit()
 
-        event, payment, renewed_subscription, config_uri = (
+        event, payment, second_subscription, config_uri = (
             await processor.process_transaction(
                 make_tx(
                     txid="tx-second",
-                    amount=Decimal("7.00"),
+                    amount=Decimal("11.00"),
                     address_to="receiver-wallet-2",
                 )
             )
@@ -476,24 +482,27 @@ async def test_second_paid_order_extends_existing_subscription_without_new_uuid(
 
         assert event.order_id == second_order.id
         assert payment.status == PaymentStatus.CONFIRMED
-        assert renewed_subscription.id == first_subscription_id
-        assert renewed_subscription.uuid == first_uuid
-        assert renewed_subscription.order_id == second_order.id
-        assert renewed_subscription.device_limit == 2
-        assert renewed_subscription.expires_at > first_expires_at
-        assert config_uri == f"https://connect.test/{first_uuid}?device=android"
+        assert second_subscription.id != first_subscription_id
+        assert second_subscription.uuid != first_uuid
+        assert second_subscription.uuid == "fake-uuid-2"
+        assert second_subscription.order_id == second_order.id
+        assert second_subscription.device_limit == 1
+        assert second_subscription.expires_at > first_expires_at
+        assert config_uri == (
+            "https://connect.test/fake-uuid-2?device=android"
+        )
 
         refreshed_second_order = await session.get(Order, second_order.id)
         assert refreshed_second_order.status == OrderStatus.ACTIVATED
-        assert await count_rows(session, Subscription) == 1
+        assert await count_rows(session, Subscription) == 2
         assert await count_rows(session, Payment) == 2
         assert await count_rows(session, PaymentEvent) == 2
         assert FakeVpnAccessService.create_calls == [
-            {"user_id": user.id, "device_limit": 1, "uuid": "fake-uuid-1"}
+            {"user_id": user.id, "device_limit": 1, "uuid": "fake-uuid-1"},
+            {"user_id": user.id, "device_limit": 1, "uuid": "fake-uuid-2"},
         ]
-        assert FakeVpnAccessService.extend_calls == [
-            {"uuid": first_uuid, "device_limit": 2}
-        ]
+        assert FakeVpnAccessService.extend_calls == []
+
 
 @pytest.mark.asyncio
 async def test_order_service_does_not_reuse_expired_waiting_order(session_factory):
@@ -509,7 +518,7 @@ async def test_order_service_does_not_reuse_expired_waiting_order(session_factor
             first_name=user.first_name,
             last_name=user.last_name,
             language_code=user.language_code,
-            tariff_code=TariffCode.DEVICES_1,
+            tariff_code=TariffCode.PERIOD_1_MONTH,
             payment_option_code=payment_option.code,
         )
 

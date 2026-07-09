@@ -6,13 +6,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.common.enums import CurrencyCode, NetworkCode
+from app.common.enums import CurrencyCode, NetworkCode, TariffCode
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.payment_method import PaymentMethod
 from app.services.order_service import OrderService
-from app.common.enums import TariffCode
-
-
 
 class FakeSession:
     def __init__(self) -> None:
@@ -108,15 +105,26 @@ class FakeOrderRepository:
     def __init__(self, *, active_waiting_order=None, orders_by_id=None) -> None:
         self.active_waiting_order = active_waiting_order
         self.orders_by_id = orders_by_id or {}
-        self.get_active_calls: list[int] = []
+        self.get_active_calls: list[dict] = []
         self.get_by_id_calls: list[int] = []
         self.create_calls: list[dict] = []
         self.mark_expired_calls: list[int] = []
         self.created_orders: list[SimpleNamespace] = []
         self.next_id = 100
 
-    async def get_active_waiting_order_by_user(self, user_id: int):
-        self.get_active_calls.append(user_id)
+    async def get_active_waiting_order_by_user(
+        self,
+        user_id: int,
+        tariff_code: TariffCode,
+        payment_option_id: int,
+    ):
+        self.get_active_calls.append(
+            {
+                "user_id": user_id,
+                "tariff_code": tariff_code,
+                "payment_option_id": payment_option_id,
+            }
+        )
         return self.active_waiting_order
 
     async def get_by_id(self, order_id: int):
@@ -129,6 +137,7 @@ class FakeOrderRepository:
         user_id: int,
         tariff_code: TariffCode,
         device_limit: int,
+        duration_days: int,
         price_usd,
         payment_method: PaymentMethod,
         payment_option_id: int | None,
@@ -146,6 +155,7 @@ class FakeOrderRepository:
                 "user_id": user_id,
                 "tariff_code": tariff_code,
                 "device_limit": device_limit,
+                "duration_days": duration_days,
                 "price_usd": price_usd,
                 "payment_method": payment_method,
                 "payment_option_id": payment_option_id,
@@ -165,6 +175,7 @@ class FakeOrderRepository:
             status=OrderStatus.WAITING_PAYMENT,
             tariff_code=tariff_code,
             device_limit=device_limit,
+            duration_days=duration_days,
             price_usd=price_usd,
             payment_method=payment_method,
             payment_option_id=payment_option_id,
@@ -295,7 +306,7 @@ async def test_create_order_creates_user_and_waiting_payment_order_with_tariff_a
     before_call = datetime.now(UTC)
     order = await service.create_order(
         telegram_id=123,
-        tariff_code=TariffCode.DEVICES_2,
+        tariff_code=TariffCode.PERIOD_2_MONTHS,
         payment_option_code="usdt_trc20",
         username="ivan",
         first_name="Ivan",
@@ -306,9 +317,10 @@ async def test_create_order_creates_user_and_waiting_payment_order_with_tariff_a
 
     assert order.status == OrderStatus.WAITING_PAYMENT
     assert order.user_id == 10
-    assert order.tariff_code == TariffCode.DEVICES_2
-    assert order.device_limit == 2
-    assert order.price_usd == Decimal("7.00")
+    assert order.tariff_code == TariffCode.PERIOD_2_MONTHS
+    assert order.device_limit == 1
+    assert order.duration_days == 66
+    assert order.price_usd == Decimal("7.50")
     assert order.payment_method == PaymentMethod.CRYPTO
     assert order.payment_option_id == 5
     assert order.expected_amount is None
@@ -331,7 +343,13 @@ async def test_create_order_creates_user_and_waiting_payment_order_with_tariff_a
             "is_admin": False,
         }
     ]
-    assert order_repository.get_active_calls == [10]
+    assert order_repository.get_active_calls == [
+        {
+            "user_id": 10,
+            "tariff_code": TariffCode.PERIOD_2_MONTHS,
+            "payment_option_id": 5,
+        }
+    ]
     assert len(order_repository.create_calls) == 1
     assert payment_option_repository.get_by_code_calls == ["usdt_trc20"]
     assert service.session.commit_count == 1
@@ -350,7 +368,7 @@ async def test_create_order_updates_existing_user_before_order_creation():
 
     order = await service.create_order(
         telegram_id=123,
-        tariff_code=TariffCode.DEVICES_1,
+        tariff_code=TariffCode.PERIOD_1_MONTH,
         payment_option_code="usdt_trc20",
         username="new_username",
         first_name="New",
@@ -373,7 +391,13 @@ async def test_create_order_updates_existing_user_before_order_creation():
             "language_code": "en",
         }
     ]
-    assert order_repository.get_active_calls == [7]
+    assert order_repository.get_active_calls == [
+        {
+            "user_id": 7,
+            "tariff_code": TariffCode.PERIOD_1_MONTH,
+            "payment_option_id": 5,
+        }
+    ]
     assert service.session.commit_count == 1
 
 
@@ -387,7 +411,7 @@ async def test_create_order_marks_new_user_as_admin_when_telegram_id_is_in_setti
 
     await service.create_order(
         telegram_id=123,
-        tariff_code=TariffCode.DEVICES_1,
+        tariff_code=TariffCode.PERIOD_1_MONTH,
         payment_option_code="usdt_trc20",
     )
 
@@ -397,12 +421,15 @@ async def test_create_order_marks_new_user_as_admin_when_telegram_id_is_in_setti
 
 
 @pytest.mark.asyncio
-async def test_create_order_reuses_existing_waiting_order_and_does_not_create_duplicate():
+async def test_create_order_reuses_matching_waiting_order_and_does_not_create_duplicate():
     existing_user = make_user(user_id=7, telegram_id=123)
     active_order = make_order(order_id=77, user_id=7, status=OrderStatus.WAITING_PAYMENT)
     user_repository = FakeUserRepository(existing_user=existing_user)
     order_repository = FakeOrderRepository(active_waiting_order=active_order)
-    payment_option_repository = FakePaymentOptionRepository({})
+    payment_option = make_payment_option(option_id=5, code="usdt_trc20")
+    payment_option_repository = FakePaymentOptionRepository(
+        {"usdt_trc20": payment_option}
+    )
     service = make_service(
         user_repository=user_repository,
         order_repository=order_repository,
@@ -411,13 +438,20 @@ async def test_create_order_reuses_existing_waiting_order_and_does_not_create_du
 
     result = await service.create_order(
         telegram_id=123,
-        tariff_code="unsupported_tariff",
-        payment_option_code="missing_option",
+        tariff_code=TariffCode.PERIOD_1_MONTH,
+        payment_option_code="usdt_trc20",
     )
 
     assert result is active_order
     assert order_repository.create_calls == []
-    assert payment_option_repository.get_by_code_calls == []
+    assert order_repository.get_active_calls == [
+        {
+            "user_id": 7,
+            "tariff_code": TariffCode.PERIOD_1_MONTH,
+            "payment_option_id": 5,
+        }
+    ]
+    assert payment_option_repository.get_by_code_calls == ["usdt_trc20"]
     assert service.session.commit_count == 1
     assert service.session.rollback_count == 0
 
@@ -438,7 +472,7 @@ async def test_create_order_does_not_reuse_non_active_or_expired_order_when_repo
 
     order = await service.create_order(
         telegram_id=123,
-        tariff_code=TariffCode.DEVICES_1,
+        tariff_code=TariffCode.PERIOD_1_MONTH,
         payment_option_code="usdt_trc20",
     )
 
@@ -490,7 +524,7 @@ async def test_create_order_with_missing_payment_option_rolls_back_and_does_not_
     with pytest.raises(ValueError, match="Payment option not found in DB: missing_option"):
         await service.create_order(
             telegram_id=123,
-            tariff_code=TariffCode.DEVICES_1,
+            tariff_code=TariffCode.PERIOD_1_MONTH,
             payment_option_code="missing_option",
         )
 
@@ -521,13 +555,14 @@ async def test_create_order_with_telegram_stars_payment_option_sets_empty_curren
 
     order = await service.create_order(
         telegram_id=123,
-        tariff_code=TariffCode.DEVICES_3,
+        tariff_code=TariffCode.PERIOD_3_MONTHS,
         payment_option_code="telegram_stars",
     )
 
-    assert order.tariff_code == TariffCode.DEVICES_3
-    assert order.device_limit == 3
-    assert order.price_usd == Decimal("10.00")
+    assert order.tariff_code == TariffCode.PERIOD_3_MONTHS
+    assert order.device_limit == 1
+    assert order.duration_days == 100
+    assert order.price_usd == Decimal("11.00")
     assert order.payment_method == PaymentMethod.TELEGRAM_STARS
     assert order.payment_option_id == 9
     assert order.expected_currency is None

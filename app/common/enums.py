@@ -24,6 +24,11 @@ class NetworkCode(StrEnum):
 
 
 class TariffCode(StrEnum):
+    # Legacy-коды. Оставляем для существующих заказов.
     DEVICES_1 = "devices_1"
     DEVICES_2 = "devices_2"
     DEVICES_3 = "devices_3"
+
+    PERIOD_1_MONTH = "period_1_month"
+    PERIOD_2_MONTHS = "period_2_months"
+    PERIOD_3_MONTHS = "period_3_months"

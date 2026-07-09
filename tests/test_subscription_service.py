@@ -192,12 +192,14 @@ def make_order(
     user_id: int = 7,
     status: OrderStatus = OrderStatus.PAID,
     device_limit: int = 1,
+    duration_days: int = 30,
 ):
     return SimpleNamespace(
         id=order_id,
         user_id=user_id,
         status=status,
         device_limit=device_limit,
+        duration_days=duration_days,
         activated_at=None,
     )
 
@@ -267,7 +269,14 @@ def patch_meta_sync(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_paid_order_without_active_subscription_creates_new_subscription_and_activates_order():
-    order = make_order(order_id=23, user_id=7, status=OrderStatus.PAID, device_limit=2)
+    before_call = datetime.now(timezone.utc)
+    order = make_order(
+        order_id=23,
+        user_id=7,
+        status=OrderStatus.PAID,
+        device_limit=1,
+        duration_days=66,
+    )
     repository = FakeSubscriptionRepository(active_subscription=None)
     vpn_access = FakeVpnAccessService()
     service = make_service(
@@ -282,14 +291,19 @@ async def test_paid_order_without_active_subscription_creates_new_subscription_a
     assert subscription.status == SubscriptionStatus.ACTIVE
     assert subscription.user_id == 7
     assert subscription.order_id == 23
-    assert subscription.device_limit == 2
+    assert subscription.device_limit == 1
     assert subscription.vpn_server_id == 11
     assert subscription.last_access_sent_at is not None
+    assert subscription.expires_at >= before_call + timedelta(days=66)
+    assert subscription.expires_at <= datetime.now(timezone.utc) + timedelta(
+        days=66,
+        seconds=1,
+    )
     assert config_uri == "https://connect/new-vpn-uuid"
 
     assert order.status == OrderStatus.ACTIVATED
     assert order.activated_at is not None
-    assert vpn_access.create_calls == [{"user_id": 7, "device_limit": 2}]
+    assert vpn_access.create_calls == [{"user_id": 7, "device_limit": 1}]
     assert vpn_access.extend_calls == []
     assert vpn_access.get_config_calls == []
     assert len(repository.create_calls) == 1
@@ -341,16 +355,22 @@ async def test_reprocessing_same_order_reuses_existing_subscription_without_crea
 
 
 @pytest.mark.asyncio
-async def test_activated_order_without_subscription_by_order_reuses_active_subscription():
-    order = make_order(order_id=23, status=OrderStatus.ACTIVATED, device_limit=1)
-    active_subscription = make_subscription(
-        subscription_id=88,
-        user_id=7,
-        order_id=10,
-        uuid="active-uuid",
+async def test_activated_order_without_linked_subscription_raises_and_rolls_back():
+    order = make_order(
+        order_id=23,
+        status=OrderStatus.ACTIVATED,
         device_limit=1,
+        duration_days=33,
     )
-    repository = FakeSubscriptionRepository(active_subscription=active_subscription)
+    repository = FakeSubscriptionRepository(
+        active_subscription=make_subscription(
+            subscription_id=88,
+            user_id=7,
+            order_id=10,
+            uuid="unrelated-active-uuid",
+            device_limit=1,
+        )
+    )
     vpn_access = FakeVpnAccessService()
     service = make_service(
         order=order,
@@ -358,18 +378,21 @@ async def test_activated_order_without_subscription_by_order_reuses_active_subsc
         vpn_access_service=vpn_access,
     )
 
-    subscription, config_uri = await service.activate_or_extend_by_order(order.id)
+    with pytest.raises(
+        ValueError,
+        match="subscription linked to this order was not found",
+    ):
+        await service.activate_or_extend_by_order(order.id)
 
-    assert subscription is active_subscription
-    assert config_uri == "https://connect/active-uuid"
-    assert order.status == OrderStatus.ACTIVATED
+    assert repository.get_active_calls == []
     assert repository.create_calls == []
     assert repository.extend_calls == []
     assert vpn_access.create_calls == []
     assert vpn_access.extend_calls == []
-    assert vpn_access.get_config_calls == [{"uuid": "active-uuid", "device_limit": 1}]
-    assert service.session.commit_count == 1
-    assert FakeSubscriptionMetaSyncService.calls[0]["reason"] == "activated_order_resync"
+    assert vpn_access.get_config_calls == []
+    assert service.session.commit_count == 0
+    assert service.session.rollback_count == 1
+    assert FakeSubscriptionMetaSyncService.calls == []
 
 
 @pytest.mark.asyncio
@@ -397,18 +420,23 @@ async def test_non_paid_order_does_not_create_subscription_and_rolls_back():
 
 
 @pytest.mark.asyncio
-async def test_paid_order_with_active_subscription_extends_existing_uuid_from_current_expiry():
-    current_expires_at = datetime.now(timezone.utc) + timedelta(days=10)
-    order = make_order(order_id=24, status=OrderStatus.PAID, device_limit=3)
+async def test_paid_order_with_existing_active_subscription_creates_new_uuid():
     active_subscription = make_subscription(
         subscription_id=90,
         user_id=7,
         order_id=10,
-        uuid="renewed-uuid",
+        uuid="existing-uuid",
         device_limit=1,
-        expires_at=current_expires_at,
     )
-    repository = FakeSubscriptionRepository(active_subscription=active_subscription)
+    order = make_order(
+        order_id=24,
+        status=OrderStatus.PAID,
+        device_limit=1,
+        duration_days=100,
+    )
+    repository = FakeSubscriptionRepository(
+        active_subscription=active_subscription,
+    )
     vpn_access = FakeVpnAccessService()
     service = make_service(
         order=order,
@@ -416,43 +444,39 @@ async def test_paid_order_with_active_subscription_extends_existing_uuid_from_cu
         vpn_access_service=vpn_access,
     )
 
+    before_call = datetime.now(timezone.utc)
     subscription, config_uri = await service.activate_or_extend_by_order(order.id)
 
-    assert subscription is active_subscription
-    assert subscription.uuid == "renewed-uuid"
+    assert subscription is not active_subscription
+    assert subscription.uuid == "new-vpn-uuid"
     assert subscription.order_id == 24
-    assert subscription.device_limit == 3
-    assert subscription.expires_at == current_expires_at + timedelta(days=30)
-    assert config_uri == "https://connect/renewed-uuid"
+    assert subscription.device_limit == 1
+    assert subscription.expires_at >= before_call + timedelta(days=100)
+    assert subscription.expires_at <= datetime.now(timezone.utc) + timedelta(
+        days=100,
+        seconds=1,
+    )
+    assert active_subscription.uuid == "existing-uuid"
+    assert active_subscription.order_id == 10
+    assert config_uri == "https://connect/new-vpn-uuid"
     assert order.status == OrderStatus.ACTIVATED
-    assert vpn_access.create_calls == []
-    assert vpn_access.extend_calls == [{"uuid": "renewed-uuid", "device_limit": 3}]
-    assert repository.create_calls == []
-    assert repository.extend_calls == [
-        {
-            "subscription_id": 90,
-            "order_id": 24,
-            "expires_at": current_expires_at + timedelta(days=30),
-            "device_limit": 3,
-        }
-    ]
+    assert repository.get_active_calls == []
+    assert len(repository.create_calls) == 1
+    assert repository.extend_calls == []
+    assert vpn_access.create_calls == [{"user_id": 7, "device_limit": 1}]
+    assert vpn_access.extend_calls == []
     assert service.session.commit_count == 1
 
 
 @pytest.mark.asyncio
-async def test_paid_order_with_past_active_subscription_extends_from_now_not_old_expiry():
-    past_expires_at = datetime.now(timezone.utc) - timedelta(days=5)
-    before_call = datetime.now(timezone.utc)
-    order = make_order(order_id=25, status=OrderStatus.PAID, device_limit=2)
-    active_subscription = make_subscription(
-        subscription_id=91,
-        user_id=7,
-        order_id=10,
-        uuid="past-active-uuid",
+async def test_order_duration_is_taken_from_order_snapshot():
+    order = make_order(
+        order_id=25,
+        status=OrderStatus.PAID,
         device_limit=1,
-        expires_at=past_expires_at,
+        duration_days=33,
     )
-    repository = FakeSubscriptionRepository(active_subscription=active_subscription)
+    repository = FakeSubscriptionRepository()
     vpn_access = FakeVpnAccessService()
     service = make_service(
         order=order,
@@ -460,19 +484,17 @@ async def test_paid_order_with_past_active_subscription_extends_from_now_not_old
         vpn_access_service=vpn_access,
     )
 
-    subscription, config_uri = await service.activate_or_extend_by_order(order.id)
+    before_call = datetime.now(timezone.utc)
+    subscription, _ = await service.activate_or_extend_by_order(order.id)
 
-    after_call = datetime.now(timezone.utc)
+    assert subscription.expires_at >= before_call + timedelta(days=33)
+    assert subscription.expires_at <= datetime.now(timezone.utc) + timedelta(
+        days=33,
+        seconds=1,
+    )
+    assert repository.extend_calls == []
+    assert vpn_access.extend_calls == []
 
-    assert subscription is active_subscription
-    assert subscription.uuid == "past-active-uuid"
-    assert config_uri == "https://connect/past-active-uuid"
-    assert subscription.expires_at >= before_call + timedelta(days=30)
-    assert subscription.expires_at <= after_call + timedelta(days=30, seconds=1)
-    assert subscription.expires_at > past_expires_at + timedelta(days=30)
-    assert vpn_access.extend_calls == [{"uuid": "past-active-uuid", "device_limit": 2}]
-    assert vpn_access.create_calls == []
-    assert service.session.commit_count == 1
 
 
 @pytest.mark.asyncio

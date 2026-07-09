@@ -18,6 +18,8 @@ class OrderRepository(BaseRepository):
     async def get_active_waiting_order_by_user(
             self,
             user_id: int,
+            tariff_code: TariffCode,
+            payment_option_id: int,
     ) -> Order | None:
         now = datetime.now(UTC)
 
@@ -25,6 +27,8 @@ class OrderRepository(BaseRepository):
             select(Order)
             .where(
                 Order.user_id == user_id,
+                Order.tariff_code == tariff_code,
+                Order.payment_option_id == payment_option_id,
                 Order.status == OrderStatus.WAITING_PAYMENT,
                 Order.expires_at > now,
             )
@@ -39,6 +43,7 @@ class OrderRepository(BaseRepository):
         user_id: int,
         tariff_code: TariffCode,
         device_limit: int,
+        duration_days: int,
         price_usd,
         payment_method: PaymentMethod,
         payment_option_id: int | None,
@@ -56,6 +61,7 @@ class OrderRepository(BaseRepository):
             status=OrderStatus.WAITING_PAYMENT,
             tariff_code=tariff_code,
             device_limit=device_limit,
+            duration_days=duration_days,
             price_usd=price_usd,
             payment_method=payment_method,
             payment_option_id=payment_option_id,

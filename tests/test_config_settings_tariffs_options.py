@@ -14,7 +14,12 @@ from app.config.payment_options import (
     get_payment_option,
 )
 from app.config.settings import Settings, get_settings
-from app.config.tariffs import TARIFFS, TariffConfig, get_tariff
+from app.config.tariffs import (
+    TARIFFS,
+    TariffConfig,
+    get_purchasable_tariffs,
+    get_tariff,
+)
 from app.payment_core.enums.payment_method import PaymentMethod
 
 
@@ -152,19 +157,33 @@ def test_tariffs_match_public_pricing_and_duration():
         TariffCode.DEVICES_1,
         TariffCode.DEVICES_2,
         TariffCode.DEVICES_3,
+        TariffCode.PERIOD_1_MONTH,
+        TariffCode.PERIOD_2_MONTHS,
+        TariffCode.PERIOD_3_MONTHS,
     }
-    assert TARIFFS[TariffCode.DEVICES_1] == TariffConfig(
-        code=TariffCode.DEVICES_1,
-        title="1 устройство",
+
+    assert TARIFFS[TariffCode.PERIOD_1_MONTH] == TariffConfig(
+        code=TariffCode.PERIOD_1_MONTH,
+        title="1 месяц + 3 дня в подарок",
         device_limit=1,
         price_usd=Decimal("4.00"),
-        duration_days=30,
+        base_days=30,
+        bonus_days=3,
     )
-    assert TARIFFS[TariffCode.DEVICES_2].device_limit == 2
-    assert TARIFFS[TariffCode.DEVICES_2].price_usd == Decimal("7.00")
-    assert TARIFFS[TariffCode.DEVICES_3].device_limit == 3
-    assert TARIFFS[TariffCode.DEVICES_3].price_usd == Decimal("10.00")
-    assert all(tariff.duration_days == 30 for tariff in TARIFFS.values())
+
+    purchasable = get_purchasable_tariffs()
+    assert [
+        (tariff.price_usd, tariff.duration_days, tariff.device_limit)
+        for tariff in purchasable
+    ] == [
+        (Decimal("4.00"), 33, 1),
+        (Decimal("7.50"), 66, 1),
+        (Decimal("11.00"), 100, 1),
+    ]
+
+    assert TARIFFS[TariffCode.DEVICES_1].duration_days == 30
+    assert TARIFFS[TariffCode.DEVICES_2].duration_days == 30
+    assert TARIFFS[TariffCode.DEVICES_3].duration_days == 30
 
 
 def test_get_tariff_returns_config_and_rejects_unknown_code():
@@ -250,6 +269,9 @@ def test_common_enums_keep_external_string_values_stable():
         "devices_1",
         "devices_2",
         "devices_3",
+        "period_1_month",
+        "period_2_months",
+        "period_3_months",
     ]
 
 

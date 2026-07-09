@@ -116,7 +116,11 @@ async def test_order_repository_get_active_waiting_order_by_user_returns_scalar_
     session = FakeSession(scalar_value=order)
     repository = OrderRepository(session)
 
-    result = await repository.get_active_waiting_order_by_user(user_id=7)
+    result = await repository.get_active_waiting_order_by_user(
+        user_id=7,
+        tariff_code=TariffCode.PERIOD_1_MONTH,
+        payment_option_id=5,
+    )
 
     assert result is order
     assert len(session.execute_calls) == 1
@@ -130,12 +134,13 @@ async def test_order_repository_create_adds_waiting_payment_order_and_flushes():
 
     order = await repository.create(
         user_id=7,
-        tariff_code=TariffCode.DEVICES_2,
-        device_limit=2,
-        price_usd=Decimal("7.00"),
+        tariff_code=TariffCode.PERIOD_2_MONTHS,
+        device_limit=1,
+        duration_days=66,
+        price_usd=Decimal("7.50"),
         payment_method=PaymentMethod.CRYPTO,
         payment_option_id=5,
-        expected_amount=Decimal("7.00"),
+        expected_amount=Decimal("7.50"),
         expected_currency=CurrencyCode.USDT,
         expected_network=NetworkCode.TRC20,
         destination_address="wallet-to",
@@ -149,12 +154,13 @@ async def test_order_repository_create_adds_waiting_payment_order_and_flushes():
     assert order.id == 900
     assert order.user_id == 7
     assert order.status == OrderStatus.WAITING_PAYMENT
-    assert order.tariff_code == TariffCode.DEVICES_2
-    assert order.device_limit == 2
-    assert order.price_usd == Decimal("7.00")
+    assert order.tariff_code == TariffCode.PERIOD_2_MONTHS
+    assert order.device_limit == 1
+    assert order.duration_days == 66
+    assert order.price_usd == Decimal("7.50")
     assert order.payment_method == PaymentMethod.CRYPTO
     assert order.payment_option_id == 5
-    assert order.expected_amount == Decimal("7.00")
+    assert order.expected_amount == Decimal("7.50")
     assert order.expected_currency == CurrencyCode.USDT
     assert order.expected_network == NetworkCode.TRC20
     assert order.destination_address == "wallet-to"
@@ -174,8 +180,9 @@ async def test_order_repository_create_propagates_flush_error_without_fake_succe
     with pytest.raises(RuntimeError, match="flush failed"):
         await repository.create(
             user_id=7,
-            tariff_code=TariffCode.DEVICES_1,
+            tariff_code=TariffCode.PERIOD_1_MONTH,
             device_limit=1,
+            duration_days=33,
             price_usd=Decimal("4.00"),
             payment_method=PaymentMethod.CRYPTO,
             payment_option_id=5,

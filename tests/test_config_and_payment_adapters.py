@@ -12,7 +12,12 @@ from app.config.payment_options import (
     get_active_payment_options,
     get_payment_option,
 )
-from app.config.tariffs import TARIFFS, TariffConfig, get_tariff
+from app.config.tariffs import (
+    TARIFFS,
+    TariffConfig,
+    get_purchasable_tariffs,
+    get_tariff,
+)
 from app.payment_adapters.base import NormalizedTransaction
 from app.payment_adapters.mock import MockPaymentAdapter
 from app.payment_adapters.registry import (
@@ -23,17 +28,37 @@ from app.payment_core.enums.payment_method import PaymentMethod
 
 
 def test_tariffs_have_expected_public_prices_device_limits_and_duration():
-    assert get_tariff(TariffCode.DEVICES_1) == TariffConfig(
-        code=TariffCode.DEVICES_1,
-        title="1 устройство",
+    one_month = get_tariff(TariffCode.PERIOD_1_MONTH)
+    two_months = get_tariff(TariffCode.PERIOD_2_MONTHS)
+    three_months = get_tariff(TariffCode.PERIOD_3_MONTHS)
+
+    assert one_month == TariffConfig(
+        code=TariffCode.PERIOD_1_MONTH,
+        title="1 месяц + 3 дня в подарок",
         device_limit=1,
         price_usd=Decimal("4.00"),
-        duration_days=30,
+        base_days=30,
+        bonus_days=3,
     )
-    assert get_tariff(TariffCode.DEVICES_2).device_limit == 2
-    assert get_tariff(TariffCode.DEVICES_2).price_usd == Decimal("7.00")
-    assert get_tariff(TariffCode.DEVICES_3).device_limit == 3
-    assert get_tariff(TariffCode.DEVICES_3).price_usd == Decimal("10.00")
+    assert one_month.duration_days == 33
+
+    assert two_months.device_limit == 1
+    assert two_months.price_usd == Decimal("7.50")
+    assert two_months.base_days == 60
+    assert two_months.bonus_days == 6
+    assert two_months.duration_days == 66
+
+    assert three_months.device_limit == 1
+    assert three_months.price_usd == Decimal("11.00")
+    assert three_months.base_days == 90
+    assert three_months.bonus_days == 10
+    assert three_months.duration_days == 100
+
+    assert [tariff.code for tariff in get_purchasable_tariffs()] == [
+        TariffCode.PERIOD_1_MONTH,
+        TariffCode.PERIOD_2_MONTHS,
+        TariffCode.PERIOD_3_MONTHS,
+    ]
 
 
 def test_tariff_configs_are_frozen_and_key_matches_code():
@@ -41,11 +66,14 @@ def test_tariff_configs_are_frozen_and_key_matches_code():
         TariffCode.DEVICES_1,
         TariffCode.DEVICES_2,
         TariffCode.DEVICES_3,
+        TariffCode.PERIOD_1_MONTH,
+        TariffCode.PERIOD_2_MONTHS,
+        TariffCode.PERIOD_3_MONTHS,
     }
     assert all(key == tariff.code for key, tariff in TARIFFS.items())
 
     with pytest.raises(Exception):
-        get_tariff(TariffCode.DEVICES_1).price_usd = Decimal("0.01")
+        get_tariff(TariffCode.PERIOD_1_MONTH).price_usd = Decimal("0.01")
 
 
 def test_get_tariff_rejects_unsupported_code():
