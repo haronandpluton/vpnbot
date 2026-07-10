@@ -181,6 +181,14 @@ async def test_select_tariff_period_1_month_edits_to_payment_method_keyboard():
                 "select_payment:period_1_month:cryptobot_btc",
                 "select_payment:period_1_month:cryptobot_eth",
             ],
+            [
+                "select_payment:period_1_month:cryptobot_ton",
+                "select_payment:period_1_month:cryptobot_ltc",
+            ],
+            [
+                "select_payment:period_1_month:cryptobot_bnb",
+                "select_payment:period_1_month:cryptobot_trx",
+            ],
             ["buy_vpn"],
         ],
     )

@@ -199,6 +199,10 @@ def test_payment_options_include_cryptobot_assets_and_inactive_future_options():
         "cryptobot_usdc",
         "cryptobot_btc",
         "cryptobot_eth",
+        "cryptobot_ton",
+        "cryptobot_ltc",
+        "cryptobot_bnb",
+        "cryptobot_trx",
         "xrp_xrpl",
         "sol_solana",
         "usdt_trc20",
@@ -214,6 +218,10 @@ def test_payment_options_include_cryptobot_assets_and_inactive_future_options():
         "cryptobot_usdc",
         "cryptobot_btc",
         "cryptobot_eth",
+        "cryptobot_ton",
+        "cryptobot_ltc",
+        "cryptobot_bnb",
+        "cryptobot_trx",
     )
     assert PAYMENT_OPTIONS["cryptobot_btc"] == PaymentOptionConfig(
         code="cryptobot_btc",
@@ -223,6 +231,15 @@ def test_payment_options_include_cryptobot_assets_and_inactive_future_options():
         display_name="CryptoBot — BTC",
         is_active=True,
         sort_order=30,
+    )
+    assert PAYMENT_OPTIONS["cryptobot_ton"] == PaymentOptionConfig(
+        code="cryptobot_ton",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.TON,
+        network=None,
+        display_name="CryptoBot — TON",
+        is_active=True,
+        sort_order=50,
     )
     assert PAYMENT_OPTIONS["usdt_trc20"].is_active is False
     assert PAYMENT_OPTIONS["xrp_xrpl"].is_active is False
@@ -238,12 +255,20 @@ def test_active_payment_options_are_only_cryptobot_assets_in_ui_order():
         "cryptobot_usdc",
         "cryptobot_btc",
         "cryptobot_eth",
+        "cryptobot_ton",
+        "cryptobot_ltc",
+        "cryptobot_bnb",
+        "cryptobot_trx",
     ]
     assert [option.currency for option in active] == [
         CurrencyCode.USDT,
         CurrencyCode.USDC,
         CurrencyCode.BTC,
         CurrencyCode.ETH,
+        CurrencyCode.TON,
+        CurrencyCode.LTC,
+        CurrencyCode.BNB,
+        CurrencyCode.TRX,
     ]
     assert all(option.is_active for option in active)
 
@@ -264,6 +289,10 @@ def test_common_enums_keep_external_string_values_stable():
         "USDC",
         "BTC",
         "ETH",
+        "TON",
+        "LTC",
+        "BNB",
+        "TRX",
         "XRP",
         "SOL",
     ]

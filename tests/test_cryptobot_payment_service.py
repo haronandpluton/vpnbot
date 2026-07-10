@@ -179,6 +179,10 @@ async def test_ensure_invoice_reuses_existing_invoice_without_duplicate():
         (CurrencyCode.USDC, "USDC"),
         (CurrencyCode.BTC, "BTC"),
         (CurrencyCode.ETH, "ETH"),
+        (CurrencyCode.TON, "TON"),
+        (CurrencyCode.LTC, "LTC"),
+        (CurrencyCode.BNB, "BNB"),
+        (CurrencyCode.TRX, "TRX"),
     ],
 )
 async def test_ensure_invoice_creates_usd_fiat_invoice_for_selected_asset(

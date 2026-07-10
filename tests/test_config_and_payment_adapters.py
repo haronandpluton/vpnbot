@@ -105,6 +105,10 @@ def test_crypto_payment_options_have_currency_and_valid_network_rules():
     cryptobot_usdc = get_payment_option("cryptobot_usdc")
     cryptobot_btc = get_payment_option("cryptobot_btc")
     cryptobot_eth = get_payment_option("cryptobot_eth")
+    cryptobot_ton = get_payment_option("cryptobot_ton")
+    cryptobot_ltc = get_payment_option("cryptobot_ltc")
+    cryptobot_bnb = get_payment_option("cryptobot_bnb")
+    cryptobot_trx = get_payment_option("cryptobot_trx")
     usdt_trc20 = get_payment_option("usdt_trc20")
     xrp = get_payment_option("xrp_xrpl")
 
@@ -113,6 +117,10 @@ def test_crypto_payment_options_have_currency_and_valid_network_rules():
     assert cryptobot_usdc.currency == CurrencyCode.USDC
     assert cryptobot_btc.currency == CurrencyCode.BTC
     assert cryptobot_eth.currency == CurrencyCode.ETH
+    assert cryptobot_ton.currency == CurrencyCode.TON
+    assert cryptobot_ltc.currency == CurrencyCode.LTC
+    assert cryptobot_bnb.currency == CurrencyCode.BNB
+    assert cryptobot_trx.currency == CurrencyCode.TRX
     assert all(
         option.network is None
         for option in (
@@ -120,6 +128,10 @@ def test_crypto_payment_options_have_currency_and_valid_network_rules():
             cryptobot_usdc,
             cryptobot_btc,
             cryptobot_eth,
+            cryptobot_ton,
+            cryptobot_ltc,
+            cryptobot_bnb,
+            cryptobot_trx,
         )
     )
 

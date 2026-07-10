@@ -133,6 +133,8 @@ def test_payment_method_keyboard_uses_selected_tariff_in_callback():
     assert row_texts(markup) == [
         ["USDT", "USDC"],
         ["BTC", "ETH"],
+        ["TON", "LTC"],
+        ["BNB", "TRX"],
         ["Назад"],
     ]
     assert row_callbacks(markup) == [
@@ -143,6 +145,14 @@ def test_payment_method_keyboard_uses_selected_tariff_in_callback():
         [
             "select_payment:period_2_months:cryptobot_btc",
             "select_payment:period_2_months:cryptobot_eth",
+        ],
+        [
+            "select_payment:period_2_months:cryptobot_ton",
+            "select_payment:period_2_months:cryptobot_ltc",
+        ],
+        [
+            "select_payment:period_2_months:cryptobot_bnb",
+            "select_payment:period_2_months:cryptobot_trx",
         ],
         ["buy_vpn"],
     ]

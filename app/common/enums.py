@@ -12,6 +12,10 @@ class CurrencyCode(StrEnum):
     USDC = "USDC"
     BTC = "BTC"
     ETH = "ETH"
+    TON = "TON"
+    LTC = "LTC"
+    BNB = "BNB"
+    TRX = "TRX"
     XRP = "XRP"
     SOL = "SOL"
 

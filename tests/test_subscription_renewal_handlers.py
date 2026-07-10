@@ -114,17 +114,27 @@ async def test_renewal_tariff_keeps_subscription_id_in_payment_step():
     assert "Продление подписки ID: 50" in text
     assert "Тариф: 2 месяца + 6 дней в подарок" in text
     assert "Срок доступа: 66 дней" in text
-    assert callback_rows(callback.message.edit_text_calls[0]["reply_markup"]) == [
-        [
-            "renew_pay:50:period_2_months:cryptobot_usdt",
-            "renew_pay:50:period_2_months:cryptobot_usdc",
-        ],
-        [
-            "renew_pay:50:period_2_months:cryptobot_btc",
-            "renew_pay:50:period_2_months:cryptobot_eth",
-        ],
-        ["renew_subscription:50"],
-    ]
+    assert callback_rows(
+        callback.message.edit_text_calls[0]["reply_markup"]
+    ) == [
+               [
+                   "renew_pay:50:period_2_months:cryptobot_usdt",
+                   "renew_pay:50:period_2_months:cryptobot_usdc",
+               ],
+               [
+                   "renew_pay:50:period_2_months:cryptobot_btc",
+                   "renew_pay:50:period_2_months:cryptobot_eth",
+               ],
+               [
+                   "renew_pay:50:period_2_months:cryptobot_ton",
+                   "renew_pay:50:period_2_months:cryptobot_ltc",
+               ],
+               [
+                   "renew_pay:50:period_2_months:cryptobot_bnb",
+                   "renew_pay:50:period_2_months:cryptobot_trx",
+               ],
+               ["renew_subscription:50"],
+           ]
     assert callback.answer_calls == [{"text": None}]
 
 

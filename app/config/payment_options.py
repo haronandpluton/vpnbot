@@ -19,6 +19,10 @@ CRYPTOBOT_PAYMENT_OPTION_CODES: tuple[str, ...] = (
     "cryptobot_usdc",
     "cryptobot_btc",
     "cryptobot_eth",
+    "cryptobot_ton",
+    "cryptobot_ltc",
+    "cryptobot_bnb",
+    "cryptobot_trx",
 )
 
 CRYPTOBOT_SUPPORTED_CURRENCIES: frozenset[CurrencyCode] = frozenset(
@@ -27,6 +31,10 @@ CRYPTOBOT_SUPPORTED_CURRENCIES: frozenset[CurrencyCode] = frozenset(
         CurrencyCode.USDC,
         CurrencyCode.BTC,
         CurrencyCode.ETH,
+        CurrencyCode.TON,
+        CurrencyCode.LTC,
+        CurrencyCode.BNB,
+        CurrencyCode.TRX,
     }
 )
 
@@ -67,6 +75,42 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         display_name="CryptoBot — ETH",
         is_active=True,
         sort_order=40,
+    ),
+    "cryptobot_ton": PaymentOptionConfig(
+        code="cryptobot_ton",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.TON,
+        network=None,
+        display_name="CryptoBot — TON",
+        is_active=True,
+        sort_order=50,
+    ),
+    "cryptobot_ltc": PaymentOptionConfig(
+        code="cryptobot_ltc",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.LTC,
+        network=None,
+        display_name="CryptoBot — LTC",
+        is_active=True,
+        sort_order=60,
+    ),
+    "cryptobot_bnb": PaymentOptionConfig(
+        code="cryptobot_bnb",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.BNB,
+        network=None,
+        display_name="CryptoBot — BNB",
+        is_active=True,
+        sort_order=70,
+    ),
+    "cryptobot_trx": PaymentOptionConfig(
+        code="cryptobot_trx",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.TRX,
+        network=None,
+        display_name="CryptoBot — TRX",
+        is_active=True,
+        sort_order=80,
     ),
     # Эти варианты оставлены в доменной модели для последующих отдельных
     # адаптеров. Пока они не должны попадать в пользовательский flow.
