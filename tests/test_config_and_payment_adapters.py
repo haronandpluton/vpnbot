@@ -86,7 +86,9 @@ def test_payment_options_have_stable_codes_and_unique_sort_orders():
     assert len({option.sort_order for option in PAYMENT_OPTIONS.values()}) == len(
         PAYMENT_OPTIONS
     )
-    assert all(isinstance(option, PaymentOptionConfig) for option in PAYMENT_OPTIONS.values())
+    assert all(
+        isinstance(option, PaymentOptionConfig) for option in PAYMENT_OPTIONS.values()
+    )
 
 
 def test_get_active_payment_options_returns_active_options_sorted_and_excludes_inactive_stars():
@@ -99,20 +101,36 @@ def test_get_active_payment_options_returns_active_options_sorted_and_excludes_i
 
 
 def test_crypto_payment_options_have_currency_and_valid_network_rules():
-    cryptobot = get_payment_option("cryptobot_usdt")
+    cryptobot_usdt = get_payment_option("cryptobot_usdt")
+    cryptobot_usdc = get_payment_option("cryptobot_usdc")
+    cryptobot_btc = get_payment_option("cryptobot_btc")
+    cryptobot_eth = get_payment_option("cryptobot_eth")
     usdt_trc20 = get_payment_option("usdt_trc20")
     xrp = get_payment_option("xrp_xrpl")
 
-    assert cryptobot.payment_method == PaymentMethod.CRYPTO
-    assert cryptobot.currency == CurrencyCode.USDT
-    assert cryptobot.network is None
+    assert cryptobot_usdt.payment_method == PaymentMethod.CRYPTO
+    assert cryptobot_usdt.currency == CurrencyCode.USDT
+    assert cryptobot_usdc.currency == CurrencyCode.USDC
+    assert cryptobot_btc.currency == CurrencyCode.BTC
+    assert cryptobot_eth.currency == CurrencyCode.ETH
+    assert all(
+        option.network is None
+        for option in (
+            cryptobot_usdt,
+            cryptobot_usdc,
+            cryptobot_btc,
+            cryptobot_eth,
+        )
+    )
 
     assert usdt_trc20.payment_method == PaymentMethod.CRYPTO
     assert usdt_trc20.currency == CurrencyCode.USDT
     assert usdt_trc20.network == NetworkCode.TRC20
+    assert usdt_trc20.is_active is False
 
     assert xrp.currency == CurrencyCode.XRP
     assert xrp.network == NetworkCode.XRPL
+    assert xrp.is_active is False
 
 
 def test_telegram_stars_option_is_present_but_inactive_and_has_no_crypto_network():
@@ -198,8 +216,7 @@ def test_normalized_transaction_repr_contains_only_core_public_diagnostics():
     )
 
     assert repr(tx) == (
-        "NormalizedTransaction(txid='tx-1', amount=4.00, "
-        "currency=USDT, network=TRC20)"
+        "NormalizedTransaction(txid='tx-1', amount=4.00, currency=USDT, network=TRC20)"
     )
     assert "secret-from" not in repr(tx)
     assert "secret-to" not in repr(tx)

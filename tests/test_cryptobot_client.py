@@ -171,7 +171,8 @@ async def test_create_invoice_sends_expected_cryptobot_params_and_returns_dict()
     client = make_client()
 
     result = await client.create_invoice(
-        asset="USDT",
+        fiat="USD",
+        accepted_assets="USDT",
         amount=Decimal("4.00"),
         description="PresentVPN order #23",
         payload="order:23",
@@ -183,7 +184,9 @@ async def test_create_invoice_sends_expected_cryptobot_params_and_returns_dict()
         {
             "url": "https://pay.crypt.bot/api/createInvoice",
             "params": {
-                "asset": "USDT",
+                "currency_type": "fiat",
+                "fiat": "USD",
+                "accepted_assets": "USDT",
                 "amount": "4.00",
                 "description": "PresentVPN order #23",
                 "payload": "order:23",
@@ -210,7 +213,8 @@ async def test_create_invoice_rejects_unexpected_result_structure(result):
 
     with pytest.raises(CryptoBotAPIError) as exc_info:
         await client.create_invoice(
-            asset="USDT",
+            fiat="USD",
+            accepted_assets="USDT",
             amount=Decimal("4.00"),
             description="desc",
             payload="order:23",
@@ -241,25 +245,28 @@ async def test_get_invoice_returns_matching_item_from_dict_items_result():
     result = await client.get_invoice("23")
 
     assert result == matching
-    assert FakeAsyncClient.instances[0].get_calls[0]["params"] == {
-        "invoice_ids": "23"
-    }
+    assert FakeAsyncClient.instances[0].get_calls[0]["params"] == {"invoice_ids": "23"}
 
 
 @pytest.mark.asyncio
-async def test_get_invoice_returns_first_item_from_dict_items_when_exact_id_not_found():
+async def test_get_invoice_returns_none_from_dict_items_when_exact_id_not_found():
     first = {"invoice_id": 22, "status": "active"}
     FakeAsyncClient.queued_responses = [
         FakeResponse(
             json_data={
                 "ok": True,
-                "result": {"items": [first, {"invoice_id": 24}]},
+                "result": {
+                    "items": [
+                        first,
+                        {"invoice_id": 24},
+                    ]
+                },
             }
         )
     ]
     client = make_client()
 
-    assert await client.get_invoice(23) == first
+    assert await client.get_invoice(23) is None
 
 
 @pytest.mark.asyncio
@@ -284,6 +291,22 @@ async def test_get_invoice_returns_direct_dict_when_invoice_id_matches():
 
 
 @pytest.mark.asyncio
+async def test_get_invoice_returns_none_from_direct_dict_when_id_differs():
+    invoice = {"invoice_id": "24", "status": "paid"}
+    FakeAsyncClient.queued_responses = [
+        FakeResponse(
+            json_data={
+                "ok": True,
+                "result": invoice,
+            }
+        )
+    ]
+    client = make_client()
+
+    assert await client.get_invoice(23) is None
+
+
+@pytest.mark.asyncio
 async def test_get_invoice_returns_matching_item_from_list_result():
     matching = {"invoice_id": "23", "status": "paid"}
     FakeAsyncClient.queued_responses = [
@@ -300,14 +323,22 @@ async def test_get_invoice_returns_matching_item_from_list_result():
 
 
 @pytest.mark.asyncio
-async def test_get_invoice_returns_first_item_from_list_when_exact_id_not_found():
+async def test_get_invoice_returns_none_from_list_when_exact_id_not_found():
     first = {"invoice_id": "22"}
     FakeAsyncClient.queued_responses = [
-        FakeResponse(json_data={"ok": True, "result": [first, {"invoice_id": "24"}]})
+        FakeResponse(
+            json_data={
+                "ok": True,
+                "result": [
+                    first,
+                    {"invoice_id": "24"},
+                ],
+            }
+        )
     ]
     client = make_client()
 
-    assert await client.get_invoice(23) == first
+    assert await client.get_invoice(23) is None
 
 
 @pytest.mark.asyncio

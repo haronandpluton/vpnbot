@@ -21,13 +21,29 @@ class FakeMessage:
 
 
 class FakeCallback:
-    def __init__(self, *, data: str) -> None:
+    def __init__(self, *, data: str, telegram_id: int = 123) -> None:
         self.data = data
         self.message = FakeMessage()
+        self.from_user = SimpleNamespace(id=telegram_id)
         self.answer_calls: list[dict] = []
 
     async def answer(self, text: str | None = None, **kwargs) -> None:
         self.answer_calls.append({"text": text, **kwargs})
+
+
+class FakeOrderService:
+    instances: list["FakeOrderService"] = []
+    order = SimpleNamespace(id=23, user_id=1)
+
+    def __init__(self, session) -> None:
+        self.session = session
+        self.calls: list[dict] = []
+        self.__class__.instances.append(self)
+
+    async def get_order_for_telegram_user(self, **kwargs):
+        self.calls.append(kwargs)
+        CALL_LOG.append(("owner", kwargs["order_id"]))
+        return self.__class__.order
 
 
 class FakeCryptoBotPaymentService:
@@ -65,12 +81,19 @@ class FakePaymentCheckService:
 @pytest.fixture(autouse=True)
 def patch_services(monkeypatch):
     CALL_LOG.clear()
+    FakeOrderService.instances = []
+    FakeOrderService.order = SimpleNamespace(id=23, user_id=1)
     FakeCryptoBotPaymentService.instances = []
     FakeCryptoBotPaymentService.error = None
     FakePaymentCheckService.instances = []
     FakePaymentCheckService.result = SimpleNamespace(
         status="waiting_payment",
         error_message=None,
+    )
+    monkeypatch.setattr(
+        payment_check_module,
+        "OrderService",
+        FakeOrderService,
     )
     monkeypatch.setattr(
         payment_check_module,
@@ -92,9 +115,24 @@ async def test_check_payment_callback_rejects_malformed_order_id_before_services
 
     assert callback.answer_calls == [{"text": "Некорректный заказ", "show_alert": True}]
     assert callback.message.answer_calls == []
+    assert FakeOrderService.instances == []
     assert FakeCryptoBotPaymentService.instances == []
     assert FakePaymentCheckService.instances == []
     assert CALL_LOG == []
+
+
+@pytest.mark.asyncio
+async def test_check_payment_callback_rejects_foreign_order_before_provider_call():
+    FakeOrderService.order = None
+    callback = FakeCallback(data="check_payment:23", telegram_id=999)
+
+    await check_payment_callback(callback, session="session")
+
+    assert FakeOrderService.instances[0].calls == [{"order_id": 23, "telegram_id": 999}]
+    assert FakeCryptoBotPaymentService.instances == []
+    assert FakePaymentCheckService.instances == []
+    assert CALL_LOG == [("owner", 23)]
+    assert callback.answer_calls == [{"text": "Заказ не найден", "show_alert": True}]
 
 
 @pytest.mark.asyncio
@@ -107,7 +145,7 @@ async def test_check_payment_callback_handles_cryptobot_sync_error_without_check
     assert FakeCryptoBotPaymentService.instances[0].session == "session"
     assert FakeCryptoBotPaymentService.instances[0].order_ids == [23]
     assert FakePaymentCheckService.instances == []
-    assert CALL_LOG == [("sync", 23)]
+    assert CALL_LOG == [("owner", 23), ("sync", 23)]
     assert callback.message.answer_calls == [
         {
             "text": (
@@ -162,7 +200,7 @@ async def test_check_payment_callback_sends_clear_text_for_payment_statuses(
 
     await check_payment_callback(callback, session="session")
 
-    assert CALL_LOG == [("sync", 23), ("check", 23)]
+    assert CALL_LOG == [("owner", 23), ("sync", 23), ("check", 23)]
     assert FakeCryptoBotPaymentService.instances[0].session == "session"
     assert FakePaymentCheckService.instances[0].session == "session"
     assert callback.message.answer_calls == [{"text": expected_text}]
@@ -207,6 +245,6 @@ async def test_check_payment_callback_sends_specific_invalid_payment_reason(
 
     await check_payment_callback(callback, session="session")
 
-    assert CALL_LOG == [("sync", 23), ("check", 23)]
+    assert CALL_LOG == [("owner", 23), ("sync", 23), ("check", 23)]
     assert callback.message.answer_calls == [{"text": expected_text}]
     assert callback.answer_calls == [{"text": None}]

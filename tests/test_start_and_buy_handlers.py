@@ -60,16 +60,13 @@ class FakeSession:
 
 def assert_callback_rows(markup, expected):
     assert [
-        [button.callback_data for button in row]
-        for row in markup.inline_keyboard
+        [button.callback_data for button in row] for row in markup.inline_keyboard
     ] == expected
 
 
 def test_main_menu_text_is_stable_entrypoint_copy():
     assert main_menu_text() == (
-        "VPNFOR\n\n"
-        "Быстрый VPN-доступ для стабильного подключения.\n\n"
-        "Выбери действие:"
+        "VPNFOR\n\nБыстрый VPN-доступ для стабильного подключения.\n\nВыбери действие:"
     )
 
 
@@ -172,10 +169,20 @@ async def test_select_tariff_period_1_month_edits_to_payment_method_keyboard():
     assert "Тариф: 1 месяц + 3 дня в подарок" in text
     assert "Устройств: 1" in text
     assert "Срок доступа: 33 дня" in text
-    assert "Стоимость: 4 USDT" in text
+    assert "Стоимость: 4 USD" in text
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
-        [["select_payment:period_1_month:cryptobot_usdt"], ["buy_vpn"]],
+        [
+            [
+                "select_payment:period_1_month:cryptobot_usdt",
+                "select_payment:period_1_month:cryptobot_usdc",
+            ],
+            [
+                "select_payment:period_1_month:cryptobot_btc",
+                "select_payment:period_1_month:cryptobot_eth",
+            ],
+            ["buy_vpn"],
+        ],
     )
     assert callback.answer_calls == [{"text": None}]
 
@@ -289,7 +296,10 @@ async def test_select_payment_happy_path_creates_order_invoice_and_payment_keybo
 
         async def ensure_invoice_for_order(self, order_id: int):
             invoice_order_ids.append(order_id)
-            return {"pay_url": "https://pay.example/invoice-23"}
+            return {
+                "bot_invoice_url": "https://bot.example/invoice-23",
+                "pay_url": "https://deprecated.example/invoice-23",
+            }
 
     monkeypatch.setattr(
         buy_module,
@@ -303,7 +313,7 @@ async def test_select_payment_happy_path_creates_order_invoice_and_payment_keybo
         FakeCryptoBotPaymentService,
     )
 
-    callback = FakeCallback(data="select_payment:period_2_months:cryptobot_usdt")
+    callback = FakeCallback(data="select_payment:period_2_months:cryptobot_btc")
 
     await select_payment_callback(callback, session=session)
 
@@ -311,7 +321,7 @@ async def test_select_payment_happy_path_creates_order_invoice_and_payment_keybo
         {
             "telegram_id": 123,
             "tariff_code": TariffCode.PERIOD_2_MONTHS,
-            "payment_option_code": "cryptobot_usdt",
+            "payment_option_code": "cryptobot_btc",
             "username": "ivan",
             "first_name": "Ivan",
             "last_name": "Redeemer",
@@ -323,17 +333,16 @@ async def test_select_payment_happy_path_creates_order_invoice_and_payment_keybo
     assert "Order ID: 23" in text
     assert "Тариф: 2 месяца + 6 дней в подарок" in text
     assert "Срок доступа: 66 дней" in text
-    assert "Сумма: 7.50 USDT" in text
+    assert "Стоимость: 7.50 USD" in text
+    assert "Валюта оплаты: BTC" in text
     assert callback.message.edit_text_calls[0]["parse_mode"] == "HTML"
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
         [[None], ["check_payment:23"], ["dev_confirm_payment:23"]],
     )
     assert (
-        callback.message.edit_text_calls[0]["reply_markup"]
-        .inline_keyboard[0][0]
-        .url
-        == "https://pay.example/invoice-23"
+        callback.message.edit_text_calls[0]["reply_markup"].inline_keyboard[0][0].url
+        == "https://bot.example/invoice-23"
     )
     assert callback.answer_calls == [{"text": None}]
     assert session.rollback_count == 0

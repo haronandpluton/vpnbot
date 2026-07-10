@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from app.common.enums import AppEnv, CurrencyCode, NetworkCode, TariffCode
 from app.config import constants
 from app.config.payment_options import (
+    CRYPTOBOT_PAYMENT_OPTION_CODES,
     PAYMENT_OPTIONS,
     PaymentOptionConfig,
     get_active_payment_options,
@@ -56,8 +57,7 @@ def test_settings_required_aliases_and_safe_defaults_are_stable():
     assert settings.vpn_default_server_name == "default-node"
     assert settings.vpn_default_inbound_id == 1
     assert (
-        settings.vpn_subscription_public_base_url
-        == "https://connect.presentvpn.click"
+        settings.vpn_subscription_public_base_url == "https://connect.presentvpn.click"
     )
     assert settings.subscription_meta_retry_scheduler_enabled is True
     assert settings.subscription_meta_retry_interval_seconds == 120
@@ -193,9 +193,12 @@ def test_get_tariff_returns_config_and_rejects_unknown_code():
         get_tariff("broken")  # type: ignore[arg-type]
 
 
-def test_payment_options_include_configured_crypto_networks_and_inactive_stars():
+def test_payment_options_include_cryptobot_assets_and_inactive_future_options():
     assert set(PAYMENT_OPTIONS) == {
         "cryptobot_usdt",
+        "cryptobot_usdc",
+        "cryptobot_btc",
+        "cryptobot_eth",
         "xrp_xrpl",
         "sol_solana",
         "usdt_trc20",
@@ -206,43 +209,43 @@ def test_payment_options_include_configured_crypto_networks_and_inactive_stars()
         "usdc_polygon",
         "telegram_stars",
     }
-    assert PAYMENT_OPTIONS["usdt_trc20"] == PaymentOptionConfig(
-        code="usdt_trc20",
+    assert CRYPTOBOT_PAYMENT_OPTION_CODES == (
+        "cryptobot_usdt",
+        "cryptobot_usdc",
+        "cryptobot_btc",
+        "cryptobot_eth",
+    )
+    assert PAYMENT_OPTIONS["cryptobot_btc"] == PaymentOptionConfig(
+        code="cryptobot_btc",
         payment_method=PaymentMethod.CRYPTO,
-        currency=CurrencyCode.USDT,
-        network=NetworkCode.TRC20,
-        display_name="USDT (TRC20)",
+        currency=CurrencyCode.BTC,
+        network=None,
+        display_name="CryptoBot — BTC",
         is_active=True,
         sort_order=30,
     )
-    assert PAYMENT_OPTIONS["xrp_xrpl"].network == NetworkCode.XRPL
-    assert PAYMENT_OPTIONS["sol_solana"].currency == CurrencyCode.SOL
-    assert PAYMENT_OPTIONS["cryptobot_usdt"].network is None
-    assert PAYMENT_OPTIONS["telegram_stars"].payment_method == PaymentMethod.TELEGRAM_STARS
-    assert PAYMENT_OPTIONS["telegram_stars"].currency is None
-    assert PAYMENT_OPTIONS["telegram_stars"].network is None
+    assert PAYMENT_OPTIONS["usdt_trc20"].is_active is False
+    assert PAYMENT_OPTIONS["xrp_xrpl"].is_active is False
+    assert PAYMENT_OPTIONS["sol_solana"].is_active is False
     assert PAYMENT_OPTIONS["telegram_stars"].is_active is False
 
 
-def test_active_payment_options_are_only_active_and_sorted_by_sort_order():
+def test_active_payment_options_are_only_cryptobot_assets_in_ui_order():
     active = get_active_payment_options()
 
     assert [option.code for option in active] == [
         "cryptobot_usdt",
-        "xrp_xrpl",
-        "sol_solana",
-        "usdt_trc20",
-        "usdt_erc20",
-        "usdt_bep20",
-        "usdc_erc20",
-        "usdc_solana",
-        "usdc_polygon",
+        "cryptobot_usdc",
+        "cryptobot_btc",
+        "cryptobot_eth",
+    ]
+    assert [option.currency for option in active] == [
+        CurrencyCode.USDT,
+        CurrencyCode.USDC,
+        CurrencyCode.BTC,
+        CurrencyCode.ETH,
     ]
     assert all(option.is_active for option in active)
-    assert "telegram_stars" not in {option.code for option in active}
-    assert [option.sort_order for option in active] == sorted(
-        option.sort_order for option in active
-    )
 
 
 def test_get_payment_option_returns_config_and_rejects_unknown_code():
@@ -256,7 +259,14 @@ def test_common_enums_keep_external_string_values_stable():
     assert AppEnv.DEV.value == "dev"
     assert AppEnv.PROD.value == "prod"
     assert AppEnv.TEST.value == "test"
-    assert [item.value for item in CurrencyCode] == ["USDT", "USDC", "XRP", "SOL"]
+    assert [item.value for item in CurrencyCode] == [
+        "USDT",
+        "USDC",
+        "BTC",
+        "ETH",
+        "XRP",
+        "SOL",
+    ]
     assert [item.value for item in NetworkCode] == [
         "TRC20",
         "ERC20",

@@ -114,9 +114,9 @@ def test_tariff_keyboard_exposes_current_tariff_callbacks_and_back_button():
     markup = tariff_keyboard()
 
     assert row_texts(markup) == [
-        ["1 месяц + 3 дня в подарок — 4 USDT"],
-        ["2 месяца + 6 дней в подарок — 7.5 USDT"],
-        ["3 месяца + 10 дней в подарок — 11 USDT"],
+        ["1 месяц + 3 дня в подарок — 4 USD"],
+        ["2 месяца + 6 дней в подарок — 7.5 USD"],
+        ["3 месяца + 10 дней в подарок — 11 USD"],
         ["Назад"],
     ]
     assert row_callbacks(markup) == [
@@ -130,9 +130,20 @@ def test_tariff_keyboard_exposes_current_tariff_callbacks_and_back_button():
 def test_payment_method_keyboard_uses_selected_tariff_in_callback():
     markup = payment_method_keyboard("period_2_months")
 
-    assert row_texts(markup) == [["CryptoBot — 7.5 USDT"], ["Назад"]]
+    assert row_texts(markup) == [
+        ["USDT", "USDC"],
+        ["BTC", "ETH"],
+        ["Назад"],
+    ]
     assert row_callbacks(markup) == [
-        ["select_payment:period_2_months:cryptobot_usdt"],
+        [
+            "select_payment:period_2_months:cryptobot_usdt",
+            "select_payment:period_2_months:cryptobot_usdc",
+        ],
+        [
+            "select_payment:period_2_months:cryptobot_btc",
+            "select_payment:period_2_months:cryptobot_eth",
+        ],
         ["buy_vpn"],
     ]
 

@@ -14,6 +14,22 @@ class PaymentOptionConfig:
     is_active: bool
     sort_order: int
 
+CRYPTOBOT_PAYMENT_OPTION_CODES: tuple[str, ...] = (
+    "cryptobot_usdt",
+    "cryptobot_usdc",
+    "cryptobot_btc",
+    "cryptobot_eth",
+)
+
+CRYPTOBOT_SUPPORTED_CURRENCIES: frozenset[CurrencyCode] = frozenset(
+    {
+        CurrencyCode.USDT,
+        CurrencyCode.USDC,
+        CurrencyCode.BTC,
+        CurrencyCode.ETH,
+    }
+)
+
 
 PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
     "cryptobot_usdt": PaymentOptionConfig(
@@ -23,16 +39,45 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         network=None,
         display_name="CryptoBot — USDT",
         is_active=True,
-        sort_order=5,
+        sort_order=10,
     ),
+    "cryptobot_usdc": PaymentOptionConfig(
+        code="cryptobot_usdc",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.USDC,
+        network=None,
+        display_name="CryptoBot — USDC",
+        is_active=True,
+        sort_order=20,
+    ),
+    "cryptobot_btc": PaymentOptionConfig(
+        code="cryptobot_btc",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.BTC,
+        network=None,
+        display_name="CryptoBot — BTC",
+        is_active=True,
+        sort_order=30,
+    ),
+    "cryptobot_eth": PaymentOptionConfig(
+        code="cryptobot_eth",
+        payment_method=PaymentMethod.CRYPTO,
+        currency=CurrencyCode.ETH,
+        network=None,
+        display_name="CryptoBot — ETH",
+        is_active=True,
+        sort_order=40,
+    ),
+    # Эти варианты оставлены в доменной модели для последующих отдельных
+    # адаптеров. Пока они не должны попадать в пользовательский flow.
     "xrp_xrpl": PaymentOptionConfig(
         code="xrp_xrpl",
         payment_method=PaymentMethod.CRYPTO,
         currency=CurrencyCode.XRP,
         network=NetworkCode.XRPL,
         display_name="XRP (XRP Ledger)",
-        is_active=True,
-        sort_order=10,
+        is_active=False,
+        sort_order=100,
     ),
     "sol_solana": PaymentOptionConfig(
         code="sol_solana",
@@ -40,8 +85,8 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         currency=CurrencyCode.SOL,
         network=NetworkCode.SOLANA,
         display_name="SOL (Solana)",
-        is_active=True,
-        sort_order=20,
+        is_active=False,
+        sort_order=110,
     ),
     "usdt_trc20": PaymentOptionConfig(
         code="usdt_trc20",
@@ -49,8 +94,8 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         currency=CurrencyCode.USDT,
         network=NetworkCode.TRC20,
         display_name="USDT (TRC20)",
-        is_active=True,
-        sort_order=30,
+        is_active=False,
+        sort_order=120,
     ),
     "usdt_erc20": PaymentOptionConfig(
         code="usdt_erc20",
@@ -58,8 +103,8 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         currency=CurrencyCode.USDT,
         network=NetworkCode.ERC20,
         display_name="USDT (ERC20)",
-        is_active=True,
-        sort_order=40,
+        is_active=False,
+        sort_order=130,
     ),
     "usdt_bep20": PaymentOptionConfig(
         code="usdt_bep20",
@@ -67,8 +112,8 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         currency=CurrencyCode.USDT,
         network=NetworkCode.BEP20,
         display_name="USDT (BEP20)",
-        is_active=True,
-        sort_order=50,
+        is_active=False,
+        sort_order=140,
     ),
     "usdc_erc20": PaymentOptionConfig(
         code="usdc_erc20",
@@ -76,8 +121,8 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         currency=CurrencyCode.USDC,
         network=NetworkCode.ERC20,
         display_name="USDC (ERC20)",
-        is_active=True,
-        sort_order=60,
+        is_active=False,
+        sort_order=150,
     ),
     "usdc_solana": PaymentOptionConfig(
         code="usdc_solana",
@@ -85,8 +130,8 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         currency=CurrencyCode.USDC,
         network=NetworkCode.SOLANA,
         display_name="USDC (Solana)",
-        is_active=True,
-        sort_order=70,
+        is_active=False,
+        sort_order=160,
     ),
     "usdc_polygon": PaymentOptionConfig(
         code="usdc_polygon",
@@ -94,8 +139,8 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         currency=CurrencyCode.USDC,
         network=NetworkCode.POLYGON,
         display_name="USDC (Polygon)",
-        is_active=True,
-        sort_order=80,
+        is_active=False,
+        sort_order=170,
     ),
     "telegram_stars": PaymentOptionConfig(
         code="telegram_stars",
@@ -104,7 +149,7 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         network=None,
         display_name="Telegram Stars",
         is_active=False,
-        sort_order=90,
+        sort_order=200,
     ),
 }
 
@@ -121,3 +166,7 @@ def get_active_payment_options() -> list[PaymentOptionConfig]:
         (option for option in PAYMENT_OPTIONS.values() if option.is_active),
         key=lambda item: item.sort_order,
     )
+
+
+def is_cryptobot_payment_option(code: str) -> bool:
+    return code in CRYPTOBOT_PAYMENT_OPTION_CODES

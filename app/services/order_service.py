@@ -51,6 +51,22 @@ class OrderService:
         )
         return user
 
+    async def get_order_for_telegram_user(
+        self,
+        *,
+        order_id: int,
+        telegram_id: int,
+    ):
+        user = await self.user_repository.get_by_telegram_id(telegram_id)
+        if user is None:
+            return None
+
+        order = await self.order_repository.get_by_id(order_id)
+        if order is None or order.user_id != user.id:
+            return None
+
+        return order
+
     async def create_order(
         self,
         telegram_id: int,
@@ -93,9 +109,7 @@ class OrderService:
                 "payment_option_id": payment_option.id,
             }
             if target_subscription_id is not None:
-                waiting_order_kwargs["target_subscription_id"] = (
-                    target_subscription_id
-                )
+                waiting_order_kwargs["target_subscription_id"] = target_subscription_id
 
             existing_order = (
                 await self.order_repository.get_active_waiting_order_by_user(
@@ -128,13 +142,9 @@ class OrderService:
                 "comment": None,
             }
             if target_subscription_id is not None:
-                create_order_kwargs["target_subscription_id"] = (
-                    target_subscription_id
-                )
+                create_order_kwargs["target_subscription_id"] = target_subscription_id
 
-            order = await self.order_repository.create(
-                **create_order_kwargs
-            )
+            order = await self.order_repository.create(**create_order_kwargs)
 
             await self.session.commit()
             return order
@@ -154,18 +164,14 @@ class OrderService:
             return
 
         if target_subscription_id <= 0:
-            raise ValueError(
-                f"Target subscription not found: {target_subscription_id}"
-            )
+            raise ValueError(f"Target subscription not found: {target_subscription_id}")
 
         subscription = await self.subscription_repository.get_by_id(
             target_subscription_id
         )
 
         if subscription is None or subscription.user_id != user_id:
-            raise ValueError(
-                f"Target subscription not found: {target_subscription_id}"
-            )
+            raise ValueError(f"Target subscription not found: {target_subscription_id}")
 
         if subscription.status not in {
             SubscriptionStatus.ACTIVE,

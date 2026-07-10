@@ -56,7 +56,8 @@ class CryptoBotClient:
     async def create_invoice(
         self,
         *,
-        asset: str,
+        fiat: str,
+        accepted_assets: str,
         amount: Decimal,
         description: str,
         payload: str,
@@ -65,7 +66,9 @@ class CryptoBotClient:
         result = await self._get(
             "createInvoice",
             {
-                "asset": asset,
+                "currency_type": "fiat",
+                "fiat": fiat,
+                "accepted_assets": accepted_assets,
                 "amount": str(amount),
                 "description": description,
                 "payload": payload,
@@ -87,15 +90,17 @@ class CryptoBotClient:
                 for item in items:
                     if str(item.get("invoice_id")) == str(invoice_id):
                         return item
-                return items[0] if items else None
+                return None
 
             if str(result.get("invoice_id")) == str(invoice_id):
                 return result
+
+            return None
 
         if isinstance(result, list):
             for item in result:
                 if str(item.get("invoice_id")) == str(invoice_id):
                     return item
-            return result[0] if result else None
+            return None
 
         raise CryptoBotAPIError(f"Unexpected getInvoices result: {result!r}")

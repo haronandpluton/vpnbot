@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.payment_adapters.cryptobot import CryptoBotAPIError
 from app.services.cryptobot_payment_service import CryptoBotPaymentService
+from app.services.order_service import OrderService
 from app.services.payment_check_service import PaymentCheckService
 
 router = Router()
@@ -21,6 +22,17 @@ async def check_payment_callback(
         return
 
     order_id = int(order_id_raw)
+
+    order = await OrderService(session).get_order_for_telegram_user(
+        order_id=order_id,
+        telegram_id=callback.from_user.id,
+    )
+    if order is None:
+        await callback.answer(
+            "Заказ не найден",
+            show_alert=True,
+        )
+        return
 
     try:
         await CryptoBotPaymentService(session).sync_paid_invoice_and_activate(order_id)

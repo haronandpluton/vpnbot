@@ -6,6 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot.keyboards.main_menu import payment_method_keyboard, tariff_keyboard
 from app.bot.keyboards.payment import payment_check_keyboard
 from app.common.enums import TariffCode
+from app.config.payment_options import (
+    get_payment_option,
+    is_cryptobot_payment_option,
+)
 from app.config.settings import get_settings
 from app.config.tariffs import (
     PURCHASABLE_TARIFF_CODES,
@@ -66,8 +70,7 @@ def _tariff_details_text(
         title = f"Тариф: {tariff.title}"
     else:
         title = (
-            f"Продление подписки ID: {target_subscription_id}\n"
-            f"Тариф: {tariff.title}"
+            f"Продление подписки ID: {target_subscription_id}\nТариф: {tariff.title}"
         )
 
     return (
@@ -75,10 +78,10 @@ def _tariff_details_text(
         f"Устройств: {tariff.device_limit}\n"
         f"Срок доступа: {tariff.duration_days} "
         f"{_days_word(tariff.duration_days)}\n"
-        f"Стоимость: {_format_price_usd(tariff.price_usd)} USDT\n\n"
+        f"Стоимость: {_format_price_usd(tariff.price_usd)} USD\n\n"
         "Оплачивая подписку, ты подтверждаешь, что ознакомился "
         "с правилами сервиса: /rules\n\n"
-        "Выбери способ оплаты:"
+        "Выберите валюту оплаты:"
     )
 
 
@@ -101,9 +104,7 @@ async def buy_vpn_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("renew_subscription:"))
 async def renew_subscription_callback(callback: CallbackQuery):
-    subscription_id_raw = callback.data.removeprefix(
-        "renew_subscription:"
-    )
+    subscription_id_raw = callback.data.removeprefix("renew_subscription:")
     subscription_id = _parse_positive_id(subscription_id_raw)
 
     if subscription_id is None:
@@ -114,10 +115,7 @@ async def renew_subscription_callback(callback: CallbackQuery):
         return
 
     await callback.message.edit_text(
-        (
-            f"Продление подписки ID: {subscription_id}\n\n"
-            "Выбери срок продления:"
-        ),
+        (f"Продление подписки ID: {subscription_id}\n\nВыбери срок продления:"),
         reply_markup=tariff_keyboard(
             target_subscription_id=subscription_id,
         ),
@@ -218,9 +216,7 @@ async def select_payment_callback(
             tariff_code_raw,
             payment_option_code,
         ) = parts
-        target_subscription_id = _parse_positive_id(
-            subscription_id_raw
-        )
+        target_subscription_id = _parse_positive_id(subscription_id_raw)
 
         if target_subscription_id is None:
             await callback.answer(
@@ -238,7 +234,17 @@ async def select_payment_callback(
         )
         return
 
-    if payment_option_code != "cryptobot_usdt":
+    try:
+        payment_option = get_payment_option(payment_option_code)
+    except ValueError:
+        payment_option = None
+
+    if (
+        payment_option is None
+        or not payment_option.is_active
+        or payment_option.currency is None
+        or not is_cryptobot_payment_option(payment_option_code)
+    ):
         await callback.answer(
             "Этот способ оплаты пока недоступен",
             show_alert=True,
@@ -266,14 +272,10 @@ async def select_payment_callback(
     }
 
     if target_subscription_id is not None:
-        create_order_kwargs["target_subscription_id"] = (
-            target_subscription_id
-        )
+        create_order_kwargs["target_subscription_id"] = target_subscription_id
 
     try:
-        order = await order_service.create_order(
-            **create_order_kwargs
-        )
+        order = await order_service.create_order(**create_order_kwargs)
     except ValueError:
         if target_subscription_id is None:
             raise
@@ -285,9 +287,9 @@ async def select_payment_callback(
         return
 
     try:
-        invoice = await CryptoBotPaymentService(
-            session
-        ).ensure_invoice_for_order(order.id)
+        invoice = await CryptoBotPaymentService(session).ensure_invoice_for_order(
+            order.id
+        )
     except CryptoBotAPIError as exc:
         await session.rollback()
         await callback.message.answer(
@@ -300,16 +302,20 @@ async def select_payment_callback(
         )
         raise exc
 
-    payment_url = invoice.get("pay_url") or order.destination_address
+    payment_url = (
+        invoice.get("bot_invoice_url")
+        or invoice.get("pay_url")
+        or invoice.get("mini_app_invoice_url")
+        or invoice.get("web_app_invoice_url")
+        or order.destination_address
+    )
 
     if target_subscription_id is None:
         order_title = "Заказ создан."
         target_line = ""
     else:
         order_title = "Заказ на продление создан."
-        target_line = (
-            f"Подписка ID: {target_subscription_id}\n"
-        )
+        target_line = f"Подписка ID: {target_subscription_id}\n"
 
     text = (
         f"{order_title}\n\n"
@@ -319,10 +325,11 @@ async def select_payment_callback(
         f"Устройств: {order.device_limit}\n"
         f"Срок доступа: {order.duration_days} "
         f"{_days_word(order.duration_days)}\n"
-        f"Сумма: {order.price_usd:.2f} USDT\n"
+        f"Стоимость: {order.price_usd:.2f} USD\n"
+        f"Валюта оплаты: {payment_option.currency.value}\n"
         "Оплата: CryptoBot\n\n"
-        "Нажми «Оплатить через CryptoBot» и подтверди оплату "
-        "в CryptoBot.\n\n"
+        "Нажми «Оплатить через CryptoBot». CryptoBot рассчитает "
+        "точную сумму в выбранной валюте по цене заказа в USD.\n\n"
         "После оплаты вернись в бот и нажми "
         "«Я оплатил / Проверить оплату»."
     )

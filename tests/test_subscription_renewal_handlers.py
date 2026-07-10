@@ -60,10 +60,7 @@ class FakeSession:
 
 
 def callback_rows(markup):
-    return [
-        [button.callback_data for button in row]
-        for row in markup.inline_keyboard
-    ]
+    return [[button.callback_data for button in row] for row in markup.inline_keyboard]
 
 
 @pytest.mark.asyncio
@@ -96,12 +93,9 @@ async def test_renew_subscription_opens_tariffs_scoped_to_subscription():
     await renew_subscription_callback(callback)
 
     assert callback.message.edit_text_calls[0]["text"] == (
-        "Продление подписки ID: 50\n\n"
-        "Выбери срок продления:"
+        "Продление подписки ID: 50\n\nВыбери срок продления:"
     )
-    assert callback_rows(
-        callback.message.edit_text_calls[0]["reply_markup"]
-    ) == [
+    assert callback_rows(callback.message.edit_text_calls[0]["reply_markup"]) == [
         ["renew_tariff:50:period_1_month"],
         ["renew_tariff:50:period_2_months"],
         ["renew_tariff:50:period_3_months"],
@@ -112,9 +106,7 @@ async def test_renew_subscription_opens_tariffs_scoped_to_subscription():
 
 @pytest.mark.asyncio
 async def test_renewal_tariff_keeps_subscription_id_in_payment_step():
-    callback = FakeCallback(
-        data="renew_tariff:50:period_2_months"
-    )
+    callback = FakeCallback(data="renew_tariff:50:period_2_months")
 
     await select_renewal_tariff_callback(callback)
 
@@ -122,12 +114,14 @@ async def test_renewal_tariff_keeps_subscription_id_in_payment_step():
     assert "Продление подписки ID: 50" in text
     assert "Тариф: 2 месяца + 6 дней в подарок" in text
     assert "Срок доступа: 66 дней" in text
-    assert callback_rows(
-        callback.message.edit_text_calls[0]["reply_markup"]
-    ) == [
+    assert callback_rows(callback.message.edit_text_calls[0]["reply_markup"]) == [
         [
-            "renew_pay:50:period_2_months:"
-            "cryptobot_usdt"
+            "renew_pay:50:period_2_months:cryptobot_usdt",
+            "renew_pay:50:period_2_months:cryptobot_usdc",
+        ],
+        [
+            "renew_pay:50:period_2_months:cryptobot_btc",
+            "renew_pay:50:period_2_months:cryptobot_eth",
         ],
         ["renew_subscription:50"],
     ]
@@ -163,9 +157,7 @@ async def test_renewal_payment_creates_order_for_selected_subscription(
 
         async def ensure_invoice_for_order(self, order_id: int):
             invoice_order_ids.append(order_id)
-            return {
-                "pay_url": "https://pay.example/invoice-23"
-            }
+            return {"pay_url": "https://pay.example/invoice-23"}
 
     monkeypatch.setattr(
         buy_module,
@@ -186,12 +178,7 @@ async def test_renewal_payment_creates_order_for_selected_subscription(
         FakeCryptoBotPaymentService,
     )
 
-    callback = FakeCallback(
-        data=(
-            "renew_pay:50:period_2_months:"
-            "cryptobot_usdt"
-        )
-    )
+    callback = FakeCallback(data=("renew_pay:50:period_2_months:cryptobot_usdt"))
 
     await select_payment_callback(callback, session=session)
 
@@ -254,12 +241,7 @@ async def test_invalid_renewal_target_does_not_create_invoice(
         FakeCryptoBotPaymentService,
     )
 
-    callback = FakeCallback(
-        data=(
-            "renew_pay:50:period_1_month:"
-            "cryptobot_usdt"
-        )
-    )
+    callback = FakeCallback(data=("renew_pay:50:period_1_month:cryptobot_usdt"))
 
     await select_payment_callback(callback, session=session)
 
@@ -293,7 +275,4 @@ def test_renewal_callback_data_fits_telegram_limit():
     ]
 
     assert callback_values
-    assert all(
-        len(value.encode("utf-8")) <= 64
-        for value in callback_values
-    )
+    assert all(len(value.encode("utf-8")) <= 64 for value in callback_values)

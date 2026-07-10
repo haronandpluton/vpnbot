@@ -10,6 +10,8 @@ class AppEnv(StrEnum):
 class CurrencyCode(StrEnum):
     USDT = "USDT"
     USDC = "USDC"
+    BTC = "BTC"
+    ETH = "ETH"
     XRP = "XRP"
     SOL = "SOL"
 

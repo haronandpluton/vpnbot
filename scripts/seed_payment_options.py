@@ -44,5 +44,14 @@ async def seed_payment_options() -> None:
             raise
 
 
+async def main() -> None:
+    from app.database.session import engine
+
+    try:
+        await seed_payment_options()
+    finally:
+        await engine.dispose()
+
+
 if __name__ == "__main__":
-    asyncio.run(seed_payment_options())
+    asyncio.run(main())
