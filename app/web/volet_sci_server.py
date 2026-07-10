@@ -73,7 +73,7 @@ class VoletSciWebServer:
 
     def _html_response(self, title: str, body: str) -> web.Response:
         html = f"""<!doctype html>
-    <html lang="ru">
+    <html lang="en">
     <head>
       <meta charset="utf-8">
       <title>{title}</title>
@@ -339,7 +339,7 @@ class VoletSciWebServer:
       <h3>Payment status</h3>
       <p>
         After payment, return to the Telegram bot and press
-        “Я оплатил / Проверить оплату”.
+        “I Paid / Check Payment”.
       </p>
     </div>
     """
@@ -400,8 +400,8 @@ class VoletSciWebServer:
 
         html = build_volet_sci_html(
             form_data,
-            title="Оплата VPN через Volet",
-            submit_text="Перейти к оплате Volet",
+            title="VPN Payment via Volet",
+            submit_text="Continue to Volet Payment",
             auto_submit=True,
         )
 
@@ -413,14 +413,14 @@ class VoletSciWebServer:
 
     async def handle_success(self, request: web.Request) -> web.Response:
         html = """<!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Платёж отправлен</title>
+  <title>Payment Submitted</title>
 </head>
 <body>
-  <h1>Платёж отправлен</h1>
-  <p>Если оплата прошла успешно, вернитесь в Telegram-бот и проверьте подписку.</p>
+  <h1>Payment Submitted</h1>
+  <p>If the payment was successful, return to the Telegram bot and check your subscription.</p>
 </body>
 </html>
 """
@@ -428,14 +428,14 @@ class VoletSciWebServer:
 
     async def handle_fail(self, request: web.Request) -> web.Response:
         html = """<!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Платёж не завершён</title>
+  <title>Payment Not Completed</title>
 </head>
 <body>
-  <h1>Платёж не завершён</h1>
-  <p>Вернитесь в Telegram-бот и создайте новый заказ или обратитесь в поддержку.</p>
+  <h1>Payment Not Completed</h1>
+  <p>Return to the Telegram bot and create a new order or contact support.</p>
 </body>
 </html>
 """

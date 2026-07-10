@@ -5,26 +5,20 @@ from pathlib import Path
 
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import (
-    CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    Message,
-)
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 router = Router()
 
 LEGAL_DIR = Path(__file__).resolve().parents[2] / "legal"
-
 TELEGRAM_TEXT_LIMIT = 4096
 LEGAL_CHUNK_LIMIT = 3900
 
 RULES_MENU_TEXT = (
-    "Service Rules:\n\n"
-    "1. Terms of Service\n"
-    "2. Refund and Payment Cancellation Policy\n"
-    "3. Privacy Policy\n"
-    "4. Plans"
+    "Правила сервиса:\n\n"
+    "1. Пользовательское соглашение\n"
+    "2. Условия возврата и отмены платежа\n"
+    "3. Политика конфиденциальности\n"
+    "4. Тарифы"
 )
 
 
@@ -33,31 +27,31 @@ def rules_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Terms of Service",
+                    text="Пользовательское соглашение",
                     callback_data="rules:terms",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Refund and Payment Cancellation",
+                    text="Возврат и отмена платежа",
                     callback_data="rules:refund",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Privacy Policy",
+                    text="Политика конфиденциальности",
                     callback_data="rules:privacy",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Plans",
+                    text="Тарифы",
                     callback_data="rules:tariffs",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Back to Menu",
+                    text="Назад в меню",
                     callback_data="back_to_main_menu",
                 )
             ],
@@ -70,13 +64,13 @@ def rules_back_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Back to Rules",
+                    text="Назад к правилам",
                     callback_data="rules",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Back to Menu",
+                    text="Назад в меню",
                     callback_data="back_to_main_menu",
                 )
             ],
@@ -99,7 +93,6 @@ def split_telegram_text(
         raise ValueError("Invalid Telegram chunk limit")
 
     normalized = text.strip()
-
     if not normalized:
         return []
 
@@ -108,16 +101,10 @@ def split_telegram_text(
 
     for paragraph in normalized.split("\n\n"):
         paragraph = paragraph.strip()
-
         if not paragraph:
             continue
 
-        candidate = (
-            paragraph
-            if not current
-            else f"{current}\n\n{paragraph}"
-        )
-
+        candidate = paragraph if not current else f"{current}\n\n{paragraph}"
         if len(candidate) <= limit:
             current = candidate
             continue
@@ -127,18 +114,11 @@ def split_telegram_text(
             current = ""
 
         while len(paragraph) > limit:
-            split_at = paragraph.rfind(
-                " ",
-                0,
-                limit + 1,
-            )
-
+            split_at = paragraph.rfind(" ", 0, limit + 1)
             if split_at <= 0:
                 split_at = limit
 
-            chunks.append(
-                paragraph[:split_at].rstrip()
-            )
+            chunks.append(paragraph[:split_at].rstrip())
             paragraph = paragraph[split_at:].lstrip()
 
         current = paragraph
@@ -154,22 +134,15 @@ async def send_legal_document(
     *,
     filename: str,
 ) -> None:
-    chunks = split_telegram_text(
-        load_legal_text(filename)
-    )
+    chunks = split_telegram_text(load_legal_text(filename))
 
     await callback.answer()
 
     for index, chunk in enumerate(chunks):
         is_last = index == len(chunks) - 1
-
         await callback.message.answer(
             chunk,
-            reply_markup=(
-                rules_back_keyboard()
-                if is_last
-                else None
-            ),
+            reply_markup=rules_back_keyboard() if is_last else None,
         )
 
 
@@ -182,9 +155,7 @@ async def rules_command(message: Message) -> None:
 
 
 @router.callback_query(F.data == "rules")
-async def rules_callback(
-    callback: CallbackQuery,
-) -> None:
+async def rules_callback(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         RULES_MENU_TEXT,
         reply_markup=rules_keyboard(),
@@ -193,9 +164,7 @@ async def rules_callback(
 
 
 @router.callback_query(F.data == "rules:terms")
-async def terms_callback(
-    callback: CallbackQuery,
-) -> None:
+async def terms_callback(callback: CallbackQuery) -> None:
     await send_legal_document(
         callback,
         filename="terms.txt",
@@ -203,9 +172,7 @@ async def terms_callback(
 
 
 @router.callback_query(F.data == "rules:refund")
-async def refund_callback(
-    callback: CallbackQuery,
-) -> None:
+async def refund_callback(callback: CallbackQuery) -> None:
     await send_legal_document(
         callback,
         filename="refund_policy.txt",
@@ -213,9 +180,7 @@ async def refund_callback(
 
 
 @router.callback_query(F.data == "rules:privacy")
-async def privacy_callback(
-    callback: CallbackQuery,
-) -> None:
+async def privacy_callback(callback: CallbackQuery) -> None:
     await send_legal_document(
         callback,
         filename="privacy.txt",
@@ -223,15 +188,12 @@ async def privacy_callback(
 
 
 @router.callback_query(F.data == "rules:tariffs")
-async def tariffs_callback(
-    callback: CallbackQuery,
-) -> None:
+async def tariffs_callback(callback: CallbackQuery) -> None:
     text = (
-        "Plans\n\n"
-        "1 device — 4 USDT\n"
-        "Subscription period — 30 days.\n\n"
-        "Plans for 2 and 3 devices "
-        "will be added later."
+        "Тарифы\n\n"
+        "1 устройство — 4 USDT\n"
+        "Срок подписки — 30 дней.\n\n"
+        "Тарифы на 2 и 3 устройства будут добавлены позднее."
     )
 
     await callback.message.edit_text(

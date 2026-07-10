@@ -1,0 +1,57 @@
+ТЕХНИЧЕСКИЙ ДОЛГ / ОТЛОЖЕННАЯ PRODUCTION-ПРОВЕРКА
+
+Функция: продление существующей VPN-подписки с сохранением UUID.
+
+Статус:
+- код задеплоен в production;
+- commit: 3ce9bda;
+- миграция БД: 4f2a9c6d1e7b;
+- сервис vpnbot.service работает;
+- локально пройдено 744 теста;
+- PostgreSQL concurrency test пройден;
+- заказ на продление успешно создаётся в production.
+
+Проверенный production-сценарий:
+- создан Order ID 29;
+- status = waiting_payment;
+- tariff_code = period_2_months;
+- duration_days = 66;
+- price_usd = 7.50;
+- target_subscription_id = 1;
+- activated_subscription_id = NULL.
+
+Не проверено из-за отсутствия возможности оплатить:
+1. Реальная оплата заказа на продление через CryptoBot.
+2. Обработка подтверждённого payment event.
+3. Переход заказа:
+   waiting_payment → paid → activated.
+4. Заполнение:
+   orders.activated_subscription_id = 1.
+5. Увеличение expires_at подписки ровно на 66 дней.
+6. Сохранение прежнего UUID.
+7. Сохранение первоначального subscriptions.order_id.
+8. Получение пользователем уведомления об успешном продлении.
+9. Отображение нового срока в /my_subscription.
+10. Повторная проверка того же оплаченного заказа без повторного увеличения срока.
+11. Запись в system_errors при искусственно вызванной ошибке активации после оплаты.
+
+Критерии успешного закрытия:
+- UUID до и после продления одинаковый;
+- subscriptions.order_id не изменился;
+- expires_at увеличился ровно на duration_days заказа;
+- заказ получил status=activated;
+- activated_subscription_id равен ID продлённой подписки;
+- повторная обработка payment event не меняет expires_at второй раз;
+- пользователь получает рабочую ссылку с прежним VPN-ключом;
+- в логах нет traceback, IntegrityError и ошибок VPN API.
+
+Дополнительный технический долг:
+- SubscriptionRepository.extend() остаётся legacy-методом и перезаписывает subscriptions.order_id.
+- Платёжный flow его больше не использует.
+- В дальнейшем метод нужно удалить либо переименовать и ограничить его использование, чтобы его случайно не вернули в post-payment flow.
+
+Production backup перед миграцией:
+- /var/backups/vpnbot/vpnbot_20260710_013548.dump
+
+Примечание:
+Order ID 29 не оплачен и должен автоматически перейти в expired после истечения TTL.

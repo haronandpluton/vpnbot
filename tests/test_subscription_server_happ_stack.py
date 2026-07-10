@@ -149,8 +149,8 @@ def test_connect_page_contains_happ_add_deep_link_copy_fallback_and_once_guard()
     assert "vpn_auto_open_" in page
     assert "setTimeout(function ()" in page
     assert "location.href = DEEP_LINK" in page
-    assert "Открыть вручную" in page
-    assert "Копировать" in page
+    assert "Open Manually" in page
+    assert "Copy" in page
     assert "/sub/" not in page
 
 
@@ -218,7 +218,7 @@ def test_connect_endpoint_returns_html_setup_page_with_safe_headers(tmp_path):
     assert harness.handler.close_connection is True
 
     page = harness.body.decode("utf-8")
-    assert "Устройство: <b>ios</b>" in page
+    assert "Device: <b>ios</b>" in page
     assert f"happ://add/https://connect.example.com/{VALID_UUID}" in page
     assert f'value="https://connect.example.com/{VALID_UUID}"' in page
     assert "sessionStorage" in page

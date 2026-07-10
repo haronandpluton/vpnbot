@@ -1,28 +1,28 @@
 from __future__ import annotations
 
 START_TEXT = (
-    "Добро пожаловать.\n\n"
-    "Здесь можно купить VPN-подписку, получить доступ и управлять своей подпиской."
+    "Welcome.\n\n"
+    "Here you can buy a VPN subscription, get access, and manage your subscription."
 )
 
 FAQ_TEXT = (
     "FAQ:\n"
-    "1. Установите клиент.\n"
-    "2. Выберите тариф.\n"
-    "3. Оплатите.\n"
-    "4. Получите доступ и подключитесь."
+    "1. Install the client.\n"
+    "2. Choose a plan.\n"
+    "3. Pay.\n"
+    "4. Get access and connect."
 )
 
 SUPPORT_TEXT = (
-    "Если возникли проблемы с оплатой или подключением, напишите в поддержку."
+    "If you have problems with payment or connection, contact support."
 )
 
 PAYMENT_EXACT_AMOUNT_WARNING = (
-    "Оплачивайте только точную сумму и только в указанной сети."
+    "Pay only the exact amount and use only the specified network."
 )
 
 XRP_MEMO_WARNING = (
-    "Для XRP обязательно указывайте destination tag / memo, если он показан в счете."
+    "For XRP, always include the destination tag / memo if it is shown on the invoice."
 )
 
 CALLBACK_MAIN_MENU = "main_menu"

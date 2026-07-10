@@ -1,58 +1,58 @@
-Политика конфиденциальности
+Privacy Policy
 
 PRESENT VPN 🎁
 
-Дата вступления в силу: 7 июля 2026 г.
+Effective date: July 7, 2026
 
-1. Какие данные обрабатываются
+1. Data We Process
 
-Для работы Telegram-бота и предоставления VPN-доступа Сервис может обрабатывать:
+To operate the Telegram bot and provide VPN access, the Service may process:
 
-• Telegram ID, username, имя и язык пользователя;
-• сведения о заказах, оплатах и статусах платежей;
-• сумму, валюту, сеть, адрес и идентификатор транзакции;
-• данные подписки: UUID, сервер, статус и срок действия;
-• технические журналы, сведения об ошибках и административных действиях;
-• IP-адрес, время обращения и User-Agent при использовании страницы подключения.
+• Telegram ID, username, name, and user language;
+• information about orders, payments, and payment statuses;
+• payment amount, currency, network, address, and transaction identifier;
+• subscription data: UUID, server, status, and expiration date;
+• technical logs, error information, and administrative actions;
+• IP address, request time, and User-Agent when the connection page is used.
 
-2. Для чего используются данные
+2. How We Use Data
 
-Данные используются только для:
+Data is used only to:
 
-• создания и исполнения заказов;
-• проверки платежей;
-• выдачи и продления VPN-доступа;
-• предотвращения злоупотреблений;
-• технической поддержки;
-• диагностики ошибок и обеспечения безопасности Сервиса.
+• create and fulfill orders;
+• verify payments;
+• issue and renew VPN access;
+• prevent abuse;
+• provide technical support;
+• diagnose errors and maintain Service security.
 
-3. Какие данные о трафике не собираются
+3. Traffic Data We Do Not Collect
 
-Сервис не осуществляет сбор и хранение:
+The Service does not collect or store:
 
-• списка посещённых сайтов;
-• содержимого интернет-трафика;
-• DNS-запросов;
-• истории интернет-активности пользователя.
+• lists of websites visited;
+• internet traffic content;
+• DNS requests;
+• the user's internet activity history.
 
-4. Передача данных третьим лицам
+4. Sharing Data with Third Parties
 
-Для работы Сервиса отдельные технические данные могут обрабатываться Telegram, поставщиками хостинга, платёжными сервисами, блокчейн-сетями и инфраструктурой VPN.
+To operate the Service, certain technical data may be processed by Telegram, hosting providers, payment services, blockchain networks, and VPN infrastructure providers.
 
-Передаётся только объём данных, необходимый для выполнения соответствующей операции.
+Only the amount of data required to perform the relevant operation is shared.
 
-5. Обработка платежей сторонними сервисами
+5. Payment Processing by Third Parties
 
-Для обработки криптовалютных платежей Оператор Сервиса может привлекать сторонних платежных провайдеров.
+The Service Operator may use third-party payment providers to process cryptocurrency payments.
 
-Обработка информации, необходимой для совершения платежа, осуществляется такими провайдерами в соответствии с их собственными условиями использования и политиками конфиденциальности.
+Information required to complete a payment is processed by those providers under their own terms of service and privacy policies.
 
-6. Срок хранения
+6. Data Retention
 
-Данные хранятся в течение срока, необходимого для работы подписки, обработки платежей, разрешения спорных ситуаций, обеспечения безопасности и выполнения применимых требований.
+Data is retained for as long as necessary to operate the subscription, process payments, resolve disputes, maintain security, and comply with applicable requirements.
 
-7. Обращения пользователя
+7. User Requests
 
-По вопросам обработки данных пользователь может обратиться в поддержку через команду /help.
+For questions about data processing, users may contact support through the /help command.
 
-Используя PRESENT VPN 🎁, пользователь подтверждает, что ознакомился с настоящей Политикой конфиденциальности.
+By using PRESENT VPN 🎁, the user confirms that they have read this Privacy Policy.

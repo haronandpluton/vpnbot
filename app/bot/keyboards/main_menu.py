@@ -15,19 +15,19 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Купить VPN",
+                    text="Buy VPN",
                     callback_data="buy_vpn",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Моя подписка",
+                    text="My Subscription",
                     callback_data="my_subscription",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Скачать VPN",
+                    text="Download VPN",
                     callback_data="download_vpn",
                 )
             ],
@@ -37,7 +37,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                     callback_data="faq",
                 ),
                 InlineKeyboardButton(
-                    text="Поддержка",
+                    text="Support",
                     callback_data="support",
                 ),
             ],
@@ -47,6 +47,9 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
 
 def _format_price_usd(value: Decimal) -> str:
     return format(value.normalize(), "f")
+
+def _format_tariff_button_price(value: Decimal) -> str:
+    return _format_price_usd(value).replace(".", ",")
 
 
 def tariff_keyboard(
@@ -64,7 +67,8 @@ def tariff_keyboard(
             [
                 InlineKeyboardButton(
                     text=(
-                        f"{tariff.title} — {_format_price_usd(tariff.price_usd)} USD"
+                        f"{_format_tariff_button_price(tariff.price_usd)}$ — "
+                        f"{tariff.title}"
                     ),
                     callback_data=callback_data,
                 )
@@ -79,7 +83,7 @@ def tariff_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="Назад",
+                text="Back",
                 callback_data=back_callback,
             )
         ]
@@ -130,7 +134,7 @@ def payment_method_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="Назад",
+                text="Back",
                 callback_data=back_callback,
             )
         ]
@@ -144,7 +148,7 @@ def back_to_main_menu_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Назад в меню",
+                    text="Back to Menu",
                     callback_data="back_to_main_menu",
                 )
             ]

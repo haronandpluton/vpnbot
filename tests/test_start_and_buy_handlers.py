@@ -66,7 +66,15 @@ def assert_callback_rows(markup, expected):
 
 def test_main_menu_text_is_stable_entrypoint_copy():
     assert main_menu_text() == (
-        "VPNFOR\n\nБыстрый VPN-доступ для стабильного подключения.\n\nВыбери действие:"
+        "🎁 Welcome to Present VPN! 🎁\n\n"
+        "I am your personal bot and assistant 🤖\n\n"
+        "I'll help you connect to VPN in seconds, securely access your "
+        "favorite websites and apps, and keep your privacy protected\n\n"
+        "🎁 Unique Present Days Program 🎁\n\n"
+        "✨ Every subscription already includes a present. Purchase any "
+        "plan and automatically receive extra VPN days. The longer your "
+        "subscription, the more present days you get ✨\n\n"
+        "🎁 Get your 3 VPN days as a present now 🎁"
     )
 
 
@@ -113,7 +121,7 @@ async def test_buy_command_sends_tariff_keyboard():
 
     await buy_command(message)
 
-    assert message.answer_calls[0]["text"] == "Выбери тариф:"
+    assert message.answer_calls[0]["text"] == "Choose a plan 🎁"
     assert_callback_rows(
         message.answer_calls[0]["reply_markup"],
         [
@@ -131,7 +139,7 @@ async def test_buy_vpn_callback_edits_to_tariff_keyboard_and_answers_callback():
 
     await buy_vpn_callback(callback)
 
-    assert callback.message.edit_text_calls[0]["text"] == "Выбери тариф:"
+    assert callback.message.edit_text_calls[0]["text"] == "Choose a plan 🎁"
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
         [
@@ -153,7 +161,7 @@ async def test_select_tariff_blocks_unavailable_tariff_without_editing_message()
     assert callback.message.edit_text_calls == []
     assert callback.answer_calls == [
         {
-            "text": "Этот тариф недоступен.",
+            "text": "This plan is unavailable.",
             "show_alert": True,
         }
     ]
@@ -166,10 +174,10 @@ async def test_select_tariff_period_1_month_edits_to_payment_method_keyboard():
     await select_tariff_callback(callback)
 
     text = callback.message.edit_text_calls[0]["text"]
-    assert "Тариф: 1 месяц + 3 дня в подарок" in text
-    assert "Устройств: 1" in text
-    assert "Срок доступа: 33 дня" in text
-    assert "Стоимость: 4 USD" in text
+    assert "Plan: 33 days (30 days + 3 days 🎁)" in text
+    assert "Devices: 1" in text
+    assert "Access period: 33 days" in text
+    assert "Price: 4 USD" in text
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
         [
@@ -202,7 +210,7 @@ async def test_select_payment_rejects_malformed_callback_data():
     await select_payment_callback(callback, session=FakeSession())
 
     assert callback.answer_calls == [
-        {"text": "Некорректный выбор оплаты", "show_alert": True}
+        {"text": "Invalid payment selection", "show_alert": True}
     ]
     assert callback.message.edit_text_calls == []
 
@@ -223,7 +231,7 @@ async def test_select_payment_rejects_unavailable_tariff_before_order_creation(
     await select_payment_callback(callback, session=FakeSession())
 
     assert callback.answer_calls == [
-        {"text": "Этот тариф недоступен", "show_alert": True}
+        {"text": "This plan is unavailable", "show_alert": True}
     ]
     assert order_service_calls == []
 
@@ -244,7 +252,7 @@ async def test_select_payment_rejects_unsupported_payment_option_before_order_cr
     await select_payment_callback(callback, session=FakeSession())
 
     assert callback.answer_calls == [
-        {"text": "Этот способ оплаты пока недоступен", "show_alert": True}
+        {"text": "This payment method is currently unavailable", "show_alert": True}
     ]
     assert order_service_calls == []
 
@@ -270,7 +278,7 @@ async def test_select_payment_rejects_cryptobot_when_disabled_before_order_creat
     await select_payment_callback(callback, session=FakeSession())
 
     assert callback.answer_calls == [
-        {"text": "CryptoBot сейчас отключен", "show_alert": True}
+        {"text": "CryptoBot is currently unavailable", "show_alert": True}
     ]
     assert order_service_calls == []
 
@@ -339,10 +347,10 @@ async def test_select_payment_happy_path_creates_order_invoice_and_payment_keybo
     assert invoice_order_ids == [23]
     text = callback.message.edit_text_calls[0]["text"]
     assert "Order ID: 23" in text
-    assert "Тариф: 2 месяца + 6 дней в подарок" in text
-    assert "Срок доступа: 66 дней" in text
-    assert "Стоимость: 7.50 USD" in text
-    assert "Валюта оплаты: BTC" in text
+    assert "Plan: 66 days (60 days + 6 days 🎁)" in text
+    assert "Access period: 66 days" in text
+    assert "Price: 7.50 USD" in text
+    assert "Payment currency: BTC" in text
     assert callback.message.edit_text_calls[0]["parse_mode"] == "HTML"
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
@@ -398,12 +406,12 @@ async def test_select_payment_rolls_back_and_notifies_user_when_cryptobot_invoic
     assert callback.message.answer_calls == [
         {
             "text": (
-                "Не удалось создать счёт CryptoBot. "
-                "Попробуй позже или обратись в поддержку."
+                "Could not create a CryptoBot invoice. "
+                "Try again later or contact support."
             )
         }
     ]
     assert callback.answer_calls == [
-        {"text": "Ошибка создания счёта", "show_alert": True}
+        {"text": "Invoice creation error", "show_alert": True}
     ]
     assert callback.message.edit_text_calls == []

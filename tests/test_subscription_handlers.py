@@ -125,10 +125,10 @@ async def test_my_subscription_sends_separate_card_for_each_active_subscription(
     assert len(message.answer_calls) == 2
 
     first_message = message.answer_calls[0]
-    assert "Подписка №1" in first_message["text"]
-    assert "ID подписки: 50" in first_message["text"]
-    assert "Устройств: 1" in first_message["text"]
-    assert "Активна до: 01.08.2026 12:00" in first_message["text"]
+    assert "Subscription #1" in first_message["text"]
+    assert "Subscription ID: 50" in first_message["text"]
+    assert "Devices: 1" in first_message["text"]
+    assert "Active until: 01.08.2026 12:00" in first_message["text"]
     assert row_callbacks(first_message["reply_markup"]) == [
         ["vpn_access:show_config:50"],
         ["vpn_access:show_config:50"],
@@ -139,9 +139,9 @@ async def test_my_subscription_sends_separate_card_for_each_active_subscription(
     ]
 
     second_message = message.answer_calls[1]
-    assert "Подписка №2" in second_message["text"]
-    assert "ID подписки: 77" in second_message["text"]
-    assert "Активна до: 05.09.2026 18:30" in second_message["text"]
+    assert "Subscription #2" in second_message["text"]
+    assert "Subscription ID: 77" in second_message["text"]
+    assert "Active until: 05.09.2026 18:30" in second_message["text"]
     assert row_callbacks(second_message["reply_markup"])[0] == [
         "vpn_access:show_config:77"
     ]
@@ -153,24 +153,24 @@ async def test_my_subscription_sends_separate_card_for_each_active_subscription(
     [
         (
             "user_not_found",
-            "Я пока не нашел твой профиль.\n\n"
-            "Сначала создай заказ или запусти бота через /start.",
+            "I could not find your profile yet.\n\n"
+            "Create an order first or start the bot with /start.",
         ),
         (
             "subscription_not_found",
-            "Активные подписки не найдены.\n\n"
-            "Если ты уже оплатил заказ, нажми «Проверить оплату» "
-            "в сообщении с заказом.",
+            "No active subscriptions found.\n\n"
+            "If you have already paid, click “Check Payment” "
+            "in the order message.",
         ),
         (
             "subscription_expired",
-            "Срок всех подписок истек.\n\n"
-            "Открой подписку и нажми «Продлить подписку».",
+            "All subscriptions have expired.\n\n"
+            "Open a subscription and click “Renew Subscription”.",
         ),
         (
             "unknown",
-            "Не удалось определить состояние подписок.\n\n"
-            "Обратись в поддержку.",
+            "Could not determine the subscription status.\n\n"
+            "Contact support.",
         ),
     ],
 )
@@ -194,7 +194,7 @@ async def test_show_vpn_config_callback_blocks_missing_user():
     await show_vpn_config_callback(callback, session="session")
 
     assert callback.answer_calls == [
-        {"text": "Не удалось определить пользователя.", "show_alert": True}
+        {"text": "Could not identify the user.", "show_alert": True}
     ]
     assert callback.message.answer_calls == []
     assert FakeMySubscriptionService.instances == []
@@ -215,7 +215,7 @@ async def test_show_vpn_config_callback_rejects_invalid_subscription_id(data):
     await show_vpn_config_callback(callback, session="session")
 
     assert callback.answer_calls == [
-        {"text": "Некорректная подписка.", "show_alert": True}
+        {"text": "Invalid subscription.", "show_alert": True}
     ]
     assert callback.message.answer_calls == []
     assert FakeMySubscriptionService.instances == []
@@ -242,7 +242,7 @@ async def test_show_vpn_config_callback_blocks_missing_active_access(result):
         {"telegram_id": 123, "subscription_id": 50}
     ]
     assert callback.answer_calls == [
-        {"text": "Активная подписка не найдена.", "show_alert": True}
+        {"text": "No active subscription found.", "show_alert": True}
     ]
     assert callback.message.answer_calls == []
 
@@ -251,8 +251,8 @@ async def test_show_vpn_config_callback_blocks_missing_active_access(result):
 @pytest.mark.parametrize(
     ("status", "expected_text"),
     [
-        ("subscription_expired", "Срок выбранной подписки истек."),
-        ("subscription_not_active", "Выбранная подписка не активна."),
+        ("subscription_expired", "The selected subscription has expired."),
+        ("subscription_not_active", "The selected subscription is not active."),
     ],
 )
 async def test_show_vpn_config_callback_reports_unavailable_selected_subscription(
@@ -295,7 +295,7 @@ async def test_show_vpn_config_callback_sends_selected_subscription_config():
     assert FakeMySubscriptionService.instances[0].access_calls == [
         {"telegram_id": 123, "subscription_id": 77}
     ]
-    assert "Страница подключения VPN:" in callback.message.answer_calls[0]["text"]
+    assert "VPN connection page:" in callback.message.answer_calls[0]["text"]
     assert (
         "<code>https://connect.example/sub-uuid-77</code>"
         in callback.message.answer_calls[0]["text"]
@@ -314,7 +314,7 @@ async def test_happ_android_callback_sends_android_instruction_and_answers_callb
     await happ_android_callback(callback)
 
     assert (
-        "Подключение через Happ VPN на Android:"
+        "Connecting through Happ VPN on Android:"
         in callback.message.answer_calls[0]["text"]
     )
     assert callback.answer_calls == [{"text": None}]
@@ -326,7 +326,7 @@ async def test_happ_ios_callback_sends_ios_instruction_and_answers_callback():
 
     await happ_ios_callback(callback)
 
-    assert "Подключение на iPhone:" in callback.message.answer_calls[0]["text"]
+    assert "Connecting on iPhone:" in callback.message.answer_calls[0]["text"]
     assert callback.answer_calls == [{"text": None}]
 
 
@@ -337,7 +337,7 @@ async def test_happ_fallback_callback_sends_fallback_instruction_and_answers_cal
     await happ_fallback_callback(callback)
 
     assert (
-        "Если Happ VPN не открылся автоматически:"
+        "If Happ VPN did not open automatically:"
         in callback.message.answer_calls[0]["text"]
     )
     assert callback.answer_calls == [{"text": None}]

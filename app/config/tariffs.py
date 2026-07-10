@@ -24,7 +24,7 @@ TARIFFS: dict[TariffCode, TariffConfig] = {
     # Legacy-тарифы нужны для чтения старых заказов.
     TariffCode.DEVICES_1: TariffConfig(
         code=TariffCode.DEVICES_1,
-        title="1 устройство — старый тариф",
+        title="1 device — legacy plan",
         device_limit=1,
         price_usd=Decimal("4.00"),
         base_days=30,
@@ -32,7 +32,7 @@ TARIFFS: dict[TariffCode, TariffConfig] = {
     ),
     TariffCode.DEVICES_2: TariffConfig(
         code=TariffCode.DEVICES_2,
-        title="2 устройства — старый тариф",
+        title="2 devices — legacy plan",
         device_limit=2,
         price_usd=Decimal("7.00"),
         base_days=30,
@@ -40,7 +40,7 @@ TARIFFS: dict[TariffCode, TariffConfig] = {
     ),
     TariffCode.DEVICES_3: TariffConfig(
         code=TariffCode.DEVICES_3,
-        title="3 устройства — старый тариф",
+        title="3 devices — legacy plan",
         device_limit=3,
         price_usd=Decimal("10.00"),
         base_days=30,
@@ -50,7 +50,7 @@ TARIFFS: dict[TariffCode, TariffConfig] = {
     # Актуальные тарифы. Каждый создаёт подписку на одно устройство.
     TariffCode.PERIOD_1_MONTH: TariffConfig(
         code=TariffCode.PERIOD_1_MONTH,
-        title="1 месяц + 3 дня в подарок",
+        title="33 days (30 days + 3 days 🎁)",
         device_limit=1,
         price_usd=Decimal("4.00"),
         base_days=30,
@@ -58,7 +58,7 @@ TARIFFS: dict[TariffCode, TariffConfig] = {
     ),
     TariffCode.PERIOD_2_MONTHS: TariffConfig(
         code=TariffCode.PERIOD_2_MONTHS,
-        title="2 месяца + 6 дней в подарок",
+        title="66 days (60 days + 6 days 🎁)",
         device_limit=1,
         price_usd=Decimal("7.50"),
         base_days=60,
@@ -66,11 +66,11 @@ TARIFFS: dict[TariffCode, TariffConfig] = {
     ),
     TariffCode.PERIOD_3_MONTHS: TariffConfig(
         code=TariffCode.PERIOD_3_MONTHS,
-        title="3 месяца + 10 дней в подарок",
+        title="99 days (90 days + 9 days 🎁)",
         device_limit=1,
         price_usd=Decimal("11.00"),
         base_days=90,
-        bonus_days=10,
+        bonus_days=9,
     ),
 }
 

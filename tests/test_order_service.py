@@ -561,7 +561,7 @@ async def test_create_order_with_telegram_stars_payment_option_sets_empty_curren
 
     assert order.tariff_code == TariffCode.PERIOD_3_MONTHS
     assert order.device_limit == 1
-    assert order.duration_days == 100
+    assert order.duration_days == 99
     assert order.price_usd == Decimal("11.00")
     assert order.payment_method == PaymentMethod.TELEGRAM_STARS
     assert order.payment_option_id == 9

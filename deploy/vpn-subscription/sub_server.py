@@ -157,7 +157,7 @@ def build_expired_vless_link(client_uuid: str) -> str:
         f"?encryption=none"
         f"&security=none"
         f"&type=tcp"
-        f"#❌ Подписка закончилась — продлите в Telegram"
+        f"#❌ Subscription expired — renew in Telegram"
     )
 
 
@@ -267,7 +267,7 @@ def build_connect_page(
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Подключение VPN</title>
+    <title>VPN Connection</title>
     <style>
         body {{
             margin: 0;
@@ -361,45 +361,45 @@ def build_connect_page(
 </head>
 <body>
     <div class="card">
-        <h1>Подключение VPN</h1>
+        <h1>VPN Connection</h1>
 
         <p>
-            Устройство: <b>{safe_device}</b><br>
-            Профиль: <b>vpn-{safe_uuid_short}</b>
+            Device: <b>{safe_device}</b><br>
+            Profile: <b>vpn-{safe_uuid_short}</b>
         </p>
 
         <div class="row">
             <div>🔗</div>
             <div>
-                <div id="status"><b>Пробуем открыть Happ VPN…</b></div>
-                <div class="muted">Если ничего не происходит, нажмите кнопку ниже.</div>
+                <div id="status"><b>Trying to open Happ VPN…</b></div>
+                <div class="muted">If nothing happens, click the button below.</div>
             </div>
         </div>
 
         <a id="openBtn" class="btn success" href="{safe_deep_link}" rel="noopener">
-            Открыть вручную
+            Open Manually
         </a>
 
         <div class="muted" id="hint" style="margin-top:10px"></div>
     </div>
 
     <div class="card">
-        <h1>Если не получилось открыть автоматически</h1>
+        <h1>If the app did not open automatically</h1>
 
         <ol>
-            <li>Нажмите кнопку <b>Копировать</b>.</li>
-            <li>Откройте Happ VPN.</li>
-            <li>Нажмите <b>+</b> в верхнем углу.</li>
-            <li>Выберите <b>Импорт/Вставить из буфера</b>.</li>
+            <li>Click <b>Copy</b>.</li>
+            <li>Open Happ VPN.</li>
+            <li>Click <b>+</b> in the upper corner.</li>
+            <li>Select <b>Import/Paste from Clipboard</b>.</li>
         </ol>
 
         <div class="field-row">
             <input type="text" id="subLinkField" value="{safe_subscription_url}" readonly>
-            <button id="copyBtn" class="primary">Копировать</button>
+            <button id="copyBtn" class="primary">Copy</button>
         </div>
 
         <p class="muted">
-            Эта ссылка также может быть добавлена как подписка: <code>Subscription / URL</code>.
+            This link can also be added as a subscription: <code>Subscription / URL</code>.
         </p>
     </div>
 
@@ -411,9 +411,9 @@ def build_connect_page(
         const userAgent = navigator.userAgent.toLowerCase();
 
         if (/android|iphone|ipad|ipod/.test(userAgent)) {{
-            hint.textContent = "Если появится запрос на открытие приложения — подтвердите.";
+            hint.textContent = "If prompted to open the app, confirm it.";
         }} else {{
-            hint.innerHTML = "Если появится запрос «Разрешить открыть <code>happ</code>», нажмите «Разрешить».";
+            hint.innerHTML = "If you see “Allow this page to open <code>happ</code>”, click “Allow”.";
         }}
 
         const AUTO_OPEN_KEY = "vpn_auto_open_" + SUBSCRIPTION_URL;
@@ -437,7 +437,7 @@ def build_connect_page(
                 const oldText = btn.textContent;
                 const oldBg = btn.style.background;
 
-                btn.textContent = "Скопировано!";
+                btn.textContent = "Copied!";
                 btn.style.background = "#16a34a";
 
                 setTimeout(function () {{

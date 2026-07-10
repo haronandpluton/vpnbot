@@ -1,163 +1,163 @@
-Пользовательское соглашение
+Terms of Service
 
 PRESENT VPN 🎁
 
-Дата вступления в силу: 7 июля 2026 г.
+Effective date: July 7, 2026
 
-Настоящее Пользовательское соглашение (далее — «Соглашение») регулирует порядок использования сервиса PRESENT VPN 🎁, предоставляемого через Telegram-бота (далее — «Сервис»).
+These Terms of Service (the “Terms”) govern the use of PRESENT VPN 🎁, provided through a Telegram bot (the “Service”).
 
-Используя Сервис, пользователь подтверждает, что ознакомился с настоящим Соглашением и принимает его условия в полном объеме.
-
-⸻
-
-1. Назначение Сервиса
-
-PRESENT VPN 🎁 предоставляет пользователям доступ к VPN-сервису для защиты интернет-соединения, повышения конфиденциальности и безопасного использования сети Интернет.
-
-Настоящий Сервис не ориентирован на пользователей из юрисдикций, в отношении которых использование или распространение подобных услуг ограничено, запрещено либо не входит в сферу деятельности Оператора Сервиса.
-
-Оператор Сервиса не осуществляет целенаправленного продвижения, предложения или предоставления услуг в юрисдикциях, на которые деятельность Сервиса не ориентирована. Если пользователь получает доступ к Сервису из такой юрисдикции, он делает это исключительно по собственной инициативе и под свою ответственность.
-
-Приобретая подписку, пользователь подтверждает, что использует Сервис по собственной инициативе, самостоятельно оценивает правомерность его использования в своей юрисдикции и принимает на себя всю связанную с этим ответственность.
+By using the Service, the user confirms that they have read these Terms and accept them in full.
 
 ⸻
 
-2. Право пользования
+1. Purpose of the Service
 
-Пользователь обязуется:
+PRESENT VPN 🎁 provides users with access to a VPN service intended to protect internet connections, improve privacy, and support secure internet use.
 
-использовать Сервис только в законных целях;
-соблюдать законодательство своей страны;
-не использовать Сервис для совершения противоправных действий;
-самостоятельно убедиться, что использование VPN разрешено законодательством государства его пребывания.
+The Service is not intended for users in jurisdictions where the use or distribution of such services is restricted, prohibited, or outside the Service Operator's scope of activity.
 
-Пользователь несет полную ответственность за использование Сервиса.
+The Service Operator does not intentionally market, offer, or provide services in jurisdictions that the Service does not target. If a user accesses the Service from such a jurisdiction, they do so solely on their own initiative and at their own risk.
 
-⸻
-
-3. Ограничения использования
-
-Запрещается использовать PRESENT VPN 🎁 для:
-
-распространения вредоносного программного обеспечения;
-проведения DDoS-атак;
-взлома информационных систем;
-мошеннической деятельности;
-рассылки спама;
-нарушения прав третьих лиц;
-любой деятельности, противоречащей применимому законодательству.
-
-При выявлении подобных действий доступ к Сервису может быть прекращен без предварительного уведомления.
+By purchasing a subscription, the user confirms that they use the Service on their own initiative, independently assess whether its use is lawful in their jurisdiction, and accept all related responsibility.
 
 ⸻
 
-4. Географические ограничения
+2. Right of Use
 
-Оператор Сервиса вправе ограничить или отказать в предоставлении доступа пользователям из отдельных государств или территорий в соответствии с требованиями применимого законодательства, санкционных режимов, внутренних правил Оператора Сервиса или по иным юридически обоснованным причинам.
+The user agrees to:
 
-Использование Сервиса в юрисдикциях, где VPN запрещен или ограничен законом, осуществляется исключительно на риск пользователя.
+use the Service only for lawful purposes;
+comply with the laws of their country;
+not use the Service to commit unlawful acts;
+independently verify that VPN use is permitted under the laws of the country where they are located.
 
-⸻
-
-5. Оплата
-
-Оплата подписки производится исключительно с использованием криптовалюты.
-
-Пользователь самостоятельно несет ответственность за правильность указания адресов кошельков, выбора сети блокчейна и иных реквизитов при совершении платежей.
-
-После подтверждения транзакции в соответствующей сети блокчейна платеж считается исполненным.
+The user is fully responsible for their use of the Service.
 
 ⸻
 
-6. Возврат средств
+3. Restrictions on Use
 
-В силу цифрового характера оказываемых услуг и немедленного предоставления доступа к Сервису оплаченные средства, как правило, возврату не подлежат.
+PRESENT VPN 🎁 must not be used for:
 
-В исключительных случаях Оператор Сервиса вправе принять решение о полном или частичном возврате средств по собственному усмотрению.
+distributing malware;
+conducting DDoS attacks;
+unauthorized access to information systems;
+fraudulent activity;
+sending spam;
+violating third-party rights;
+any activity that violates applicable law.
 
-⸻
-
-7. Доступность Сервиса
-
-Оператор Сервиса стремится обеспечивать стабильную работу PRESENT VPN 🎁, однако не гарантирует:
-
-непрерывную доступность Сервиса;
-отсутствие технических сбоев;
-отсутствие ограничений со стороны интернет-провайдеров, владельцев платформ или государственных органов;
-совместимость со всеми устройствами и программным обеспечением пользователя.
-
-Технические работы могут проводиться без предварительного уведомления.
+If such activity is detected, access to the Service may be terminated without prior notice.
 
 ⸻
 
-8. Ограничение ответственности
+4. Geographic Restrictions
 
-Сервис PRESENT VPN 🎁 предоставляется в соответствии с принципами «As Is» («как есть») и «As Available» («по мере доступности»), без каких-либо явных или подразумеваемых гарантий относительно его непрерывной работы, доступности, соответствия ожиданиям пользователя либо пригодности для достижения конкретных целей.
+The Service Operator may restrict or refuse access to users from certain countries or territories in accordance with applicable law, sanctions regimes, the Service Operator's internal policies, or other legally justified reasons.
 
-Оператор Сервиса не несет ответственности за:
-невозможность использования Сервиса по причинам, не зависящим от него;
-действия интернет-провайдеров;
-ограничения доступа со стороны государственных органов;
-потерю данных;
-косвенные убытки;
-упущенную выгоду пользователя.
-
-Максимальная ответственность Оператора Сервиса ограничивается суммой оплаченной пользователем подписки.
+Use of the Service in jurisdictions where VPN services are prohibited or restricted by law is entirely at the user's own risk.
 
 ⸻
 
-9. Конфиденциальность и обработка данных
+5. Payment
 
-Оператор Сервиса обрабатывает только минимальный объем технической и учетной информации, необходимой для предоставления доступа к Сервису, обеспечения его работоспособности и технической поддержки.
+Subscription payments are made exclusively using cryptocurrency.
 
-Оператор Сервиса не осуществляет сбор или хранение информации о посещаемых пользователем веб-сайтах, содержимом интернет-трафика, DNS-запросах и иных данных, характеризующих интернет-активность пользователя.
+The user is responsible for correctly entering wallet addresses, selecting the blockchain network, and providing all other payment details.
 
-Оператор Сервиса стремится минимизировать объем обрабатываемых данных и не использует техническую информацию в целях отслеживания действий пользователя в сети Интернет.
-
-⸻
-
-10. Интеллектуальная собственность
-
-Все объекты интеллектуальной собственности, связанные с работой PRESENT VPN 🎁, включая наименование Сервиса, логотип, элементы оформления, программный код, тексты, графические материалы, программное обеспечение и иные материалы, принадлежат Оператору Сервиса либо используются им на законных основаниях.
-
-Пользователю не предоставляются какие-либо права на объекты интеллектуальной собственности, за исключением ограниченного права использования Сервиса в соответствии с настоящим Соглашением.
-
-Запрещается копирование, распространение, модификация, декомпиляция, обратная разработка, перепродажа либо иное использование элементов Сервиса без предварительного письменного согласия Оператора Сервиса, за исключением случаев, прямо предусмотренных применимым законодательством.
+A payment is considered completed once the transaction is confirmed on the relevant blockchain network.
 
 ⸻
 
-11. Форс-мажор
+6. Refunds
 
-Оператор Сервиса не несет ответственности за полное или частичное неисполнение обязательств по настоящему Соглашению, если такое неисполнение явилось следствием обстоятельств, находящихся вне разумного контроля Оператора Сервиса.
+Due to the digital nature of the Service and the immediate provision of access, payments are generally non-refundable.
 
-К таким обстоятельствам относятся, включая, но не ограничиваясь: стихийные бедствия, аварии, перебои в работе сетей связи и электроснабжения, действия государственных органов, ограничения доступа к сети Интернет, блокировки, санкции, кибератаки, действия третьих лиц, сбои в работе Telegram, дата-центров, поставщиков хостинга, интернет-провайдеров и иные обстоятельства непреодолимой силы.
-
-На период действия таких обстоятельств исполнение обязательств Оператором Сервиса может быть полностью или частично приостановлено без возникновения обязанности по возмещению связанных с этим убытков.
+In exceptional cases, the Service Operator may decide, at its sole discretion, to issue a full or partial refund.
 
 ⸻
 
-12. Изменение условий
+7. Service Availability
 
-Оператор Сервиса вправе изменять настоящее Соглашение в любое время.
+The Service Operator aims to maintain stable operation of PRESENT VPN 🎁 but does not guarantee:
 
-Новая редакция вступает в силу с момента ее публикации или размещения в Telegram-боте.
+uninterrupted Service availability;
+the absence of technical failures;
+the absence of restrictions imposed by internet service providers, platform owners, or government authorities;
+compatibility with all user devices and software.
 
-Продолжение использования Сервиса означает согласие пользователя с новой редакцией Соглашения.
-
-⸻
-
-13. Прекращение предоставления услуг
-
-Оператор Сервиса вправе:
-
-отказать в предоставлении услуг;
-ограничить доступ;
-приостановить или прекратить обслуживание пользователя без предварительного уведомления в случае нарушения настоящего Соглашения либо при наличии иных законных оснований.
+Maintenance may be performed without prior notice.
 
 ⸻
 
-14. Заключительные положения
+8. Limitation of Liability
 
-Если какое-либо положение настоящего Соглашения будет признано недействительным или неисполнимым, остальные положения сохраняют свою юридическую силу.
+PRESENT VPN 🎁 is provided on an “As Is” and “As Available” basis, without any express or implied warranties regarding uninterrupted operation, availability, fitness for the user's expectations, or suitability for a particular purpose.
 
-Используя PRESENT VPN 🎁, пользователь подтверждает, что ознакомился с настоящим Соглашением, понимает его содержание и принимает все изложенные условия.
+The Service Operator is not liable for:
+inability to use the Service for reasons beyond its control;
+actions of internet service providers;
+access restrictions imposed by government authorities;
+data loss;
+indirect damages;
+lost profits.
+
+The Service Operator's maximum liability is limited to the amount paid by the user for the subscription.
+
+⸻
+
+9. Privacy and Data Processing
+
+The Service Operator processes only the minimum technical and account information required to provide access to the Service, maintain its operation, and provide technical support.
+
+The Service Operator does not collect or store information about websites visited by the user, internet traffic content, DNS requests, or other information describing the user's internet activity.
+
+The Service Operator aims to minimize the amount of data processed and does not use technical information to track user activity on the internet.
+
+⸻
+
+10. Intellectual Property
+
+All intellectual property associated with PRESENT VPN 🎁, including the Service name, logo, design elements, source code, texts, graphics, software, and other materials, belongs to the Service Operator or is lawfully used by the Service Operator.
+
+The user receives no intellectual property rights other than the limited right to use the Service under these Terms.
+
+Copying, distributing, modifying, decompiling, reverse engineering, reselling, or otherwise using any elements of the Service without the Service Operator's prior written consent is prohibited, except where expressly permitted by applicable law.
+
+⸻
+
+11. Force Majeure
+
+The Service Operator is not liable for full or partial failure to perform its obligations under these Terms when such failure results from circumstances beyond the Service Operator's reasonable control.
+
+Such circumstances include, without limitation: natural disasters, accidents, communication or power outages, actions of government authorities, internet access restrictions, blocking, sanctions, cyberattacks, actions of third parties, failures of Telegram, data centers, hosting providers, internet service providers, and other force majeure events.
+
+During such circumstances, the Service Operator's obligations may be fully or partially suspended without creating an obligation to compensate related losses.
+
+⸻
+
+12. Changes to the Terms
+
+The Service Operator may change these Terms at any time.
+
+A revised version takes effect when it is published or made available in the Telegram bot.
+
+Continued use of the Service constitutes acceptance of the revised Terms.
+
+⸻
+
+13. Termination of Service
+
+The Service Operator may:
+
+refuse to provide services;
+restrict access;
+suspend or terminate service to a user without prior notice if these Terms are violated or if other lawful grounds exist.
+
+⸻
+
+14. Final Provisions
+
+If any provision of these Terms is found invalid or unenforceable, the remaining provisions remain in full force and effect.
+
+By using PRESENT VPN 🎁, the user confirms that they have read these Terms, understand their content, and accept all stated conditions.

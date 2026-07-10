@@ -42,8 +42,8 @@ async def send_my_subscriptions(
 
             if subscription_status == "subscription_expired":
                 text = (
-                    f"Подписка №{position}\n"
-                    f"ID подписки: {subscription.subscription_id}\n\n"
+                    f"Subscription #{position}\n"
+                    f"Subscription ID: {subscription.subscription_id}\n\n"
                     f"{format_expired_vpn_subscription_text(
                         device_limit=subscription.device_limit,
                         expires_at=subscription.expires_at,
@@ -54,8 +54,8 @@ async def send_my_subscriptions(
                 )
             else:
                 text = (
-                    f"Подписка №{position}\n"
-                    f"ID подписки: {subscription.subscription_id}\n\n"
+                    f"Subscription #{position}\n"
+                    f"Subscription ID: {subscription.subscription_id}\n\n"
                     f"{format_vpn_access_text(
                         device_limit=subscription.device_limit,
                         expires_at=subscription.expires_at,
@@ -73,29 +73,29 @@ async def send_my_subscriptions(
 
     if result.status == "user_not_found":
         await message.answer(
-            "Я пока не нашел твой профиль.\n\n"
-            "Сначала создай заказ или запусти бота через /start."
+            "I could not find your profile yet.\n\n"
+            "Create an order first or start the bot with /start."
         )
         return
 
     if result.status == "subscription_not_found":
         await message.answer(
-            "Активные подписки не найдены.\n\n"
-            "Если ты уже оплатил заказ, нажми «Проверить оплату» "
-            "в сообщении с заказом."
+            "No active subscriptions found.\n\n"
+            "If you have already paid, click “Check Payment” "
+            "in the order message."
         )
         return
 
     if result.status == "subscription_expired":
         await message.answer(
-            "Срок всех подписок истек.\n\n"
-            "Открой подписку и нажми «Продлить подписку»."
+            "All subscriptions have expired.\n\n"
+            "Open a subscription and click “Renew Subscription”."
         )
         return
 
     await message.answer(
-        "Не удалось определить состояние подписок.\n\n"
-        "Обратись в поддержку."
+        "Could not determine the subscription status.\n\n"
+        "Contact support."
     )
 
 

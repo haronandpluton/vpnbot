@@ -36,7 +36,7 @@ def row_urls(markup):
 def test_format_datetime_handles_none_and_formats_without_timezone_suffix():
     value = datetime(2026, 7, 5, 12, 34, tzinfo=timezone.utc)
 
-    assert format_datetime(None) == "не указано"
+    assert format_datetime(None) == "not specified"
     assert format_datetime(value) == "05.07.2026 12:34"
 
 
@@ -45,62 +45,62 @@ def test_format_vpn_access_text_contains_device_limit_expiry_and_happ_instructio
 
     text = format_vpn_access_text(device_limit=3, expires_at=expires_at)
 
-    assert "Твоя VPN-подписка активна." in text
-    assert "Устройств: 3" in text
-    assert "Активна до: 01.08.2026 12:00" in text
+    assert "Your VPN subscription is active." in text
+    assert "Devices: 3" in text
+    assert "Active until: 01.08.2026 12:00" in text
     assert "Happ VPN" in text
-    assert "Подключить VPN" in text
+    assert "Connect VPN" in text
 
 
 def test_format_vpn_access_text_uses_dash_for_missing_device_limit_and_missing_expiry():
     text = format_vpn_access_text(device_limit=None, expires_at=None)
 
-    assert "Устройств: —" in text
-    assert "Активна до: не указано" in text
+    assert "Devices: —" in text
+    assert "Active until: not specified" in text
 
 
 def test_format_vpn_config_text_contains_config_uri_in_html_code_block_and_fallback_instructions():
     text = format_vpn_config_text("https://connect.example/sub-uuid")
 
-    assert "Страница подключения VPN:" in text
-    assert "Открыть вручную" in text
-    assert "Копировать" in text
+    assert "VPN connection page:" in text
+    assert "Open Manually" in text
+    assert "Copy" in text
     assert "<code>https://connect.example/sub-uuid</code>" in text
 
 
 def test_happ_android_instruction_text_contains_ordered_android_steps():
     text = happ_android_instruction_text()
 
-    assert "Подключение через Happ VPN на Android:" in text
-    assert "1. Установи Happ VPN." in text
-    assert "6. Выбери добавленный профиль и включи VPN." in text
+    assert "Connecting through Happ VPN on Android:" in text
+    assert "1. Install Happ VPN." in text
+    assert "6. Select the added profile and enable the VPN." in text
 
 
 def test_happ_ios_instruction_text_contains_ios_subscription_fallback():
     text = happ_ios_instruction_text()
 
-    assert "Подключение на iPhone:" in text
-    assert "Subscription / Подписку" in text
-    assert "автоматический импорт" in text
+    assert "Connecting on iPhone:" in text
+    assert "Subscription / URL" in text
+    assert "automatic import" in text
 
 
 def test_happ_fallback_text_contains_manual_open_and_clipboard_flow():
     text = happ_fallback_text()
 
-    assert "Если Happ VPN не открылся автоматически:" in text
-    assert "Открыть вручную" in text
-    assert "Копировать" in text
-    assert "Вставить из буфера" in text
+    assert "If Happ VPN did not open automatically:" in text
+    assert "Open Manually" in text
+    assert "Copy" in text
+    assert "Paste from Clipboard" in text
 
 
 def test_main_menu_keyboard_has_stable_user_actions():
     markup = main_menu_keyboard()
 
     assert row_texts(markup) == [
-        ["Купить VPN"],
-        ["Моя подписка"],
-        ["Скачать VPN"],
-        ["FAQ", "Поддержка"],
+        ["Buy VPN"],
+        ["My Subscription"],
+        ["Download VPN"],
+        ["FAQ", "Support"],
     ]
     assert row_callbacks(markup) == [
         ["buy_vpn"],
@@ -114,10 +114,10 @@ def test_tariff_keyboard_exposes_current_tariff_callbacks_and_back_button():
     markup = tariff_keyboard()
 
     assert row_texts(markup) == [
-        ["1 месяц + 3 дня в подарок — 4 USD"],
-        ["2 месяца + 6 дней в подарок — 7.5 USD"],
-        ["3 месяца + 10 дней в подарок — 11 USD"],
-        ["Назад"],
+        ["4$ — 33 days (30 days + 3 days 🎁)"],
+        ["7,5$ — 66 days (60 days + 6 days 🎁)"],
+        ["11$ — 99 days (90 days + 9 days 🎁)"],
+        ["Back"],
     ]
     assert row_callbacks(markup) == [
         ["select_tariff:period_1_month"],
@@ -135,7 +135,7 @@ def test_payment_method_keyboard_uses_selected_tariff_in_callback():
         ["BTC", "ETH"],
         ["TON", "LTC"],
         ["BNB", "TRX"],
-        ["Назад"],
+        ["Back"],
     ]
     assert row_callbacks(markup) == [
         [
@@ -161,7 +161,7 @@ def test_payment_method_keyboard_uses_selected_tariff_in_callback():
 def test_back_to_main_menu_keyboard_returns_single_stable_callback():
     markup = back_to_main_menu_keyboard()
 
-    assert row_texts(markup) == [["Назад в меню"]]
+    assert row_texts(markup) == [["Back to Menu"]]
     assert row_callbacks(markup) == [["back_to_main_menu"]]
 
 
@@ -173,7 +173,7 @@ def test_payment_check_keyboard_without_payment_url_shows_check_and_dev_button()
     )
 
     assert row_texts(markup) == [
-        ["Я оплатил / Проверить оплату"],
+        ["I Paid / Check Payment"],
         ["DEV: подтвердить mock-платёж"],
     ]
     assert row_callbacks(markup) == [
@@ -187,13 +187,13 @@ def test_payment_check_keyboard_with_payment_url_puts_pay_button_first_and_can_h
     markup = payment_check_keyboard(
         order_id=23,
         payment_url="https://pay.example/invoice",
-        payment_url_text="Оплатить CryptoBot",
+        payment_url_text="Pay CryptoBot",
         show_dev_button=False,
     )
 
     assert row_texts(markup) == [
-        ["Оплатить CryptoBot"],
-        ["Я оплатил / Проверить оплату"],
+        ["Pay CryptoBot"],
+        ["I Paid / Check Payment"],
     ]
     assert row_callbacks(markup) == [[None], ["check_payment:23"]]
     assert row_urls(markup) == [["https://pay.example/invoice"], [None]]
@@ -203,12 +203,12 @@ def test_vpn_access_keyboard_binds_actions_to_selected_subscription():
     markup = vpn_access_keyboard(subscription_id=303)
 
     assert row_texts(markup) == [
-        ["Подключить VPN"],
-        ["Отправить доступ снова"],
-        ["Продлить подписку"],
-        ["Купить ещё подписку"],
+        ["Connect VPN"],
+        ["Send Access Again"],
+        ["Renew Subscription"],
+        ["Buy Another Subscription"],
         ["Happ VPN: Android", "Happ VPN: iPhone"],
-        ["Если Happ не открывается"],
+        ["If Happ Does Not Open"],
     ]
     assert row_callbacks(markup) == [
         ["vpn_access:show_config:303"],

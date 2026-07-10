@@ -9,10 +9,10 @@ from app.bot.handlers.legal import (
 
 
 def test_rules_menu_contains_all_sections():
-    assert "Пользовательское соглашение" in RULES_MENU_TEXT
-    assert "Условия возврата и отмены платежа" in RULES_MENU_TEXT
-    assert "Политика конфиденциальности" in RULES_MENU_TEXT
-    assert "Тарифы" in RULES_MENU_TEXT
+    assert "Terms of Service" in RULES_MENU_TEXT
+    assert "Refund and Payment Cancellation Policy" in RULES_MENU_TEXT
+    assert "Privacy Policy" in RULES_MENU_TEXT
+    assert "Plans" in RULES_MENU_TEXT
 
 
 def test_rules_keyboard_contains_expected_callbacks():
@@ -53,9 +53,9 @@ def test_legal_documents_are_available():
     privacy = load_legal_text("privacy.txt")
     refund = load_legal_text("refund_policy.txt")
 
-    assert terms.startswith("Пользовательское соглашение")
-    assert privacy.startswith("Политика конфиденциальности")
-    assert refund.startswith("Условия возврата и отмены платежа")
+    assert terms.startswith("Terms of Service")
+    assert privacy.startswith("Privacy Policy")
+    assert refund.startswith("Refund and Payment Cancellation Policy")
 
 
 def test_long_legal_text_is_split_within_telegram_limit():

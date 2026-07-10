@@ -117,7 +117,7 @@ async def admin_resend_config_command(
         return
 
     user_text = (
-            "Твой VPN-доступ повторно отправлен администратором.\n\n"
+            "Your VPN access has been sent again by an administrator.\n\n"
             + format_vpn_access_text(
         device_limit=None,
         expires_at=result.expires_at,

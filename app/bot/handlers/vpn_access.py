@@ -16,7 +16,7 @@ router = Router()
 @router.callback_query(F.data == "vpn_access:show_config")
 async def legacy_show_vpn_config_callback(callback: CallbackQuery):
     await callback.answer(
-        "Открой /my_subscription и выбери нужную подписку.",
+        "Open /my_subscription and select the subscription you need.",
         show_alert=True,
     )
 
@@ -27,17 +27,17 @@ async def show_vpn_config_callback(
     session: AsyncSession,
 ):
     if callback.from_user is None:
-        await callback.answer("Не удалось определить пользователя.", show_alert=True)
+        await callback.answer("Could not identify the user.", show_alert=True)
         return
 
     try:
         subscription_id = int(callback.data.rsplit(":", maxsplit=1)[1])
     except (AttributeError, IndexError, ValueError):
-        await callback.answer("Некорректная подписка.", show_alert=True)
+        await callback.answer("Invalid subscription.", show_alert=True)
         return
 
     if subscription_id <= 0:
-        await callback.answer("Некорректная подписка.", show_alert=True)
+        await callback.answer("Invalid subscription.", show_alert=True)
         return
 
     result = await MySubscriptionService(
@@ -48,15 +48,15 @@ async def show_vpn_config_callback(
     )
 
     if result.status == "subscription_expired":
-        await callback.answer("Срок выбранной подписки истек.", show_alert=True)
+        await callback.answer("The selected subscription has expired.", show_alert=True)
         return
 
     if result.status == "subscription_not_active":
-        await callback.answer("Выбранная подписка не активна.", show_alert=True)
+        await callback.answer("The selected subscription is not active.", show_alert=True)
         return
 
     if result.status != "active" or result.config_uri is None:
-        await callback.answer("Активная подписка не найдена.", show_alert=True)
+        await callback.answer("No active subscription found.", show_alert=True)
         return
 
     await callback.message.answer(
@@ -66,7 +66,7 @@ async def show_vpn_config_callback(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="Открыть в Happ VPN",
+                        text="Open in Happ VPN",
                         url=result.config_uri,
                     )
                 ]

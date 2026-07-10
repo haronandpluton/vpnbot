@@ -5,7 +5,7 @@ def payment_check_keyboard(
     order_id: int,
     *,
     payment_url: str | None = None,
-    payment_url_text: str = "Оплатить",
+    payment_url_text: str = "Pay",
     show_dev_button: bool = True,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
@@ -23,7 +23,7 @@ def payment_check_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="Я оплатил / Проверить оплату",
+                text="I Paid / Check Payment",
                 callback_data=f"check_payment:{order_id}",
             )
         ]

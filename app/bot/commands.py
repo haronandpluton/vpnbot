@@ -4,14 +4,14 @@ from aiogram import Bot
 from aiogram.types import BotCommand, BotCommandScopeDefault
 
 USER_COMMANDS: list[BotCommand] = [
-    BotCommand(command="start", description="🏠 Главное меню"),
-    BotCommand(command="buy", description="🛒 Купить VPN"),
-    BotCommand(command="my_subscription", description="📱 Моя подписка и устройства"),
+    BotCommand(command="start", description="🏠 Main Menu"),
+    BotCommand(command="buy", description="🛒 Buy VPN"),
+    BotCommand(command="my_subscription", description="📱 My Subscription and Devices"),
     BotCommand(command="faq", description="📘 FAQ"),
-    BotCommand(command="help", description="🆘 Поддержка"),
-    BotCommand(command="rules", description="📄 Правила сервиса"),
-    BotCommand(command="profile", description="👤 Профиль"),
-    BotCommand(command="present", description="🎁 Подарочная программа"),
+    BotCommand(command="help", description="🆘 Support"),
+    BotCommand(command="rules", description="📄 Service Rules"),
+    BotCommand(command="profile", description="👤 Profile"),
+    BotCommand(command="present", description="🎁 Present Program"),
 ]
 
 

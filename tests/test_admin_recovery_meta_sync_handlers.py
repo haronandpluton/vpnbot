@@ -346,10 +346,10 @@ async def test_resend_config_sends_user_message_logs_admin_action_and_answers_ad
 
     assert bot.send_message_calls[0]["chat_id"] == 777000
     assert (
-        "Твой VPN-доступ повторно отправлен администратором."
+        "Your VPN access has been sent again by an administrator."
         in bot.send_message_calls[0]["text"]
     )
-    assert "Активна до: 05.08.2026 12:00" in bot.send_message_calls[0]["text"]
+    assert "Active until: 05.08.2026 12:00" in bot.send_message_calls[0]["text"]
     assert bot.send_message_calls[0]["parse_mode"] == "HTML"
     assert bot.send_message_calls[0]["reply_markup"] is not None
 

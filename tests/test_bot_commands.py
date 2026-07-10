@@ -18,14 +18,14 @@ class FakeBot:
 
 def test_user_command_menu_contains_expected_public_commands():
     assert [(item.command, item.description) for item in USER_COMMANDS] == [
-        ("start", "🏠 Главное меню"),
-        ("buy", "🛒 Купить VPN"),
-        ("my_subscription", "📱 Моя подписка и устройства"),
+        ("start", "🏠 Main Menu"),
+        ("buy", "🛒 Buy VPN"),
+        ("my_subscription", "📱 My Subscription and Devices"),
         ("faq", "📘 FAQ"),
-        ("help", "🆘 Поддержка"),
-        ("rules", "📄 Правила сервиса"),
-        ("profile", "👤 Профиль"),
-        ("present", "🎁 Подарочная программа"),
+        ("help", "🆘 Support"),
+        ("rules", "📄 Service Rules"),
+        ("profile", "👤 Profile"),
+        ("present", "🎁 Present Program"),
     ]
 
 

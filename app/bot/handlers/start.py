@@ -11,9 +11,15 @@ router = Router()
 
 def main_menu_text() -> str:
     return (
-        "VPNFOR\n\n"
-        "Быстрый VPN-доступ для стабильного подключения.\n\n"
-        "Выбери действие:"
+        "🎁 Welcome to Present VPN! 🎁\n\n"
+        "I am your personal bot and assistant 🤖\n\n"
+        "I'll help you connect to VPN in seconds, securely access your "
+        "favorite websites and apps, and keep your privacy protected\n\n"
+        "🎁 Unique Present Days Program 🎁\n\n"
+        "✨ Every subscription already includes a present. Purchase any "
+        "plan and automatically receive extra VPN days. The longer your "
+        "subscription, the more present days you get ✨\n\n"
+        "🎁 Get your 3 VPN days as a present now 🎁"
     )
 
 
@@ -41,7 +47,7 @@ async def my_subscription_callback(
 ):
     if callback.from_user is None:
         await callback.answer(
-            "Не удалось определить пользователя.",
+            "Could not identify the user.",
             show_alert=True,
         )
         return

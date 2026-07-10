@@ -70,7 +70,7 @@ def test_download_platform_keyboard_has_stable_platform_callbacks():
     assert row_texts(markup) == [
         ["iPhone / iOS", "Android"],
         ["Windows", "macOS"],
-        ["Назад в меню"],
+        ["Back to Menu"],
     ]
     assert row_callbacks(markup) == [
         ["download_vpn:ios", "download_vpn:android"],
@@ -83,10 +83,10 @@ def test_platform_download_keyboard_contains_download_url_installed_and_back_cal
     markup = platform_download_keyboard("https://download.example/app")
 
     assert row_texts(markup) == [
-        ["Скачать Happ"],
-        ["Я установил(а)"],
-        ["Назад к платформам"],
-        ["Назад в меню"],
+        ["Download Happ"],
+        ["I Have Installed It"],
+        ["Back to Platforms"],
+        ["Back to Menu"],
     ]
     assert row_urls(markup) == [
         ["https://download.example/app"],
@@ -106,9 +106,9 @@ def test_installed_continue_keyboard_routes_to_buy_subscription_and_platforms():
     markup = installed_continue_keyboard()
 
     assert row_texts(markup) == [
-        ["Купить VPN", "Моя подписка"],
-        ["Назад к платформам"],
-        ["Назад в меню"],
+        ["Buy VPN", "My Subscription"],
+        ["Back to Platforms"],
+        ["Back to Menu"],
     ]
     assert row_callbacks(markup) == [
         ["buy_vpn", "my_subscription"],
@@ -127,9 +127,9 @@ def test_support_keyboard_without_username_hides_direct_support_url(monkeypatch)
     markup = support_keyboard()
 
     assert row_texts(markup) == [
-        ["Проблема с оплатой"],
-        ["VPN не подключается"],
-        ["Назад в меню"],
+        ["Payment Problem"],
+        ["VPN Does Not Connect"],
+        ["Back to Menu"],
     ]
     assert row_callbacks(markup) == [
         ["support:payment"],
@@ -149,10 +149,10 @@ def test_support_keyboard_with_username_adds_telegram_url_and_strips_at(monkeypa
     markup = support_keyboard()
 
     assert row_texts(markup) == [
-        ["Проблема с оплатой"],
-        ["VPN не подключается"],
-        ["Написать в поддержку"],
-        ["Назад в меню"],
+        ["Payment Problem"],
+        ["VPN Does Not Connect"],
+        ["Contact Support"],
+        ["Back to Menu"],
     ]
     assert row_urls(markup) == [[None], [None], ["https://t.me/support_bot"], [None]]
 
@@ -160,7 +160,7 @@ def test_support_keyboard_with_username_adds_telegram_url_and_strips_at(monkeypa
 def test_support_back_keyboard_returns_to_support_or_main_menu():
     markup = support_back_keyboard()
 
-    assert row_texts(markup) == [["Назад в поддержку"], ["Назад в меню"]]
+    assert row_texts(markup) == [["Back to Support"], ["Back to Menu"]]
     assert row_callbacks(markup) == [["support"], ["back_to_main_menu"]]
 
 
@@ -170,8 +170,8 @@ async def test_download_vpn_callback_edits_to_platform_selection_and_answers():
 
     await download_vpn_callback(callback)
 
-    assert "Скачать VPN" in callback.message.edit_text_calls[0]["text"]
-    assert "Выбери свою платформу:" in callback.message.edit_text_calls[0]["text"]
+    assert "Download VPN" in callback.message.edit_text_calls[0]["text"]
+    assert "Choose your platform:" in callback.message.edit_text_calls[0]["text"]
     assert row_callbacks(callback.message.edit_text_calls[0]["reply_markup"]) == [
         ["download_vpn:ios", "download_vpn:android"],
         ["download_vpn:windows", "download_vpn:macos"],
@@ -184,10 +184,10 @@ async def test_download_vpn_callback_edits_to_platform_selection_and_answers():
 @pytest.mark.parametrize(
     ("handler", "title", "download_url"),
     [
-        (download_vpn_ios_callback, "Happ для iPhone / iOS", HAPP_IOS_URL),
-        (download_vpn_android_callback, "Happ для Android", HAPP_ANDROID_URL),
-        (download_vpn_windows_callback, "Happ для Windows", HAPP_DESKTOP_RELEASES_URL),
-        (download_vpn_macos_callback, "Happ для macOS", HAPP_DESKTOP_RELEASES_URL),
+        (download_vpn_ios_callback, "Happ for iPhone / iOS", HAPP_IOS_URL),
+        (download_vpn_android_callback, "Happ for Android", HAPP_ANDROID_URL),
+        (download_vpn_windows_callback, "Happ for Windows", HAPP_DESKTOP_RELEASES_URL),
+        (download_vpn_macos_callback, "Happ for macOS", HAPP_DESKTOP_RELEASES_URL),
     ],
 )
 async def test_platform_download_callbacks_show_platform_text_url_and_answer(
@@ -217,7 +217,7 @@ async def test_download_vpn_installed_callback_edits_to_continue_actions():
 
     await download_vpn_installed_callback(callback)
 
-    assert "Клиент установлен" in callback.message.edit_text_calls[0]["text"]
+    assert "Client Installed" in callback.message.edit_text_calls[0]["text"]
     assert row_callbacks(callback.message.edit_text_calls[0]["reply_markup"]) == [
         ["buy_vpn", "my_subscription"],
         ["download_vpn"],
@@ -257,9 +257,9 @@ async def test_faq_callback_edits_to_faq_and_back_to_main_menu():
     await faq_callback(callback)
 
     assert "FAQ" in callback.message.edit_text_calls[0]["text"]
-    assert "Как начать пользоваться VPN?" in callback.message.edit_text_calls[0]["text"]
+    assert "How do I start using the VPN?" in callback.message.edit_text_calls[0]["text"]
     assert (
-        "Что если отправил не ту сумму или не в той сети?"
+        "What if I sent the wrong amount or used the wrong network?"
         in callback.message.edit_text_calls[0]["text"]
     )
     assert row_callbacks(callback.message.edit_text_calls[0]["reply_markup"]) == [
@@ -272,8 +272,8 @@ async def test_faq_callback_edits_to_faq_and_back_to_main_menu():
 @pytest.mark.parametrize(
     ("support_username", "expected_contact"),
     [
-        ("@support_bot", "Контакт поддержки: @support_bot"),
-        ("", "Контакт поддержки пока не указан в настройках."),
+        ("@support_bot", "Support contact: @support_bot"),
+        ("", "The support contact has not been configured yet."),
     ],
 )
 async def test_support_callback_shows_contact_state_and_support_keyboard(
@@ -290,10 +290,10 @@ async def test_support_callback_shows_contact_state_and_support_keyboard(
 
     await support_callback(callback)
 
-    assert "Поддержка" in callback.message.edit_text_calls[0]["text"]
+    assert "Support" in callback.message.edit_text_calls[0]["text"]
     assert expected_contact in callback.message.edit_text_calls[0]["text"]
     assert (
-        "Order ID, txid, сумму, сеть оплаты"
+        "Order ID, txid, payment amount, network"
         in callback.message.edit_text_calls[0]["text"]
     )
     assert row_callbacks(callback.message.edit_text_calls[0]["reply_markup"])[0:2] == [
@@ -309,9 +309,9 @@ async def test_support_payment_callback_edits_to_payment_problem_checklist():
 
     await support_payment_callback(callback)
 
-    assert "Проблема с оплатой" in callback.message.edit_text_calls[0]["text"]
+    assert "Payment Problem" in callback.message.edit_text_calls[0]["text"]
     assert "Order ID." in callback.message.edit_text_calls[0]["text"]
-    assert "txid транзакции." in callback.message.edit_text_calls[0]["text"]
+    assert "Transaction txid." in callback.message.edit_text_calls[0]["text"]
     assert row_callbacks(callback.message.edit_text_calls[0]["reply_markup"]) == [
         ["support"],
         ["back_to_main_menu"],
@@ -325,8 +325,8 @@ async def test_support_vpn_callback_edits_to_vpn_problem_checklist():
 
     await support_vpn_callback(callback)
 
-    assert "VPN не подключается" in callback.message.edit_text_calls[0]["text"]
-    assert "Подписка активна" in callback.message.edit_text_calls[0]["text"]
+    assert "VPN Does Not Connect" in callback.message.edit_text_calls[0]["text"]
+    assert "The subscription is active" in callback.message.edit_text_calls[0]["text"]
     assert (
         "Android / iOS / Windows / macOS"
         in callback.message.edit_text_calls[0]["text"]

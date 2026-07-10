@@ -455,7 +455,7 @@ async def test_second_paid_order_creates_independent_subscription_with_new_uuid(
             user_id=user.id,
             tariff_code=TariffCode.PERIOD_3_MONTHS,
             device_limit=1,
-            duration_days=100,
+            duration_days=99,
             price_usd=Decimal("11.00"),
             payment_method=PaymentMethod.CRYPTO,
             payment_option_id=first_order.payment_option_id,

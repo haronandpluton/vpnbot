@@ -259,8 +259,8 @@ async def test_handler_renders_expired_card_without_access_buttons(
 
     assert len(message.answer_calls) == 1
     card = message.answer_calls[0]
-    assert "Срок VPN-подписки истёк." in card["text"]
-    assert "Была активна до: 01.07.2026 12:00" in card["text"]
+    assert "Your VPN subscription has expired." in card["text"]
+    assert "Was active until: 01.07.2026 12:00" in card["text"]
     assert row_callbacks(card["reply_markup"]) == [
         ["renew_subscription:50"]
     ]
@@ -275,7 +275,7 @@ def test_expired_subscription_keyboard_contains_only_renewal():
     assert [
         [button.text for button in row]
         for row in markup.inline_keyboard
-    ] == [["Продлить подписку"]]
+    ] == [["Renew Subscription"]]
 
 
 def test_expired_subscription_text_explains_same_key_renewal():
@@ -291,7 +291,7 @@ def test_expired_subscription_text_explains_same_key_renewal():
         ),
     )
 
-    assert "Срок VPN-подписки истёк." in text
-    assert "Устройств: 1" in text
-    assert "Была активна до: 01.07.2026 12:00" in text
-    assert "с тем же VPN-ключом" in text
+    assert "Your VPN subscription has expired." in text
+    assert "Devices: 1" in text
+    assert "Was active until: 01.07.2026 12:00" in text
+    assert "with the same VPN key" in text

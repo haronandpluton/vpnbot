@@ -34,7 +34,7 @@ def test_tariffs_have_expected_public_prices_device_limits_and_duration():
 
     assert one_month == TariffConfig(
         code=TariffCode.PERIOD_1_MONTH,
-        title="1 месяц + 3 дня в подарок",
+        title="33 days (30 days + 3 days 🎁)",
         device_limit=1,
         price_usd=Decimal("4.00"),
         base_days=30,
@@ -51,8 +51,8 @@ def test_tariffs_have_expected_public_prices_device_limits_and_duration():
     assert three_months.device_limit == 1
     assert three_months.price_usd == Decimal("11.00")
     assert three_months.base_days == 90
-    assert three_months.bonus_days == 10
-    assert three_months.duration_days == 100
+    assert three_months.bonus_days == 9
+    assert three_months.duration_days == 99
 
     assert [tariff.code for tariff in get_purchasable_tariffs()] == [
         TariffCode.PERIOD_1_MONTH,

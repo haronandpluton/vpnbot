@@ -107,7 +107,7 @@ def test_expired_payload_contains_clear_happ_stub_profile(tmp_path):
     assert decoded.startswith(f"vless://{VALID_UUID}@127.0.0.1:9")
     assert "security=none" in decoded
     assert "type=tcp" in decoded
-    assert "#❌ Подписка закончилась — продлите в Telegram" in decoded
+    assert "#❌ Subscription expired — renew in Telegram" in decoded
 
 
 def test_active_payload_contains_real_vless_profile(tmp_path):
@@ -143,7 +143,7 @@ def test_root_endpoint_returns_expired_stub_when_metadata_expired(tmp_path):
 
     decoded = decode_payload(harness.body)
     assert decoded.startswith(f"vless://{VALID_UUID}@127.0.0.1:9")
-    assert "Подписка закончилась" in decoded
+    assert "Subscription expired" in decoded
 
 
 def test_sub_fallback_endpoint_returns_expired_stub_when_metadata_expired(tmp_path):
@@ -163,4 +163,4 @@ def test_sub_fallback_endpoint_returns_expired_stub_when_metadata_expired(tmp_pa
 
     decoded = decode_payload(harness.body)
     assert decoded.startswith(f"vless://{VALID_UUID}@127.0.0.1:9")
-    assert "Подписка закончилась" in decoded
+    assert "Subscription expired" in decoded

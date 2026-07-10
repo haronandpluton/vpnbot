@@ -113,7 +113,7 @@ async def test_check_payment_callback_rejects_malformed_order_id_before_services
 
     await check_payment_callback(callback, session="session")
 
-    assert callback.answer_calls == [{"text": "Некорректный заказ", "show_alert": True}]
+    assert callback.answer_calls == [{"text": "Invalid order", "show_alert": True}]
     assert callback.message.answer_calls == []
     assert FakeOrderService.instances == []
     assert FakeCryptoBotPaymentService.instances == []
@@ -132,7 +132,7 @@ async def test_check_payment_callback_rejects_foreign_order_before_provider_call
     assert FakeCryptoBotPaymentService.instances == []
     assert FakePaymentCheckService.instances == []
     assert CALL_LOG == [("owner", 23)]
-    assert callback.answer_calls == [{"text": "Заказ не найден", "show_alert": True}]
+    assert callback.answer_calls == [{"text": "Order not found", "show_alert": True}]
 
 
 @pytest.mark.asyncio
@@ -149,8 +149,8 @@ async def test_check_payment_callback_handles_cryptobot_sync_error_without_check
     assert callback.message.answer_calls == [
         {
             "text": (
-                "Не удалось проверить оплату через CryptoBot. "
-                "Попробуй еще раз через несколько секунд."
+                "Could not check the payment through CryptoBot. "
+                "Try again in a few seconds."
             )
         }
     ]
@@ -163,31 +163,31 @@ async def test_check_payment_callback_handles_cryptobot_sync_error_without_check
     [
         (
             "waiting_payment",
-            "Платеж пока не найден. Если ты уже оплатил, проверь еще раз через несколько секунд.",
+            "Payment has not been found yet. If you have already paid, check again in a few seconds.",
         ),
         (
             "activated",
-            "Оплата подтверждена. VPN-доступ активирован. Открой раздел «Моя подписка» и нажми «Подключить VPN».",
+            "Payment confirmed. VPN access is active. Open “My Subscription” and click “Connect VPN”.",
         ),
         (
             "paid_waiting_activation",
-            "Оплата подтверждена. Доступ активируется.",
+            "Payment confirmed. Access is being activated.",
         ),
         (
             "expired",
-            "Срок действия заказа истек. Создай новый заказ.",
+            "The order has expired. Create a new order.",
         ),
         (
             "late_payment",
-            "Платеж найден, но пришел после истечения срока заказа. Нужна ручная проверка.",
+            "Payment found, but it arrived after the order expired. Manual review is required.",
         ),
         (
             "activation_failed",
-            "Оплата найдена, но активация доступа не завершилась. Нужна ручная проверка.",
+            "Payment found, but access activation was not completed. Manual review is required.",
         ),
         (
             "unknown",
-            "Статус заказа не удалось определить. Обратись в поддержку.",
+            "Could not determine the order status. Contact support.",
         ),
     ],
 )
@@ -213,23 +213,23 @@ async def test_check_payment_callback_sends_clear_text_for_payment_statuses(
     [
         (
             "wrong_amount",
-            "Платеж найден, но сумма не совпадает с заказом.",
+            "Payment found, but the amount does not match the order.",
         ),
         (
             "wrong_network",
-            "Платеж найден, но отправлен не в той сети.",
+            "Payment found, but it was sent through the wrong network.",
         ),
         (
             "wrong_currency",
-            "Платеж найден, но валюта не совпадает с заказом.",
+            "Payment found, but the currency does not match the order.",
         ),
         (
             "other",
-            "Платеж найден, но он некорректный. Обратись в поддержку.",
+            "Payment found, but it is invalid. Contact support.",
         ),
         (
             None,
-            "Платеж найден, но он некорректный. Обратись в поддержку.",
+            "Payment found, but it is invalid. Contact support.",
         ),
     ],
 )

@@ -18,7 +18,7 @@ async def check_payment_callback(
     order_id_raw = callback.data.replace("check_payment:", "")
 
     if not order_id_raw.isdigit():
-        await callback.answer("Некорректный заказ", show_alert=True)
+        await callback.answer("Invalid order", show_alert=True)
         return
 
     order_id = int(order_id_raw)
@@ -29,7 +29,7 @@ async def check_payment_callback(
     )
     if order is None:
         await callback.answer(
-            "Заказ не найден",
+            "Order not found",
             show_alert=True,
         )
         return
@@ -38,7 +38,7 @@ async def check_payment_callback(
         await CryptoBotPaymentService(session).sync_paid_invoice_and_activate(order_id)
     except CryptoBotAPIError:
         await callback.message.answer(
-            "Не удалось проверить оплату через CryptoBot. Попробуй еще раз через несколько секунд."
+            "Could not check the payment through CryptoBot. Try again in a few seconds."
         )
         await callback.answer()
         return
@@ -46,37 +46,37 @@ async def check_payment_callback(
     result = await PaymentCheckService(session).check_order_payment(order_id)
 
     if result.status == "waiting_payment":
-        text = "Платеж пока не найден. Если ты уже оплатил, проверь еще раз через несколько секунд."
+        text = "Payment has not been found yet. If you have already paid, check again in a few seconds."
 
     elif result.status == "activated":
-        text = "Оплата подтверждена. VPN-доступ активирован. Открой раздел «Моя подписка» и нажми «Подключить VPN»."
+        text = "Payment confirmed. VPN access is active. Open “My Subscription” and click “Connect VPN”."
 
     elif result.status == "paid_waiting_activation":
-        text = "Оплата подтверждена. Доступ активируется."
+        text = "Payment confirmed. Access is being activated."
 
     elif result.status == "invalid_payment":
         reason = result.error_message or "invalid_payment"
 
         if reason == "wrong_amount":
-            text = "Платеж найден, но сумма не совпадает с заказом."
+            text = "Payment found, but the amount does not match the order."
         elif reason == "wrong_network":
-            text = "Платеж найден, но отправлен не в той сети."
+            text = "Payment found, but it was sent through the wrong network."
         elif reason == "wrong_currency":
-            text = "Платеж найден, но валюта не совпадает с заказом."
+            text = "Payment found, but the currency does not match the order."
         else:
-            text = "Платеж найден, но он некорректный. Обратись в поддержку."
+            text = "Payment found, but it is invalid. Contact support."
 
     elif result.status == "expired":
-        text = "Срок действия заказа истек. Создай новый заказ."
+        text = "The order has expired. Create a new order."
 
     elif result.status == "late_payment":
-        text = "Платеж найден, но пришел после истечения срока заказа. Нужна ручная проверка."
+        text = "Payment found, but it arrived after the order expired. Manual review is required."
 
     elif result.status == "activation_failed":
-        text = "Оплата найдена, но активация доступа не завершилась. Нужна ручная проверка."
+        text = "Payment found, but access activation was not completed. Manual review is required."
 
     else:
-        text = "Статус заказа не удалось определить. Обратись в поддержку."
+        text = "Could not determine the order status. Contact support."
 
     await callback.message.answer(text)
     await callback.answer()

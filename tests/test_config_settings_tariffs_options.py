@@ -164,7 +164,7 @@ def test_tariffs_match_public_pricing_and_duration():
 
     assert TARIFFS[TariffCode.PERIOD_1_MONTH] == TariffConfig(
         code=TariffCode.PERIOD_1_MONTH,
-        title="1 месяц + 3 дня в подарок",
+        title="33 days (30 days + 3 days 🎁)",
         device_limit=1,
         price_usd=Decimal("4.00"),
         base_days=30,
@@ -178,7 +178,7 @@ def test_tariffs_match_public_pricing_and_duration():
     ] == [
         (Decimal("4.00"), 33, 1),
         (Decimal("7.50"), 66, 1),
-        (Decimal("11.00"), 100, 1),
+        (Decimal("11.00"), 99, 1),
     ]
 
     assert TARIFFS[TariffCode.DEVICES_1].duration_days == 30
@@ -315,10 +315,10 @@ def test_common_enums_keep_external_string_values_stable():
 
 
 def test_text_constants_and_callback_constants_are_stable_for_user_navigation():
-    assert "Добро пожаловать" in constants.START_TEXT
+    assert "Welcome" in constants.START_TEXT
     assert "FAQ" in constants.FAQ_TEXT
-    assert "поддержку" in constants.SUPPORT_TEXT
-    assert "точную сумму" in constants.PAYMENT_EXACT_AMOUNT_WARNING
+    assert "support" in constants.SUPPORT_TEXT
+    assert "exact amount" in constants.PAYMENT_EXACT_AMOUNT_WARNING
     assert "XRP" in constants.XRP_MEMO_WARNING
     assert constants.CALLBACK_MAIN_MENU == "main_menu"
     assert constants.CALLBACK_BUY == "buy"

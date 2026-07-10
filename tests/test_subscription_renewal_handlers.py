@@ -80,7 +80,7 @@ async def test_renew_subscription_rejects_invalid_subscription_id(data):
     assert callback.message.edit_text_calls == []
     assert callback.answer_calls == [
         {
-            "text": "Некорректная подписка.",
+            "text": "Invalid subscription.",
             "show_alert": True,
         }
     ]
@@ -93,7 +93,7 @@ async def test_renew_subscription_opens_tariffs_scoped_to_subscription():
     await renew_subscription_callback(callback)
 
     assert callback.message.edit_text_calls[0]["text"] == (
-        "Продление подписки ID: 50\n\nВыбери срок продления:"
+        "Subscription renewal ID: 50\n\nChoose a renewal period:"
     )
     assert callback_rows(callback.message.edit_text_calls[0]["reply_markup"]) == [
         ["renew_tariff:50:period_1_month"],
@@ -111,9 +111,9 @@ async def test_renewal_tariff_keeps_subscription_id_in_payment_step():
     await select_renewal_tariff_callback(callback)
 
     text = callback.message.edit_text_calls[0]["text"]
-    assert "Продление подписки ID: 50" in text
-    assert "Тариф: 2 месяца + 6 дней в подарок" in text
-    assert "Срок доступа: 66 дней" in text
+    assert "Subscription renewal ID: 50" in text
+    assert "Plan: 66 days (60 days + 6 days 🎁)" in text
+    assert "Access period: 66 days" in text
     assert callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"]
     ) == [
@@ -206,8 +206,8 @@ async def test_renewal_payment_creates_order_for_selected_subscription(
     ]
     assert invoice_order_ids == [23]
     text = callback.message.edit_text_calls[0]["text"]
-    assert "Заказ на продление создан." in text
-    assert "Подписка ID: 50" in text
+    assert "Renewal order created." in text
+    assert "Subscription ID: 50" in text
     assert "Order ID: 23" in text
     assert callback.answer_calls == [{"text": None}]
     assert session.rollback_count == 0
@@ -259,7 +259,7 @@ async def test_invalid_renewal_target_does_not_create_invoice(
     assert callback.message.edit_text_calls == []
     assert callback.answer_calls == [
         {
-            "text": "Эту подписку нельзя продлить.",
+            "text": "This subscription cannot be renewed.",
             "show_alert": True,
         }
     ]

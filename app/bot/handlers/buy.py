@@ -29,12 +29,12 @@ def _format_price_usd(value) -> str:
 
 def _days_word(days: int) -> str:
     if days % 10 == 1 and days % 100 != 11:
-        return "день"
+        return "day"
 
     if days % 10 in {2, 3, 4} and days % 100 not in {12, 13, 14}:
-        return "дня"
+        return "days"
 
-    return "дней"
+    return "days"
 
 
 def _get_purchasable_tariff(raw_code: str) -> TariffConfig | None:
@@ -67,28 +67,28 @@ def _tariff_details_text(
     target_subscription_id: int | None = None,
 ) -> str:
     if target_subscription_id is None:
-        title = f"Тариф: {tariff.title}"
+        title = f"Plan: {tariff.title}"
     else:
         title = (
-            f"Продление подписки ID: {target_subscription_id}\nТариф: {tariff.title}"
+            f"Subscription renewal ID: {target_subscription_id}\nPlan: {tariff.title}"
         )
 
     return (
         f"{title}\n"
-        f"Устройств: {tariff.device_limit}\n"
-        f"Срок доступа: {tariff.duration_days} "
+        f"Devices: {tariff.device_limit}\n"
+        f"Access period: {tariff.duration_days} "
         f"{_days_word(tariff.duration_days)}\n"
-        f"Стоимость: {_format_price_usd(tariff.price_usd)} USD\n\n"
-        "Оплачивая подписку, ты подтверждаешь, что ознакомился "
-        "с правилами сервиса: /rules\n\n"
-        "Выберите валюту оплаты:"
+        f"Price: {_format_price_usd(tariff.price_usd)} USD\n\n"
+        "By paying for the subscription, you confirm that you have read "
+        "the service rules: /rules\n\n"
+        "Choose a payment currency:"
     )
 
 
 @router.message(Command("buy"))
 async def buy_command(message: Message):
     await message.answer(
-        "Выбери тариф:",
+        "Choose a plan 🎁",
         reply_markup=tariff_keyboard(),
     )
 
@@ -96,7 +96,7 @@ async def buy_command(message: Message):
 @router.callback_query(F.data == "buy_vpn")
 async def buy_vpn_callback(callback: CallbackQuery):
     await callback.message.edit_text(
-        "Выбери тариф:",
+        "Choose a plan 🎁",
         reply_markup=tariff_keyboard(),
     )
     await callback.answer()
@@ -109,13 +109,13 @@ async def renew_subscription_callback(callback: CallbackQuery):
 
     if subscription_id is None:
         await callback.answer(
-            "Некорректная подписка.",
+            "Invalid subscription.",
             show_alert=True,
         )
         return
 
     await callback.message.edit_text(
-        (f"Продление подписки ID: {subscription_id}\n\nВыбери срок продления:"),
+        (f"Subscription renewal ID: {subscription_id}\n\nChoose a renewal period:"),
         reply_markup=tariff_keyboard(
             target_subscription_id=subscription_id,
         ),
@@ -130,7 +130,7 @@ async def select_tariff_callback(callback: CallbackQuery):
 
     if tariff is None:
         await callback.answer(
-            "Этот тариф недоступен.",
+            "This plan is unavailable.",
             show_alert=True,
         )
         return
@@ -148,7 +148,7 @@ async def select_renewal_tariff_callback(callback: CallbackQuery):
 
     if len(parts) != 3:
         await callback.answer(
-            "Некорректный выбор тарифа.",
+            "Invalid plan selection.",
             show_alert=True,
         )
         return
@@ -159,14 +159,14 @@ async def select_renewal_tariff_callback(callback: CallbackQuery):
 
     if subscription_id is None:
         await callback.answer(
-            "Некорректная подписка.",
+            "Invalid subscription.",
             show_alert=True,
         )
         return
 
     if tariff is None:
         await callback.answer(
-            "Этот тариф недоступен.",
+            "This plan is unavailable.",
             show_alert=True,
         )
         return
@@ -196,7 +196,7 @@ async def select_payment_callback(
     if callback.data.startswith("select_payment:"):
         if len(parts) != 3:
             await callback.answer(
-                "Некорректный выбор оплаты",
+                "Invalid payment selection",
                 show_alert=True,
             )
             return
@@ -205,7 +205,7 @@ async def select_payment_callback(
     else:
         if len(parts) != 4:
             await callback.answer(
-                "Некорректный выбор оплаты",
+                "Invalid payment selection",
                 show_alert=True,
             )
             return
@@ -220,7 +220,7 @@ async def select_payment_callback(
 
         if target_subscription_id is None:
             await callback.answer(
-                "Некорректная подписка.",
+                "Invalid subscription.",
                 show_alert=True,
             )
             return
@@ -229,7 +229,7 @@ async def select_payment_callback(
 
     if tariff is None:
         await callback.answer(
-            "Этот тариф недоступен",
+            "This plan is unavailable",
             show_alert=True,
         )
         return
@@ -246,7 +246,7 @@ async def select_payment_callback(
         or not is_cryptobot_payment_option(payment_option_code)
     ):
         await callback.answer(
-            "Этот способ оплаты пока недоступен",
+            "This payment method is currently unavailable",
             show_alert=True,
         )
         return
@@ -254,7 +254,7 @@ async def select_payment_callback(
     settings = get_settings()
     if not settings.cryptobot_enabled:
         await callback.answer(
-            "CryptoBot сейчас отключен",
+            "CryptoBot is currently unavailable",
             show_alert=True,
         )
         return
@@ -281,7 +281,7 @@ async def select_payment_callback(
             raise
 
         await callback.answer(
-            "Эту подписку нельзя продлить.",
+            "This subscription cannot be renewed.",
             show_alert=True,
         )
         return
@@ -293,11 +293,11 @@ async def select_payment_callback(
     except CryptoBotAPIError as exc:
         await session.rollback()
         await callback.message.answer(
-            "Не удалось создать счёт CryptoBot. "
-            "Попробуй позже или обратись в поддержку."
+            "Could not create a CryptoBot invoice. "
+            "Try again later or contact support."
         )
         await callback.answer(
-            "Ошибка создания счёта",
+            "Invoice creation error",
             show_alert=True,
         )
         raise exc
@@ -311,27 +311,27 @@ async def select_payment_callback(
     )
 
     if target_subscription_id is None:
-        order_title = "Заказ создан."
+        order_title = "Order created."
         target_line = ""
     else:
-        order_title = "Заказ на продление создан."
-        target_line = f"Подписка ID: {target_subscription_id}\n"
+        order_title = "Renewal order created."
+        target_line = f"Subscription ID: {target_subscription_id}\n"
 
     text = (
         f"{order_title}\n\n"
         f"Order ID: {order.id}\n"
         f"{target_line}"
-        f"Тариф: {tariff.title}\n"
-        f"Устройств: {order.device_limit}\n"
-        f"Срок доступа: {order.duration_days} "
+        f"Plan: {tariff.title}\n"
+        f"Devices: {order.device_limit}\n"
+        f"Access period: {order.duration_days} "
         f"{_days_word(order.duration_days)}\n"
-        f"Стоимость: {order.price_usd:.2f} USD\n"
-        f"Валюта оплаты: {payment_option.currency.value}\n"
-        "Оплата: CryptoBot\n\n"
-        "Нажми «Оплатить через CryptoBot». CryptoBot рассчитает "
-        "точную сумму в выбранной валюте по цене заказа в USD.\n\n"
-        "После оплаты вернись в бот и нажми "
-        "«Я оплатил / Проверить оплату»."
+        f"Price: {order.price_usd:.2f} USD\n"
+        f"Payment currency: {payment_option.currency.value}\n"
+        "Payment: CryptoBot\n\n"
+        "Click “Pay with CryptoBot”. CryptoBot will calculate "
+        "the exact amount in the selected currency based on the order price in USD.\n\n"
+        "After payment, return to the bot and click "
+        "“I Paid / Check Payment”."
     )
 
     await callback.message.edit_text(
@@ -339,7 +339,7 @@ async def select_payment_callback(
         reply_markup=payment_check_keyboard(
             order.id,
             payment_url=payment_url,
-            payment_url_text="Оплатить через CryptoBot",
+            payment_url_text="Pay with CryptoBot",
             show_dev_button=settings.dev_mode,
         ),
         parse_mode="HTML",

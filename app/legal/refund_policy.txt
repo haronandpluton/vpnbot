@@ -1,55 +1,55 @@
-Условия возврата и отмены платежа
+Refund and Payment Cancellation Policy
 
 PRESENT VPN 🎁
 
-Дата вступления в силу: 7 июля 2026 г.
+Effective date: July 7, 2026
 
-1. Общие условия
+1. General Terms
 
-VPN-доступ является цифровой услугой и предоставляется после подтверждения оплаты.
+VPN access is a digital service and is provided after payment confirmation.
 
-После активации подписки и выдачи доступа платёж, как правило, возврату не подлежит.
+Once the subscription has been activated and access has been issued, payments are generally non-refundable.
 
-2. Когда обращение может быть рассмотрено
+2. When a Request May Be Considered
 
-Оператор Сервиса может рассмотреть полный или частичный возврат, если:
+The Service Operator may consider a full or partial refund if:
 
-• один и тот же заказ был оплачен повторно;
-• платёж подтверждён, но доступ не был предоставлен по вине Сервиса;
-• Сервис не может предоставить оплаченную услугу по техническим причинам.
+• the same order was paid more than once;
+• the payment was confirmed, but access was not provided due to a fault of the Service;
+• the Service cannot provide the paid service for technical reasons.
 
-Решение принимается после проверки заказа и транзакции.
+A decision is made after the order and transaction have been reviewed.
 
-3. Ошибки при криптовалютной оплате
+3. Cryptocurrency Payment Errors
 
-Пользователь самостоятельно отвечает за правильность:
+The user is responsible for verifying:
 
-• адреса получателя;
-• выбранной блокчейн-сети;
-• валюты и токена;
-• суммы платежа;
-• memo или destination tag, если они требуются.
+• the recipient address;
+• the selected blockchain network;
+• the currency and token;
+• the payment amount;
+• the memo or destination tag, when required.
 
-Платёж, отправленный на неправильный адрес, в неправильной сети или с неверными реквизитами, может быть утрачен и не может быть автоматически восстановлен Сервисом.
+A payment sent to the wrong address, through the wrong network, or with incorrect details may be lost and cannot be automatically recovered by the Service.
 
-Комиссии блокчейна, биржи или кошелька не возвращаются.
+Blockchain, exchange, and wallet fees are non-refundable.
 
-4. Недоплата, переплата и просроченный заказ
+4. Underpayment, Overpayment, and Expired Orders
 
-Недоплата не активирует заказ автоматически.
+Underpayment does not activate an order automatically.
 
-Переплата не увеличивает срок подписки автоматически.
+Overpayment does not automatically increase the subscription period.
 
-Платёж по истёкшему заказу может потребовать ручной проверки.
+A payment made for an expired order may require manual review.
 
-5. Как обратиться
+5. How to Submit a Request
 
-Для рассмотрения обращения необходимо связаться с поддержкой через /help и предоставить:
+To request a review, contact support through /help and provide:
 
 • Order ID;
-• txid транзакции;
-• сумму, валюту и сеть;
-• время платежа;
-• скриншот из кошелька или биржи.
+• transaction txid;
+• amount, currency, and network;
+• payment time;
+• a screenshot from the wallet or exchange.
 
-Каждое обращение рассматривается индивидуально.
+Each request is reviewed individually.

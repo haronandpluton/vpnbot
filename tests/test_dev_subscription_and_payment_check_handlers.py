@@ -200,9 +200,9 @@ async def test_dev_create_active_subscription_sends_activation_summary_and_vpn_k
             "/my_subscription"
         )
     }
-    assert "Твоя VPN-подписка активна." in message.answer_calls[2]["text"]
-    assert "Устройств: 1" in message.answer_calls[2]["text"]
-    assert "Активна до: 01.08.2026 12:00" in message.answer_calls[2]["text"]
+    assert "Your VPN subscription is active." in message.answer_calls[2]["text"]
+    assert "Devices: 1" in message.answer_calls[2]["text"]
+    assert "Active until: 01.08.2026 12:00" in message.answer_calls[2]["text"]
     assert row_callbacks(message.answer_calls[2]["reply_markup"]) == [
         ["vpn_access:show_config:303"],
         ["vpn_access:show_config:303"],
