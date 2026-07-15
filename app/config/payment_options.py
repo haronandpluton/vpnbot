@@ -187,13 +187,13 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         sort_order=170,
     ),
     "telegram_stars": PaymentOptionConfig(
-        code="telegram_stars",
-        payment_method=PaymentMethod.TELEGRAM_STARS,
-        currency=None,
-        network=None,
-        display_name="Telegram Stars",
-        is_active=True,
-        sort_order=200,
+    code="telegram_stars",
+    payment_method=PaymentMethod.TELEGRAM_STARS,
+    currency=CurrencyCode.XTR,
+    network=None,
+    display_name="Telegram Stars",
+    is_active=True,
+    sort_order=200,
     ),
 }
 

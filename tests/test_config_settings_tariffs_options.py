@@ -278,6 +278,7 @@ def test_active_payment_options_include_cryptobot_assets_and_stars_in_order():
         CurrencyCode.LTC,
         CurrencyCode.BNB,
         CurrencyCode.TRX,
+        CurrencyCode.XTR,
     ]
 
     assert all(option.is_active for option in active)

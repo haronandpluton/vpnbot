@@ -535,13 +535,13 @@ async def test_create_order_with_missing_payment_option_rolls_back_and_does_not_
 
 
 @pytest.mark.asyncio
-async def test_create_order_with_telegram_stars_payment_option_sets_empty_currency_and_network():
+async def test_create_order_with_telegram_stars_payment_option_sets_xtr_currency():
     existing_user = make_user(user_id=7, telegram_id=123)
     stars_option = make_payment_option(
         option_id=9,
         code="telegram_stars",
         payment_method=PaymentMethod.TELEGRAM_STARS,
-        currency=None,
+        currency=CurrencyCode.XTR,
         network=None,
     )
     order_repository = FakeOrderRepository(active_waiting_order=None)
@@ -566,7 +566,7 @@ async def test_create_order_with_telegram_stars_payment_option_sets_empty_curren
     assert order.payment_method == PaymentMethod.TELEGRAM_STARS
     assert order.payment_option_id == 9
     assert order.expected_amount == Decimal("900")
-    assert order.expected_currency is None
+    assert order.expected_currency == CurrencyCode.XTR
     assert order.expected_network is None
     assert service.session.commit_count == 1
 

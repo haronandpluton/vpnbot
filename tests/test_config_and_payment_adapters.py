@@ -151,14 +151,14 @@ def test_crypto_payment_options_have_currency_and_valid_network_rules():
     assert xrp.is_active is False
 
 
-def test_telegram_stars_option_is_active_and_has_no_crypto_network():
+def test_telegram_stars_option_is_active_and_uses_xtr_currency():
     option = get_payment_option("telegram_stars")
 
     assert (
         option.payment_method
         == PaymentMethod.TELEGRAM_STARS
     )
-    assert option.currency is None
+    assert option.currency == CurrencyCode.XTR
     assert option.network is None
     assert option.is_active is True
     assert option.display_name == "Telegram Stars"

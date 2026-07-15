@@ -260,7 +260,7 @@ async def create_user_stars_order(
     option = await option_repo.create(
         code=f"telegram_stars_{telegram_id}",
         payment_method=PaymentMethod.TELEGRAM_STARS,
-        currency=None,
+        currency=CurrencyCode.XTR,
         network=None,
         display_name="Telegram Stars",
         is_active=True,
@@ -276,7 +276,7 @@ async def create_user_stars_order(
         payment_method=PaymentMethod.TELEGRAM_STARS,
         payment_option_id=option.id,
         expected_amount=stars_amount,
-        expected_currency=None,
+        expected_currency=CurrencyCode.XTR,
         expected_network=None,
         destination_address=None,
         destination_memo_tag=None,
@@ -447,7 +447,8 @@ async def test_repeating_same_telegram_stars_payment_is_idempotent(
         )
 
         first_expires_at = first_subscription.expires_at
-
+        assert first_payment.currency == CurrencyCode.XTR
+        assert first_payment.amount == Decimal("300.00000000")
         (
             second_event,
             second_payment,
@@ -464,6 +465,7 @@ async def test_repeating_same_telegram_stars_payment_is_idempotent(
 
         assert second_event.id == first_event.id
         assert second_payment.id == first_payment.id
+        assert second_payment.currency == CurrencyCode.XTR
         assert second_subscription.id == first_subscription.id
         assert second_subscription.uuid == first_subscription.uuid
         assert second_subscription.expires_at == first_expires_at
@@ -473,7 +475,8 @@ async def test_repeating_same_telegram_stars_payment_is_idempotent(
             Order,
             order.id,
         )
-
+        assert refreshed_order.expected_currency == CurrencyCode.XTR
+        assert refreshed_order.expected_amount == Decimal("300.00000000")
         assert refreshed_order.status == OrderStatus.ACTIVATED
         assert (
             refreshed_order.activated_subscription_id
