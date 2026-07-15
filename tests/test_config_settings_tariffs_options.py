@@ -305,6 +305,7 @@ def test_common_enums_keep_external_string_values_stable():
         "TRX",
         "XRP",
         "SOL",
+        "XTR",
     ]
     assert [item.value for item in NetworkCode] == [
         "TRC20",

@@ -18,6 +18,7 @@ class CurrencyCode(StrEnum):
     TRX = "TRX"
     XRP = "XRP"
     SOL = "SOL"
+    XTR = "XTR"
 
 
 class NetworkCode(StrEnum):
