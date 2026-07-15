@@ -78,7 +78,12 @@ class PaymentService:
 
         return await self.payment_repository.mark_detected(payment)
 
-    async def _confirm_payment(self, payment_id: int):
+    async def _confirm_payment(
+            self,
+            payment_id: int,
+            *,
+            allow_expired_order: bool = False,
+    ):
         payment = await self.payment_repository.get_by_id(payment_id)
         if payment is None:
             raise ValueError(f"Payment not found: {payment_id}")
@@ -97,7 +102,10 @@ class PaymentService:
 
         payment = await self.payment_repository.mark_confirmed(payment)
 
-        if order.status == OrderStatus.WAITING_PAYMENT:
+        if order.status == OrderStatus.WAITING_PAYMENT or (
+                allow_expired_order
+                and order.status == OrderStatus.EXPIRED
+        ):
             order = await self.order_repository.mark_paid(
                 order=order,
                 paid_at=payment.confirmed_at,

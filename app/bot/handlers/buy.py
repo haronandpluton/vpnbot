@@ -20,6 +20,7 @@ from app.payment_adapters.cryptobot import CryptoBotAPIError
 from app.services.cryptobot_payment_service import CryptoBotPaymentService
 from app.services.order_service import OrderService
 
+
 router = Router()
 
 
@@ -137,7 +138,12 @@ async def select_tariff_callback(callback: CallbackQuery):
 
     await callback.message.edit_text(
         _tariff_details_text(tariff),
-        reply_markup=payment_method_keyboard(tariff.code.value),
+        reply_markup=payment_method_keyboard(
+            tariff.code.value,
+            telegram_stars_enabled=(
+                get_settings().telegram_stars_enabled
+            ),
+        ),
     )
     await callback.answer()
 
@@ -179,6 +185,9 @@ async def select_renewal_tariff_callback(callback: CallbackQuery):
         reply_markup=payment_method_keyboard(
             tariff.code.value,
             target_subscription_id=subscription_id,
+            telegram_stars_enabled=(
+                get_settings().telegram_stars_enabled
+            ),
         ),
     )
     await callback.answer()

@@ -297,7 +297,7 @@ async def test_bot_main_registers_middlewares_schedulers_and_base_routers_when_d
     assert FakeBot.instances[0].token == "bot-token"
     assert dispatcher.update.manager.items[0].name == "db:SESSION_FACTORY"
     assert dispatcher.message.manager.items[0].name == "dev_guard"
-    assert len(dispatcher.routers) == 20
+    assert len(dispatcher.routers) == 21
     assert bot_main_module.test_payment_check_router not in dispatcher.routers
     assert bot_main_module.dev_payment_router not in dispatcher.routers
     assert bot_main_module.dev_subscription_router not in dispatcher.routers
@@ -323,7 +323,7 @@ async def test_bot_main_registers_dev_routers_only_when_dev_mode_is_true(monkeyp
     await bot_main_module.main()
 
     dispatcher = FakeDispatcher.instances[0]
-    assert len(dispatcher.routers) == 23
+    assert len(dispatcher.routers) == 24
     assert dispatcher.routers[-3:] == [
         bot_main_module.test_payment_check_router,
         bot_main_module.dev_payment_router,

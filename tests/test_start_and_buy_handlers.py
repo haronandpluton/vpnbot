@@ -415,3 +415,46 @@ async def test_select_payment_rolls_back_and_notifies_user_when_cryptobot_invoic
         {"text": "Invoice creation error", "show_alert": True}
     ]
     assert callback.message.edit_text_calls == []
+
+
+@pytest.mark.asyncio
+async def test_select_tariff_shows_stars_when_enabled(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        buy_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            telegram_stars_enabled=True,
+        ),
+    )
+
+    callback = FakeCallback(
+        data="select_tariff:period_1_month"
+    )
+
+    await select_tariff_callback(callback)
+
+    assert_callback_rows(
+        callback.message.edit_text_calls[0]["reply_markup"],
+        [
+            [
+                "select_payment:period_1_month:cryptobot_usdt",
+                "select_payment:period_1_month:cryptobot_usdc",
+            ],
+            [
+                "select_payment:period_1_month:cryptobot_btc",
+                "select_payment:period_1_month:cryptobot_eth",
+            ],
+            [
+                "select_payment:period_1_month:cryptobot_ton",
+                "select_payment:period_1_month:cryptobot_ltc",
+            ],
+            [
+                "select_payment:period_1_month:cryptobot_bnb",
+                "select_payment:period_1_month:cryptobot_trx",
+            ],
+            ["select_stars:period_1_month"],
+            ["buy_vpn"],
+        ],
+    )

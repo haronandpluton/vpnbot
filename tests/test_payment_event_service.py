@@ -5,7 +5,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
-
+from sqlalchemy.exc import IntegrityError
 from app.common.enums import CurrencyCode, NetworkCode
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.payment_status import PaymentStatus
@@ -54,9 +54,15 @@ class FakePaymentEventRepository:
         *,
         events_by_external_id: dict[str, SimpleNamespace] | None = None,
         fail_on_create: bool = False,
+        integrity_error_on_create_once: bool = False,
+        integrity_recovery_event=None,
     ) -> None:
         self.events_by_external_id = events_by_external_id or {}
         self.fail_on_create = fail_on_create
+        self.integrity_error_on_create_once = (
+            integrity_error_on_create_once
+        )
+        self.integrity_recovery_event = integrity_recovery_event
         self.created_events: list[SimpleNamespace] = []
         self.get_external_calls: list[str] = []
         self.attach_calls: list[tuple[int, int]] = []
@@ -79,6 +85,23 @@ class FakePaymentEventRepository:
     ):
         if self.fail_on_create:
             raise RuntimeError("event create failed")
+
+        if self.integrity_error_on_create_once:
+            self.integrity_error_on_create_once = False
+
+            if (
+                    external_event_id is not None
+                    and self.integrity_recovery_event is not None
+            ):
+                self.events_by_external_id[
+                    external_event_id
+                ] = self.integrity_recovery_event
+
+            raise IntegrityError(
+                "INSERT INTO payment_events",
+                {},
+                RuntimeError("unique violation"),
+            )
 
         event = SimpleNamespace(
             id=self.next_id,
@@ -206,7 +229,12 @@ class FakePaymentService:
 
         return payment
 
-    async def _confirm_payment(self, payment_id: int):
+    async def _confirm_payment(
+            self,
+            payment_id: int,
+            *,
+            allow_expired_order: bool = False,
+    ):
         self.confirm_calls.append(payment_id)
         payment = self._find_payment(payment_id)
         order = await self.order_repository.get_by_id(payment.order_id)
@@ -220,7 +248,13 @@ class FakePaymentService:
             payment.status = PaymentStatus.CONFIRMED
             payment.confirmed_at = datetime.now(timezone.utc)
 
-        if payment.status == PaymentStatus.CONFIRMED and order.status == OrderStatus.WAITING_PAYMENT:
+        if payment.status == PaymentStatus.CONFIRMED and (
+                order.status == OrderStatus.WAITING_PAYMENT
+                or (
+                        allow_expired_order
+                        and order.status == OrderStatus.EXPIRED
+                )
+        ):
             order.status = OrderStatus.PAID
             order.paid_at = payment.confirmed_at
 
@@ -262,6 +296,8 @@ def make_service(
     payments_by_id: dict[int, SimpleNamespace] | None = None,
     existing_payment_by_txid: dict[str, SimpleNamespace] | None = None,
     fail_on_event_create: bool = False,
+    integrity_error_on_create_once: bool = False,
+    integrity_recovery_event=None,
 ):
     session = FakeSession()
     orders = {} if order is None else {order.id: order}
@@ -275,7 +311,14 @@ def make_service(
         order_repository=order_repository,
         existing_payment_by_txid=existing_payment_by_txid,
     )
-
+    event_repository = FakePaymentEventRepository(
+        events_by_external_id=existing_events_by_external_id,
+        fail_on_create=fail_on_event_create,
+        integrity_error_on_create_once=(
+            integrity_error_on_create_once
+        ),
+        integrity_recovery_event=integrity_recovery_event,
+    )
     service = PaymentEventService.__new__(PaymentEventService)
     service.session = session
     service.order_repository = order_repository
@@ -349,6 +392,117 @@ async def test_existing_external_event_returns_existing_context_without_creating
     assert service.payment_service.confirm_calls == []
     assert service.session.commit_count == 1
     assert service.session.rollback_count == 0
+
+@pytest.mark.asyncio
+async def test_confirmed_event_recovers_after_concurrent_unique_violation():
+    order = make_order(
+        order_id=23,
+        status=OrderStatus.PAID,
+    )
+    existing_event = SimpleNamespace(
+        id=10,
+        payment_id=20,
+        order_id=23,
+        provider="telegram_stars",
+        external_event_id="charge-123",
+    )
+    existing_payment = SimpleNamespace(
+        id=20,
+        order_id=23,
+        status=PaymentStatus.CONFIRMED,
+    )
+
+    service = make_service(
+        order=order,
+        payments_by_id={
+            existing_payment.id: existing_payment,
+        },
+        integrity_error_on_create_once=True,
+        integrity_recovery_event=existing_event,
+    )
+
+    result = await service.process_confirmed_event(
+        order_id=23,
+        amount=Decimal("300"),
+        provider="telegram_stars",
+        event_type="successful_payment",
+        external_event_id="charge-123",
+    )
+
+    assert result == (
+        existing_event,
+        existing_payment,
+        order,
+    )
+
+    assert (
+        service.payment_event_repository.created_events
+        == []
+    )
+    assert service.payment_service.create_calls == []
+    assert service.payment_service.confirm_calls == []
+
+    assert service.session.rollback_count == 1
+    assert service.session.commit_count == 1
+
+    assert (
+        service.payment_event_repository.get_external_calls
+        == [
+            "charge-123",
+            "charge-123",
+        ]
+    )
+
+@pytest.mark.asyncio
+async def test_existing_event_for_another_order_is_rejected():
+    requested_order = make_order(
+        order_id=23,
+        status=OrderStatus.WAITING_PAYMENT,
+    )
+    existing_event = SimpleNamespace(
+        id=10,
+        payment_id=20,
+        order_id=99,
+        provider="telegram_stars",
+        external_event_id="charge-123",
+    )
+    existing_payment = SimpleNamespace(
+        id=20,
+        order_id=99,
+        status=PaymentStatus.CONFIRMED,
+    )
+
+    service = make_service(
+        order=requested_order,
+        existing_events_by_external_id={
+            "charge-123": existing_event,
+        },
+        payments_by_id={
+            existing_payment.id: existing_payment,
+        },
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="already linked to another order",
+    ):
+        await service.process_confirmed_event(
+            order_id=23,
+            amount=Decimal("300"),
+            provider="telegram_stars",
+            event_type="successful_payment",
+            external_event_id="charge-123",
+        )
+
+    assert (
+        service.payment_event_repository.created_events
+        == []
+    )
+    assert service.payment_service.create_calls == []
+    assert service.payment_service.confirm_calls == []
+
+    assert service.session.commit_count == 0
+    assert service.session.rollback_count == 1
 
 
 @pytest.mark.asyncio

@@ -85,6 +85,14 @@ class Settings(BaseSettings):
     cryptobot_api_token: str = Field(default="", alias="CRYPTOBOT_API_TOKEN")
     cryptobot_asset: str = Field(default="USDT", alias="CRYPTOBOT_ASSET")
     cryptobot_expires_in: int = Field(default=900, alias="CRYPTOBOT_EXPIRES_IN")
+    telegram_stars_enabled: bool = Field(
+        default=False,
+        alias="TELEGRAM_STARS_ENABLED",
+    )
+    telegram_stars_invoice_secret: str = Field(
+        default="",
+        alias="TELEGRAM_STARS_INVOICE_SECRET",
+    )
 
     xray_panel_url: str = Field(default="", alias="XRAY_PANEL_URL")
     xray_panel_username: str = Field(default="", alias="XRAY_PANEL_USERNAME")

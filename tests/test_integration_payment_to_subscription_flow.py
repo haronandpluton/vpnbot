@@ -23,6 +23,9 @@ from app.payment_core.enums.payment_status import PaymentStatus
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.payment_polling.processor import PaymentPollingProcessor
 from app.services.payment_activation_service import PaymentActivationService
+from app.services.telegram_stars_payment_service import (
+    TelegramStarsPaymentService,
+)
 
 from app.services.order_service import OrderService
 
@@ -234,6 +237,58 @@ async def create_user_option_and_order(
     await session.commit()
     return user, option, order
 
+async def create_user_stars_order(
+        session,
+        *,
+        telegram_id: int = 777001,
+        stars_amount: Decimal = Decimal("300"),
+        duration_days: int = 33,
+):
+    user_repo = UserRepository(session)
+    option_repo = PaymentOptionRepository(session)
+    order_repo = OrderRepository(session)
+
+    user = await user_repo.create(
+        telegram_id=telegram_id,
+        username="stars_user",
+        first_name="Stars",
+        last_name="User",
+        language_code="en",
+        is_admin=False,
+    )
+
+    option = await option_repo.create(
+        code=f"telegram_stars_{telegram_id}",
+        payment_method=PaymentMethod.TELEGRAM_STARS,
+        currency=None,
+        network=None,
+        display_name="Telegram Stars",
+        is_active=True,
+        sort_order=200,
+    )
+
+    order = await order_repo.create(
+        user_id=user.id,
+        tariff_code=TariffCode.PERIOD_1_MONTH,
+        device_limit=1,
+        duration_days=duration_days,
+        price_usd=Decimal("4.00"),
+        payment_method=PaymentMethod.TELEGRAM_STARS,
+        payment_option_id=option.id,
+        expected_amount=stars_amount,
+        expected_currency=None,
+        expected_network=None,
+        destination_address=None,
+        destination_memo_tag=None,
+        expires_at=NaiveDateTime.now() + timedelta(minutes=15),
+        source="bot",
+        comment=None,
+    )
+
+    await session.commit()
+
+    return user, option, order
+
 
 def make_tx(
     *,
@@ -350,6 +405,98 @@ async def test_repeating_same_confirmed_event_reuses_existing_payment_and_subscr
         assert FakeVpnAccessService.extend_calls == []
         assert FakeVpnAccessService.get_config_calls == [
             {"uuid": "fake-uuid-1", "device_limit": 1}
+        ]
+
+
+@pytest.mark.asyncio
+async def test_repeating_same_telegram_stars_payment_is_idempotent(
+    session_factory,
+):
+    async with session_factory() as session:
+        user, _, order = await create_user_stars_order(
+            session
+        )
+
+        service = TelegramStarsPaymentService(
+            session,
+            settings=SimpleNamespace(
+                telegram_stars_enabled=True,
+                telegram_stars_invoice_secret=(
+                    "integration-stars-secret"
+                ),
+            ),
+        )
+
+        invoice_payload = service.build_payload(
+            order_id=order.id,
+            telegram_id=user.telegram_id,
+        )
+
+        (
+            first_event,
+            first_payment,
+            first_subscription,
+            first_config,
+        ) = await service.process_successful_payment(
+            telegram_id=user.telegram_id,
+            invoice_payload=invoice_payload,
+            currency="XTR",
+            total_amount=300,
+            telegram_payment_charge_id="stars-charge-1",
+            raw_payload='{"delivery": "first"}',
+        )
+
+        first_expires_at = first_subscription.expires_at
+
+        (
+            second_event,
+            second_payment,
+            second_subscription,
+            second_config,
+        ) = await service.process_successful_payment(
+            telegram_id=user.telegram_id,
+            invoice_payload=invoice_payload,
+            currency="XTR",
+            total_amount=300,
+            telegram_payment_charge_id="stars-charge-1",
+            raw_payload='{"delivery": "duplicate"}',
+        )
+
+        assert second_event.id == first_event.id
+        assert second_payment.id == first_payment.id
+        assert second_subscription.id == first_subscription.id
+        assert second_subscription.uuid == first_subscription.uuid
+        assert second_subscription.expires_at == first_expires_at
+        assert second_config == first_config
+
+        refreshed_order = await session.get(
+            Order,
+            order.id,
+        )
+
+        assert refreshed_order.status == OrderStatus.ACTIVATED
+        assert (
+            refreshed_order.activated_subscription_id
+            == first_subscription.id
+        )
+
+        assert await count_rows(session, PaymentEvent) == 1
+        assert await count_rows(session, Payment) == 1
+        assert await count_rows(session, Subscription) == 1
+
+        assert FakeVpnAccessService.create_calls == [
+            {
+                "user_id": user.id,
+                "device_limit": 1,
+                "uuid": "fake-uuid-1",
+            }
+        ]
+        assert FakeVpnAccessService.extend_calls == []
+        assert FakeVpnAccessService.get_config_calls == [
+            {
+                "uuid": "fake-uuid-1",
+                "device_limit": 1,
+            }
         ]
 
 

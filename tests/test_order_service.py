@@ -565,6 +565,7 @@ async def test_create_order_with_telegram_stars_payment_option_sets_empty_curren
     assert order.price_usd == Decimal("11.00")
     assert order.payment_method == PaymentMethod.TELEGRAM_STARS
     assert order.payment_option_id == 9
+    assert order.expected_amount == Decimal("900")
     assert order.expected_currency is None
     assert order.expected_network is None
     assert service.session.commit_count == 1

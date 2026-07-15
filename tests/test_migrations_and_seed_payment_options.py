@@ -230,7 +230,7 @@ async def test_seed_payment_options_creates_all_options_and_is_idempotent(
             )
             .scalar_one()
             .is_active
-            is False
+            is True
         )
         assert (
             session.execute(

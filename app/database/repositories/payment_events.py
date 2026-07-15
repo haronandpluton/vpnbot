@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+﻿from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -15,6 +15,19 @@ class PaymentEventRepository(BaseRepository):
     async def get_by_external_event_id(self, external_event_id: str) -> PaymentEvent | None:
         stmt = select(PaymentEvent).where(
             PaymentEvent.external_event_id == external_event_id
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_provider_and_external_event_id(
+        self,
+        *,
+        provider: str,
+        external_event_id: str,
+    ) -> PaymentEvent | None:
+        stmt = select(PaymentEvent).where(
+            PaymentEvent.provider == provider,
+            PaymentEvent.external_event_id == external_event_id,
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

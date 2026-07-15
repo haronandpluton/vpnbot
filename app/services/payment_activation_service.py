@@ -53,20 +53,28 @@ class PaymentActivationService:
         memo_tag: str | None = None,
         confirmations: int | None = None,
         raw_payload: str | None = None,
+        allow_expired_order: bool = False,
     ):
+        event_kwargs = {
+            "order_id": order_id,
+            "amount": amount,
+            "provider": provider,
+            "event_type": event_type,
+            "external_event_id": external_event_id,
+            "txid": txid,
+            "address_from": address_from,
+            "address_to": address_to,
+            "memo_tag": memo_tag,
+            "confirmations": confirmations,
+            "raw_payload": raw_payload,
+        }
+
+        if allow_expired_order:
+            event_kwargs["allow_expired_order"] = True
+
         event, payment, paid_order = (
             await self.payment_event_service.process_confirmed_event(
-                order_id=order_id,
-                amount=amount,
-                provider=provider,
-                event_type=event_type,
-                external_event_id=external_event_id,
-                txid=txid,
-                address_from=address_from,
-                address_to=address_to,
-                memo_tag=memo_tag,
-                confirmations=confirmations,
-                raw_payload=raw_payload,
+                **event_kwargs
             )
         )
 

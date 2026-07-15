@@ -382,6 +382,42 @@ async def test_confirm_payment_marks_payment_confirmed_and_waiting_order_paid():
         {"order": order, "paid_at": payment.confirmed_at}
     ]
 
+@pytest.mark.asyncio
+async def test_confirm_payment_can_mark_expired_order_paid_when_explicitly_allowed():
+    order = make_order(
+        order_id=23,
+        status=OrderStatus.EXPIRED,
+    )
+    payment = make_payment(
+        payment_id=50,
+        order_id=23,
+        status=PaymentStatus.DETECTED,
+    )
+
+    order_repository = FakeOrderRepository(order=order)
+    payment_repository = FakePaymentRepository(payment=payment)
+
+    service = make_service(
+        order_repository=order_repository,
+        payment_repository=payment_repository,
+    )
+
+    result_payment, result_order = await service._confirm_payment(
+        50,
+        allow_expired_order=True,
+    )
+
+    assert result_payment is payment
+    assert result_order is order
+    assert payment.status == PaymentStatus.CONFIRMED
+    assert order.status == OrderStatus.PAID
+    assert order.paid_at == payment.confirmed_at
+    assert order_repository.mark_paid_calls == [
+        {
+            "order": order,
+            "paid_at": payment.confirmed_at,
+        }
+    ]
 
 @pytest.mark.asyncio
 async def test_confirm_payment_confirms_payment_but_does_not_mark_non_waiting_order_paid():

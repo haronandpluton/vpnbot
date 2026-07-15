@@ -24,6 +24,7 @@ from app.bot.handlers.info import (
     support_keyboard,
     support_payment_callback,
     support_vpn_callback,
+    paysupport_command,
 )
 
 
@@ -35,6 +36,15 @@ class FakeMessage:
     def __init__(self, *, edit_error: Exception | None = None) -> None:
         self.edit_error = edit_error
         self.edit_text_calls: list[dict] = []
+        self.answer_calls: list[dict] = []
+
+    async def answer(self, text: str, **kwargs) -> None:
+        self.answer_calls.append(
+            {
+                "text": text,
+                **kwargs,
+            }
+        )
 
     async def edit_text(self, text: str, **kwargs) -> None:
         if self.edit_error is not None:
@@ -336,3 +346,46 @@ async def test_support_vpn_callback_edits_to_vpn_problem_checklist():
         ["back_to_main_menu"],
     ]
     assert callback.answer_calls == [{"text": None}]
+
+@pytest.mark.asyncio
+async def test_paysupport_command_warns_not_to_pay_again_and_shows_support(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        info_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            support_username=" @support_bot ",
+        ),
+    )
+
+    message = FakeMessage()
+
+    await paysupport_command(message)
+
+    assert len(message.answer_calls) == 1
+
+    call = message.answer_calls[0]
+
+    assert "Telegram Stars Payment Support" in call["text"]
+    assert "do not make another payment" in call["text"]
+    assert "Order ID" in call["text"]
+    assert "Number of Stars paid" in call["text"]
+    assert "Telegram payment receipt" in call["text"]
+    assert "Support contact: @support_bot" in call["text"]
+
+    markup = call["reply_markup"]
+
+    assert row_callbacks(markup) == [
+        ["support:payment"],
+        ["support:vpn"],
+        [None],
+        ["back_to_main_menu"],
+    ]
+
+    assert row_urls(markup) == [
+        [None],
+        [None],
+        ["https://t.me/support_bot"],
+        [None],
+    ]

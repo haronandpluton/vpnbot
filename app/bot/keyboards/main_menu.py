@@ -9,6 +9,8 @@ from app.config.payment_options import (
 )
 from app.config.tariffs import get_purchasable_tariffs, get_tariff
 
+TELEGRAM_STARS_PAYMENT_OPTION_CODE = "telegram_stars"
+
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -95,6 +97,8 @@ def tariff_keyboard(
 def payment_method_keyboard(
     tariff_code: str,
     target_subscription_id: int | None = None,
+    *,
+    telegram_stars_enabled: bool = False,
 ) -> InlineKeyboardMarkup:
     tariff = get_tariff(TariffCode(tariff_code))
     rows: list[list[InlineKeyboardButton]] = []
@@ -125,6 +129,37 @@ def payment_method_keyboard(
 
     if currency_buttons:
         rows.append(currency_buttons)
+    stars_option = get_payment_option(
+        TELEGRAM_STARS_PAYMENT_OPTION_CODE
+    )
+
+    if (
+        telegram_stars_enabled
+        and stars_option.is_active
+        and tariff.stars_price is not None
+        and tariff.stars_price > 0
+    ):
+        if target_subscription_id is None:
+            stars_callback = (
+                f"select_stars:{tariff.code.value}"
+            )
+        else:
+            stars_callback = (
+                f"renew_stars:{target_subscription_id}:"
+                f"{tariff.code.value}"
+            )
+
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        f"⭐ Telegram Stars — "
+                        f"{tariff.stars_price} XTR"
+                    ),
+                    callback_data=stars_callback,
+                )
+            ]
+        )
 
     if target_subscription_id is None:
         back_callback = "buy_vpn"

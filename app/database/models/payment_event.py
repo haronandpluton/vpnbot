@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin
@@ -10,7 +17,13 @@ from app.database.base import Base, TimestampMixin
 
 class PaymentEvent(Base, TimestampMixin):
     __tablename__ = "payment_events"
-
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "external_event_id",
+            name="uq_payment_events_provider_external_event_id",
+        ),
+    )
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     payment_id: Mapped[int | None] = mapped_column(

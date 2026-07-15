@@ -192,7 +192,7 @@ PAYMENT_OPTIONS: dict[str, PaymentOptionConfig] = {
         currency=None,
         network=None,
         display_name="Telegram Stars",
-        is_active=False,
+        is_active=True,
         sort_order=200,
     ),
 }

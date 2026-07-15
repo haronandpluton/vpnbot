@@ -9,6 +9,10 @@ USER_COMMANDS: list[BotCommand] = [
     BotCommand(command="my_subscription", description="📱 My Subscription and Devices"),
     BotCommand(command="faq", description="📘 FAQ"),
     BotCommand(command="help", description="🆘 Support"),
+    BotCommand(
+        command="paysupport",
+        description="⭐ Stars Payment Support",
+    ),
     BotCommand(command="rules", description="📄 Service Rules"),
     BotCommand(command="profile", description="👤 Profile"),
     BotCommand(command="present", description="🎁 Present Program"),

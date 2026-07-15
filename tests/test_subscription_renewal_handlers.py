@@ -137,6 +137,47 @@ async def test_renewal_tariff_keeps_subscription_id_in_payment_step():
            ]
     assert callback.answer_calls == [{"text": None}]
 
+@pytest.mark.asyncio
+async def test_renewal_tariff_shows_stars_when_enabled(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        buy_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            telegram_stars_enabled=True,
+        ),
+    )
+
+    callback = FakeCallback(
+        data="renew_tariff:50:period_2_months"
+    )
+
+    await select_renewal_tariff_callback(callback)
+
+    assert callback_rows(
+        callback.message.edit_text_calls[0]["reply_markup"]
+    ) == [
+        [
+            "renew_pay:50:period_2_months:cryptobot_usdt",
+            "renew_pay:50:period_2_months:cryptobot_usdc",
+        ],
+        [
+            "renew_pay:50:period_2_months:cryptobot_btc",
+            "renew_pay:50:period_2_months:cryptobot_eth",
+        ],
+        [
+            "renew_pay:50:period_2_months:cryptobot_ton",
+            "renew_pay:50:period_2_months:cryptobot_ltc",
+        ],
+        [
+            "renew_pay:50:period_2_months:cryptobot_bnb",
+            "renew_pay:50:period_2_months:cryptobot_trx",
+        ],
+        ["renew_stars:50:period_2_months"],
+        ["renew_subscription:50"],
+    ]
+
 
 @pytest.mark.asyncio
 async def test_renewal_payment_creates_order_for_selected_subscription(

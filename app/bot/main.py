@@ -34,6 +34,9 @@ from app.bot.handlers.info import router as info_router
 from app.bot.handlers.legal import router as legal_router
 from app.bot.handlers.my_subscription import router as my_subscription_router
 from app.bot.handlers.payment_check import router as payment_check_router
+from app.bot.handlers.payment_stars import (
+    router as payment_stars_router,
+)
 from app.bot.handlers.start import router as start_router
 from app.bot.handlers.test_payment_check import router as test_payment_check_router
 from app.bot.handlers.vpn_access import router as vpn_access_router
@@ -69,6 +72,7 @@ async def main() -> None:
 
     dp.include_router(start_router)
     dp.include_router(buy_router)
+    dp.include_router(payment_stars_router)
     dp.include_router(info_router)
     dp.include_router(legal_router)
     dp.include_router(my_subscription_router)

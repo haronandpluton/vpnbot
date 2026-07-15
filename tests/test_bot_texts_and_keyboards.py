@@ -158,6 +158,60 @@ def test_payment_method_keyboard_uses_selected_tariff_in_callback():
     ]
 
 
+def test_payment_method_keyboard_shows_stars_when_enabled():
+    markup = payment_method_keyboard(
+        "period_2_months",
+        telegram_stars_enabled=True,
+    )
+
+    assert row_texts(markup) == [
+        ["USDT", "USDC"],
+        ["BTC", "ETH"],
+        ["TON", "LTC"],
+        ["BNB", "TRX"],
+        ["⭐ Telegram Stars — 600 XTR"],
+        ["Back"],
+    ]
+
+    assert row_callbacks(markup) == [
+        [
+            "select_payment:period_2_months:cryptobot_usdt",
+            "select_payment:period_2_months:cryptobot_usdc",
+        ],
+        [
+            "select_payment:period_2_months:cryptobot_btc",
+            "select_payment:period_2_months:cryptobot_eth",
+        ],
+        [
+            "select_payment:period_2_months:cryptobot_ton",
+            "select_payment:period_2_months:cryptobot_ltc",
+        ],
+        [
+            "select_payment:period_2_months:cryptobot_bnb",
+            "select_payment:period_2_months:cryptobot_trx",
+        ],
+        ["select_stars:period_2_months"],
+        ["buy_vpn"],
+    ]
+
+def test_payment_method_keyboard_uses_renew_stars_callback():
+    markup = payment_method_keyboard(
+        "period_3_months",
+        target_subscription_id=77,
+        telegram_stars_enabled=True,
+    )
+
+    assert row_texts(markup)[-2:] == [
+        ["⭐ Telegram Stars — 900 XTR"],
+        ["Back"],
+    ]
+
+    assert row_callbacks(markup)[-2:] == [
+        ["renew_stars:77:period_3_months"],
+        ["renew_subscription:77"],
+    ]
+
+
 def test_back_to_main_menu_keyboard_returns_single_stable_callback():
     markup = back_to_main_menu_keyboard()
 

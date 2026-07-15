@@ -232,6 +232,37 @@ async def help_command(message: Message):
     )
 
 
+@router.message(Command("paysupport"))
+async def paysupport_command(message: Message):
+    settings = get_settings()
+    support_username = settings.support_username.strip()
+
+    contact_text = (
+        f"Support contact: @{support_username.lstrip('@')}"
+        if support_username
+        else "The support contact has not been configured yet."
+    )
+
+    text = (
+        "Telegram Stars Payment Support\n\n"
+        "If Stars were deducted but VPN access was not activated, "
+        "do not make another payment.\n\n"
+        "Before contacting support, prepare:\n\n"
+        "1. Order ID.\n"
+        "2. Number of Stars paid.\n"
+        "3. Approximate payment date and time.\n"
+        "4. Screenshot of the Telegram payment receipt.\n"
+        "5. Description of what happened after payment.\n\n"
+        f"{contact_text}\n\n"
+        "You can also open “Payment Problem” below."
+    )
+
+    await message.answer(
+        text,
+        reply_markup=support_keyboard(),
+    )
+
+
 @router.message(Command("profile"))
 async def profile_command(
     message: Message,

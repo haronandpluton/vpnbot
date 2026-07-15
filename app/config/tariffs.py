@@ -14,6 +14,7 @@ class TariffConfig:
     price_usd: Decimal
     base_days: int
     bonus_days: int
+    stars_price: int | None = None
 
     @property
     def duration_days(self) -> int:
@@ -55,6 +56,7 @@ TARIFFS: dict[TariffCode, TariffConfig] = {
         price_usd=Decimal("4.00"),
         base_days=30,
         bonus_days=3,
+        stars_price=300,
     ),
     TariffCode.PERIOD_2_MONTHS: TariffConfig(
         code=TariffCode.PERIOD_2_MONTHS,
@@ -63,6 +65,7 @@ TARIFFS: dict[TariffCode, TariffConfig] = {
         price_usd=Decimal("7.50"),
         base_days=60,
         bonus_days=6,
+        stars_price=600,
     ),
     TariffCode.PERIOD_3_MONTHS: TariffConfig(
         code=TariffCode.PERIOD_3_MONTHS,
@@ -71,6 +74,7 @@ TARIFFS: dict[TariffCode, TariffConfig] = {
         price_usd=Decimal("11.00"),
         base_days=90,
         bonus_days=9,
+        stars_price=900,
     ),
 }
 

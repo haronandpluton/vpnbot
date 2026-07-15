@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +9,7 @@ from app.database.repositories.orders import OrderRepository
 from app.database.repositories.payment_options import PaymentOptionRepository
 from app.database.repositories.subscriptions import SubscriptionRepository
 from app.database.repositories.users import UserRepository
+from app.payment_core.enums.payment_method import PaymentMethod
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 
 
@@ -124,6 +126,16 @@ class OrderService:
                 minutes=self.settings.order_ttl_minutes,
             )
 
+            expected_amount = None
+
+            if payment_option.payment_method == PaymentMethod.TELEGRAM_STARS:
+                if tariff.stars_price is None or tariff.stars_price <= 0:
+                    raise ValueError(
+                        f"Telegram Stars price is not configured for {tariff.code.value}"
+                    )
+
+                expected_amount = Decimal(tariff.stars_price)
+
             create_order_kwargs = {
                 "user_id": user.id,
                 "tariff_code": tariff.code,
@@ -132,7 +144,7 @@ class OrderService:
                 "price_usd": tariff.price_usd,
                 "payment_method": payment_option.payment_method,
                 "payment_option_id": payment_option.id,
-                "expected_amount": None,
+                "expected_amount": expected_amount,
                 "expected_currency": payment_option.currency,
                 "expected_network": payment_option.network,
                 "destination_address": None,

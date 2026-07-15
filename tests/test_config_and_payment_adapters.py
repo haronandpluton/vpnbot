@@ -39,6 +39,7 @@ def test_tariffs_have_expected_public_prices_device_limits_and_duration():
         price_usd=Decimal("4.00"),
         base_days=30,
         bonus_days=3,
+        stars_price=300,
     )
     assert one_month.duration_days == 33
 
@@ -91,14 +92,19 @@ def test_payment_options_have_stable_codes_and_unique_sort_orders():
     )
 
 
-def test_get_active_payment_options_returns_active_options_sorted_and_excludes_inactive_stars():
+def test_get_active_payment_options_returns_active_options_sorted_and_includes_stars():
     options = get_active_payment_options()
 
-    assert options == sorted(options, key=lambda item: item.sort_order)
+    assert options == sorted(
+        options,
+        key=lambda item: item.sort_order,
+    )
     assert all(option.is_active for option in options)
-    assert "telegram_stars" not in {option.code for option in options}
+    assert "telegram_stars" in {
+        option.code for option in options
+    }
     assert options[0].code == "cryptobot_usdt"
-
+    assert options[-1].code == "telegram_stars"
 
 def test_crypto_payment_options_have_currency_and_valid_network_rules():
     cryptobot_usdt = get_payment_option("cryptobot_usdt")
@@ -145,13 +151,16 @@ def test_crypto_payment_options_have_currency_and_valid_network_rules():
     assert xrp.is_active is False
 
 
-def test_telegram_stars_option_is_present_but_inactive_and_has_no_crypto_network():
+def test_telegram_stars_option_is_active_and_has_no_crypto_network():
     option = get_payment_option("telegram_stars")
 
-    assert option.payment_method == PaymentMethod.TELEGRAM_STARS
+    assert (
+        option.payment_method
+        == PaymentMethod.TELEGRAM_STARS
+    )
     assert option.currency is None
     assert option.network is None
-    assert option.is_active is False
+    assert option.is_active is True
     assert option.display_name == "Telegram Stars"
 
 

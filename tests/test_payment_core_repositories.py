@@ -520,6 +520,19 @@ async def test_payment_event_repository_get_by_external_event_id_returns_scalar_
     assert result is event
     assert len(session.execute_calls) == 1
 
+@pytest.mark.asyncio
+async def test_payment_event_repository_get_by_provider_and_external_event_id():
+    event = make_event(event_id=70)
+    session = FakeSession(scalar_value=event)
+    repository = PaymentEventRepository(session)
+
+    result = await repository.get_by_provider_and_external_event_id(
+        provider="telegram_stars",
+        external_event_id="charge-123",
+    )
+
+    assert result is event
+    assert len(session.execute_calls) == 1
 
 @pytest.mark.asyncio
 async def test_payment_event_repository_create_adds_event_and_flushes():

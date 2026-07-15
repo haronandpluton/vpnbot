@@ -229,3 +229,48 @@ async def test_activation_error_is_not_silently_converted_to_success():
         )
 
     assert subscription_service.calls == [23]
+
+@pytest.mark.asyncio
+async def test_activation_passes_allow_expired_order_only_when_requested():
+    event = make_event()
+    payment = make_payment(
+        status=PaymentStatus.CONFIRMED,
+    )
+    paid_order = make_order(
+        order_id=23,
+        status=OrderStatus.PAID,
+    )
+
+    service = make_service(
+        event_result=(
+            event,
+            payment,
+            paid_order,
+        )
+    )
+
+    await service.process_confirmed_payment_event_and_activate(
+        order_id=23,
+        amount=Decimal("300"),
+        provider="telegram_stars",
+        event_type="successful_payment",
+        external_event_id="charge-123",
+        allow_expired_order=True,
+    )
+
+    assert service.payment_event_service.calls == [
+        {
+            "order_id": 23,
+            "amount": Decimal("300"),
+            "provider": "telegram_stars",
+            "event_type": "successful_payment",
+            "external_event_id": "charge-123",
+            "txid": None,
+            "address_from": None,
+            "address_to": None,
+            "memo_tag": None,
+            "confirmations": None,
+            "raw_payload": None,
+            "allow_expired_order": True,
+        }
+    ]

@@ -53,6 +53,8 @@ def test_settings_required_aliases_and_safe_defaults_are_stable():
     assert settings.cryptobot_api_url == "https://pay.crypt.bot/api"
     assert settings.cryptobot_asset == "USDT"
     assert settings.cryptobot_expires_in == 900
+    assert settings.telegram_stars_enabled is False
+    assert settings.telegram_stars_invoice_secret == ""
     assert settings.xui_inbound_id == 9
     assert settings.vpn_default_server_name == "default-node"
     assert settings.vpn_default_inbound_id == 1
@@ -169,6 +171,7 @@ def test_tariffs_match_public_pricing_and_duration():
         price_usd=Decimal("4.00"),
         base_days=30,
         bonus_days=3,
+        stars_price=300,
     )
 
     purchasable = get_purchasable_tariffs()
@@ -193,7 +196,7 @@ def test_get_tariff_returns_config_and_rejects_unknown_code():
         get_tariff("broken")  # type: ignore[arg-type]
 
 
-def test_payment_options_include_cryptobot_assets_and_inactive_future_options():
+def test_payment_options_include_cryptobot_assets_future_options_and_stars():
     assert set(PAYMENT_OPTIONS) == {
         "cryptobot_usdt",
         "cryptobot_usdc",
@@ -244,10 +247,10 @@ def test_payment_options_include_cryptobot_assets_and_inactive_future_options():
     assert PAYMENT_OPTIONS["usdt_trc20"].is_active is False
     assert PAYMENT_OPTIONS["xrp_xrpl"].is_active is False
     assert PAYMENT_OPTIONS["sol_solana"].is_active is False
-    assert PAYMENT_OPTIONS["telegram_stars"].is_active is False
+    assert PAYMENT_OPTIONS["telegram_stars"].is_active is True
 
 
-def test_active_payment_options_are_only_cryptobot_assets_in_ui_order():
+def test_active_payment_options_include_cryptobot_assets_and_stars_in_order():
     active = get_active_payment_options()
 
     assert [option.code for option in active] == [
@@ -259,8 +262,14 @@ def test_active_payment_options_are_only_cryptobot_assets_in_ui_order():
         "cryptobot_ltc",
         "cryptobot_bnb",
         "cryptobot_trx",
+        "telegram_stars",
     ]
-    assert [option.currency for option in active] == [
+
+    assert [
+        option.currency
+        for option in active
+        if option.currency is not None
+    ] == [
         CurrencyCode.USDT,
         CurrencyCode.USDC,
         CurrencyCode.BTC,
@@ -270,6 +279,7 @@ def test_active_payment_options_are_only_cryptobot_assets_in_ui_order():
         CurrencyCode.BNB,
         CurrencyCode.TRX,
     ]
+
     assert all(option.is_active for option in active)
 
 

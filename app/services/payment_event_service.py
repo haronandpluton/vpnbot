@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.exc import IntegrityError
 from app.database.repositories.orders import OrderRepository
 from app.database.repositories.payment_events import PaymentEventRepository
 from app.database.repositories.payments import PaymentRepository
@@ -30,6 +31,47 @@ class PaymentEventService:
             order = await self.order_repository.get_by_id(existing_event.order_id)
 
         return existing_event, payment, order
+
+    async def _get_existing_event_context_for_order(
+            self,
+            existing_event,
+            *,
+            order_id: int,
+    ):
+        existing_order_id = existing_event.order_id
+
+        if existing_order_id != order_id:
+            raise ValueError(
+                "Payment event is already linked to another order: "
+                f"existing_order_id={existing_order_id}, "
+                f"requested_order_id={order_id}"
+            )
+
+        return await self._get_existing_event_context(
+            existing_event
+        )
+
+    async def _find_existing_event(
+            self,
+            *,
+            provider: str,
+            external_event_id: str,
+    ):
+        scoped_lookup = getattr(
+            self.payment_event_repository,
+            "get_by_provider_and_external_event_id",
+            None,
+        )
+
+        if scoped_lookup is not None:
+            return await scoped_lookup(
+                provider=provider,
+                external_event_id=external_event_id,
+            )
+
+        return await self.payment_event_repository.get_by_external_event_id(
+            external_event_id
+        )
 
     def _is_late_order(self, order) -> bool:
         if order.status == OrderStatus.EXPIRED:
@@ -110,8 +152,9 @@ class PaymentEventService:
     ):
         try:
             if external_event_id is not None:
-                existing_event = await self.payment_event_repository.get_by_external_event_id(
-                    external_event_id
+                existing_event = await self._find_existing_event(
+                    provider=provider,
+                    external_event_id=external_event_id,
                 )
                 if existing_event is not None:
                     result = await self._get_existing_event_context(existing_event)
@@ -187,8 +230,9 @@ class PaymentEventService:
     ):
         try:
             if external_event_id is not None:
-                existing_event = await self.payment_event_repository.get_by_external_event_id(
-                    external_event_id
+                existing_event = await self._find_existing_event(
+                    provider=provider,
+                    external_event_id=external_event_id,
                 )
                 if existing_event is not None:
                     result = await self._get_existing_event_context(existing_event)
@@ -271,14 +315,21 @@ class PaymentEventService:
         memo_tag: str | None = None,
         confirmations: int | None = None,
         raw_payload: str | None = None,
+        allow_expired_order: bool = False,
     ):
         try:
             if external_event_id is not None:
-                existing_event = await self.payment_event_repository.get_by_external_event_id(
-                    external_event_id
+                existing_event = await self._find_existing_event(
+                    provider=provider,
+                    external_event_id=external_event_id,
                 )
                 if existing_event is not None:
-                    result = await self._get_existing_event_context(existing_event)
+                    result = (
+                        await self._get_existing_event_context_for_order(
+                            existing_event,
+                            order_id=order_id,
+                        )
+                    )
                     await self.session.commit()
                     return result
 
@@ -286,7 +337,7 @@ class PaymentEventService:
             if order is None:
                 raise ValueError(f"Order not found: {order_id}")
 
-            if self._is_late_order(order):
+            if not allow_expired_order and self._is_late_order(order):
                 result = await self._process_late_event(
                     order=order,
                     amount=amount,
@@ -331,8 +382,16 @@ class PaymentEventService:
             )
 
             payment = await self.payment_service._mark_payment_detected(payment.id)
-            confirmed_payment, paid_order = await self.payment_service._confirm_payment(
-                payment.id
+            confirm_kwargs = {}
+
+            if allow_expired_order:
+                confirm_kwargs["allow_expired_order"] = True
+
+            confirmed_payment, paid_order = (
+                await self.payment_service._confirm_payment(
+                    payment.id,
+                    **confirm_kwargs,
+                )
             )
 
             await self.payment_event_repository.mark_processed(
@@ -344,6 +403,44 @@ class PaymentEventService:
             await self.session.commit()
             return event, confirmed_payment, paid_order
 
-        except Exception:
+
+        except IntegrityError:
+
             await self.session.rollback()
+
+            if external_event_id is None:
+                raise
+
+            existing_event = await self._find_existing_event(
+
+                provider=provider,
+
+                external_event_id=external_event_id,
+
+            )
+
+            if existing_event is None:
+                raise
+
+            result = (
+
+                await self._get_existing_event_context_for_order(
+
+                    existing_event,
+
+                    order_id=order_id,
+
+                )
+
+            )
+
+            await self.session.commit()
+
+            return result
+
+
+        except Exception:
+
+            await self.session.rollback()
+
             raise
