@@ -15,6 +15,18 @@ class UserRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_telegram_id_for_update(
+            self,
+            telegram_id: int,
+    ) -> User | None:
+        stmt = (
+            select(User)
+            .where(User.telegram_id == telegram_id)
+            .with_for_update()
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def create(
         self,
         telegram_id: int,

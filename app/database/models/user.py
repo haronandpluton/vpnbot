@@ -1,6 +1,6 @@
 from __future__ import annotations
-
-from sqlalchemy import BigInteger, Boolean, String
+from datetime import datetime
+from sqlalchemy import BigInteger, Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, TimestampMixin
@@ -45,6 +45,16 @@ class User(Base, TimestampMixin):
         nullable=False,
         default=False,
         server_default="false",
+    )
+    trial_eligible: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+    )
+    trial_claimed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     def __repr__(self) -> str:

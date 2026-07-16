@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 import app.bot.handlers.buy as buy_module
+import app.bot.handlers.start as start_module
 from app.bot.handlers.buy import (
     buy_command,
     buy_vpn_callback,
@@ -13,6 +14,7 @@ from app.bot.handlers.buy import (
     select_tariff_callback,
 )
 from app.bot.handlers.start import (
+    activate_trial_callback,
     back_to_main_menu_callback,
     main_menu_text,
     start_command,
@@ -20,9 +22,17 @@ from app.bot.handlers.start import (
 from app.common.enums import TariffCode
 from app.payment_adapters.cryptobot import CryptoBotAPIError
 
+from datetime import datetime, timezone
 
 class FakeMessage:
-    def __init__(self) -> None:
+    def __init__(self, *, from_user=None) -> None:
+        self.from_user = from_user or SimpleNamespace(
+            id=123,
+            username="ivan",
+            first_name="Ivan",
+            last_name="Redeemer",
+            language_code="ru",
+        )
         self.answer_calls: list[dict] = []
         self.edit_text_calls: list[dict] = []
 
@@ -52,7 +62,11 @@ class FakeCallback:
 
 class FakeSession:
     def __init__(self) -> None:
+        self.commit_count = 0
         self.rollback_count = 0
+
+    async def commit(self) -> None:
+        self.commit_count += 1
 
     async def rollback(self) -> None:
         self.rollback_count += 1
@@ -79,10 +93,47 @@ def test_main_menu_text_is_stable_entrypoint_copy():
 
 
 @pytest.mark.asyncio
-async def test_start_command_sends_main_menu():
+async def test_start_command_sends_buy_menu_for_ineligible_user(
+    monkeypatch,
+):
+    session = FakeSession()
+    service_calls = []
+
+    class FakeOrderService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def get_or_create_user(self, **kwargs):
+            service_calls.append(kwargs)
+            return SimpleNamespace(
+                id=7,
+                trial_eligible=False,
+            )
+
+    monkeypatch.setattr(
+        start_module,
+        "OrderService",
+        FakeOrderService,
+    )
+
     message = FakeMessage()
 
-    await start_command(message)
+    await start_command(
+        message,
+        session=session,
+    )
+
+    assert service_calls == [
+        {
+            "telegram_id": 123,
+            "username": "ivan",
+            "first_name": "Ivan",
+            "last_name": "Redeemer",
+            "language_code": "ru",
+        }
+    ]
+    assert session.commit_count == 1
+    assert session.rollback_count == 0
 
     assert message.answer_calls[0]["text"] == main_menu_text()
     assert_callback_rows(
@@ -95,18 +146,82 @@ async def test_start_command_sends_main_menu():
         ],
     )
 
+@pytest.mark.asyncio
+async def test_start_command_sends_trial_menu_for_eligible_user(
+    monkeypatch,
+):
+    session = FakeSession()
+
+    class FakeOrderService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def get_or_create_user(self, **kwargs):
+            return SimpleNamespace(
+                id=7,
+                trial_eligible=True,
+            )
+
+    monkeypatch.setattr(
+        start_module,
+        "OrderService",
+        FakeOrderService,
+    )
+
+    message = FakeMessage()
+
+    await start_command(
+        message,
+        session=session,
+    )
+
+    assert session.commit_count == 1
+    assert_callback_rows(
+        message.answer_calls[0]["reply_markup"],
+        [
+            ["activate_trial"],
+            ["my_subscription"],
+            ["download_vpn"],
+            ["faq", "support"],
+        ],
+    )
+
 
 @pytest.mark.asyncio
-async def test_back_to_main_menu_callback_edits_message_and_answers_callback():
+async def test_back_to_main_menu_callback_uses_current_trial_state(
+    monkeypatch,
+):
+    session = FakeSession()
+
+    class FakeOrderService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def get_or_create_user(self, **kwargs):
+            return SimpleNamespace(
+                id=7,
+                trial_eligible=True,
+            )
+
+    monkeypatch.setattr(
+        start_module,
+        "OrderService",
+        FakeOrderService,
+    )
+
     callback = FakeCallback(data="back_to_main_menu")
 
-    await back_to_main_menu_callback(callback)
+    await back_to_main_menu_callback(
+        callback,
+        session=session,
+    )
 
+    assert session.commit_count == 1
     assert callback.message.edit_text_calls[0]["text"] == main_menu_text()
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
         [
-            ["buy_vpn"],
+            ["activate_trial"],
             ["my_subscription"],
             ["download_vpn"],
             ["faq", "support"],
@@ -458,3 +573,175 @@ async def test_select_tariff_shows_stars_when_enabled(
             ["buy_vpn"],
         ],
     )
+
+@pytest.mark.asyncio
+async def test_activate_trial_callback_replaces_trial_button_and_sends_access(
+    monkeypatch,
+):
+    session = FakeSession()
+    expires_at = datetime(
+        2030,
+        1,
+        4,
+        12,
+        0,
+        tzinfo=timezone.utc,
+    )
+    activation_calls = []
+
+    class FakeTrialActivationService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def activate_trial(self, **kwargs):
+            activation_calls.append(kwargs)
+            return SimpleNamespace(
+                status="activated",
+                subscription_id=77,
+                expires_at=expires_at,
+                config_uri=(
+                    "https://connect.example/trial"
+                ),
+            )
+
+    monkeypatch.setattr(
+        start_module,
+        "TrialActivationService",
+        FakeTrialActivationService,
+    )
+
+    callback = FakeCallback(data="activate_trial")
+
+    await activate_trial_callback(
+        callback,
+        session=session,
+    )
+
+    assert activation_calls == [
+        {"telegram_id": 123}
+    ]
+    assert callback.answer_calls == [{"text": None}]
+
+    assert_callback_rows(
+        callback.message.edit_text_calls[0][
+            "reply_markup"
+        ],
+        [
+            ["buy_vpn"],
+            ["my_subscription"],
+            ["download_vpn"],
+            ["faq", "support"],
+        ],
+    )
+
+    access_message = callback.message.answer_calls[0]
+
+    assert "Your 3 free VPN days are active." in (
+        access_message["text"]
+    )
+    assert "Active until: 04.01.2030 12:00" in (
+        access_message["text"]
+    )
+    assert_callback_rows(
+        access_message["reply_markup"],
+        [
+            ["vpn_access:show_config:77"],
+            ["vpn_access:show_config:77"],
+            ["buy_vpn"],
+            [
+                "vpn_access:happ_android",
+                "vpn_access:happ_ios",
+            ],
+            ["vpn_access:happ_fallback"],
+        ],
+    )
+
+@pytest.mark.asyncio
+async def test_activate_trial_callback_handles_already_claimed_trial(
+    monkeypatch,
+):
+    session = FakeSession()
+
+    class FakeTrialActivationService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def activate_trial(self, **kwargs):
+            return SimpleNamespace(
+                status="not_eligible",
+                subscription_id=None,
+                expires_at=None,
+                config_uri=None,
+            )
+
+    monkeypatch.setattr(
+        start_module,
+        "TrialActivationService",
+        FakeTrialActivationService,
+    )
+
+    callback = FakeCallback(data="activate_trial")
+
+    await activate_trial_callback(
+        callback,
+        session=session,
+    )
+
+    assert callback.answer_calls == [{"text": None}]
+    assert_callback_rows(
+        callback.message.edit_text_calls[0][
+            "reply_markup"
+        ],
+        [
+            ["buy_vpn"],
+            ["my_subscription"],
+            ["download_vpn"],
+            ["faq", "support"],
+        ],
+    )
+    assert callback.message.answer_calls == [
+        {
+            "text": (
+                "Your free 3-day VPN access has already "
+                "been claimed."
+            )
+        }
+    ]
+
+@pytest.mark.asyncio
+async def test_activate_trial_callback_reports_infrastructure_failure(
+    monkeypatch,
+):
+    session = FakeSession()
+
+    class FakeTrialActivationService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def activate_trial(self, **kwargs):
+            raise RuntimeError("3x-ui unavailable")
+
+    monkeypatch.setattr(
+        start_module,
+        "TrialActivationService",
+        FakeTrialActivationService,
+    )
+
+    callback = FakeCallback(data="activate_trial")
+
+    await activate_trial_callback(
+        callback,
+        session=session,
+    )
+
+    assert callback.answer_calls == [{"text": None}]
+    assert callback.message.edit_text_calls == []
+    assert callback.message.answer_calls == [
+        {
+            "text": (
+                "Could not activate your free VPN access "
+                "right now.\n\n"
+                "Please try again later or contact support."
+            )
+        }
+    ]

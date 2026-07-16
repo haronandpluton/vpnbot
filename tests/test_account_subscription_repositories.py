@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-
+from sqlalchemy.dialects import postgresql
 from app.common.enums import CurrencyCode, NetworkCode
 from app.database.models import PaymentOption, Subscription, User
 from app.database.repositories.payment_options import PaymentOptionRepository
@@ -133,6 +133,25 @@ async def test_user_repository_get_by_telegram_id_returns_scalar_user():
     assert result is user
     assert len(session.execute_calls) == 1
 
+@pytest.mark.asyncio
+async def test_user_repository_get_by_telegram_id_for_update_locks_user_row():
+    user = make_user(user_id=7)
+    session = FakeSession(scalar_value=user)
+    repository = UserRepository(cast(Any, session))
+
+    result = await repository.get_by_telegram_id_for_update(123456)
+
+    assert result is user
+    assert len(session.execute_calls) == 1
+
+    statement = session.execute_calls[0]
+    compiled_sql = str(
+        statement.compile(
+            dialect=postgresql.dialect(),
+        )
+    )
+
+    assert "FOR UPDATE" in compiled_sql
 
 @pytest.mark.asyncio
 async def test_user_repository_create_adds_user_flushes_and_returns_user():

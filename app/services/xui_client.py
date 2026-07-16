@@ -1,6 +1,7 @@
 import re
 import secrets
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 import httpx
@@ -24,15 +25,16 @@ class XuiClient:
         self.base_url = config.base_url.rstrip("/")
 
     async def create_vless_client(
-        self,
-        *,
-        client_uuid: str,
-        email: str,
-        device_limit: int,
-        comment: str = "",
+            self,
+            *,
+            client_uuid: str,
+            email: str,
+            device_limit: int,
+            expires_at: datetime | None = None,
+            comment: str = "",
     ) -> None:
         self._validate_uuid(client_uuid)
-
+        expiry_time_ms = self._to_expiry_time_ms(expires_at)
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
             csrf = await self._login(client)
 
@@ -46,7 +48,7 @@ class XuiClient:
                     "flow": "",
                     "security": "auto",
                     "totalGB": 0,
-                    "expiryTime": 0,
+                    "expiryTime": expiry_time_ms,
                     "limitIp": int(device_limit or 0),
                     "tgId": 0,
                     "reset": 0,
@@ -124,6 +126,16 @@ class XuiClient:
             raise XuiClientError("3x-ui returned invalid json structure")
 
         return data
+
+    @staticmethod
+    def _to_expiry_time_ms(value: datetime | None) -> int:
+        if value is None:
+            return 0
+
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise XuiClientError("expires_at must be timezone-aware")
+
+        return int(value.timestamp() * 1000)
 
     @staticmethod
     def _validate_uuid(value: str) -> None:

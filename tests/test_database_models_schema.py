@@ -102,6 +102,11 @@ def test_user_model_has_unique_telegram_identity_and_admin_flags():
     assert column(User, "is_blocked").nullable is False
     assert str(column(User, "is_blocked").server_default.arg) == "false"
 
+    assert column(User, "trial_eligible").nullable is False
+    assert column(User, "trial_eligible").default.arg is True
+    assert str(column(User, "trial_eligible").server_default.arg) == "true"
+    assert column(User, "trial_claimed_at").nullable is True
+
 
 def test_payment_option_model_keeps_currency_network_as_separate_configured_option():
     assert PaymentOption.__tablename__ == "payment_options"
@@ -170,6 +175,25 @@ def test_subscription_model_has_stable_uuid_and_vpn_server_binding():
     assert column(Subscription, "uuid").unique is True
     assert column(Subscription, "uuid").index is True
     assert column(Subscription, "expires_at").index is True
+    assert column(Subscription, "is_trial").nullable is False
+    assert column(Subscription, "is_trial").default.arg is False
+    assert str(column(Subscription, "is_trial").server_default.arg) == "false"
+
+    trial_index = next(
+        index
+        for index in Subscription.__table__.indexes
+        if index.name == "uq_subscriptions_one_trial_per_user"
+    )
+    assert trial_index.unique is True
+    assert [item.name for item in trial_index.columns] == ["user_id"]
+    assert (
+        str(trial_index.dialect_options["postgresql"]["where"])
+        == "is_trial IS TRUE"
+    )
+    assert (
+        str(trial_index.dialect_options["sqlite"]["where"])
+        == "is_trial = 1"
+    )
 
 
 def test_vpn_server_model_supports_multi_node_selection_and_capacity_tracking():

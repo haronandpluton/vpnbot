@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, TimestampMixin
@@ -10,7 +10,15 @@ from app.payment_core.enums.subscription_status import SubscriptionStatus
 
 class Subscription(Base, TimestampMixin):
     __tablename__ = "subscriptions"
-
+    __table_args__ = (
+        Index(
+            "uq_subscriptions_one_trial_per_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("is_trial IS TRUE"),
+            sqlite_where=text("is_trial = 1"),
+        ),
+    )
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
 
     user_id: Mapped[int] = mapped_column(
@@ -45,7 +53,12 @@ class Subscription(Base, TimestampMixin):
     device_limit: Mapped[int] = mapped_column(
         nullable=False,
     )
-
+    is_trial: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
     starts_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

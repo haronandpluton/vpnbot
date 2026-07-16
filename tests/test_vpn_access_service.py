@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
@@ -21,18 +21,20 @@ class FakeXuiClient:
         self.create_calls: list[dict] = []
 
     async def create_vless_client(
-        self,
-        *,
-        client_uuid: str,
-        email: str,
-        device_limit: int,
-        comment: str = "",
+            self,
+            *,
+            client_uuid: str,
+            email: str,
+            device_limit: int,
+            expires_at: datetime | None = None,
+            comment: str = "",
     ) -> None:
         self.create_calls.append(
             {
                 "client_uuid": client_uuid,
                 "email": email,
                 "device_limit": device_limit,
+                "expires_at": expires_at,
                 "comment": comment,
             }
         )
@@ -122,6 +124,41 @@ async def test_create_access_generates_uuid_creates_xui_client_once_and_returns_
             "email": "tg-777-12345678",
             "device_limit": 2,
             "comment": "telegram user 777",
+            "expires_at": None,
+        }
+    ]
+
+@pytest.mark.asyncio
+async def test_create_access_forwards_expiration_to_xui_client(
+    monkeypatch,
+):
+    fixed_uuid = UUID("12345678-1234-5678-1234-567812345678")
+    monkeypatch.setattr(vpn_access_module, "uuid4", lambda: fixed_uuid)
+
+    expires_at = datetime(
+        2030,
+        1,
+        1,
+        tzinfo=timezone.utc,
+    )
+
+    xui_client = FakeXuiClient()
+    service = make_service(xui_client=xui_client)
+
+    result = await service.create_access(
+        user_id=777,
+        device_limit=1,
+        expires_at=expires_at,
+    )
+
+    assert result.uuid == "12345678-1234-5678-1234-567812345678"
+    assert xui_client.create_calls == [
+        {
+            "client_uuid": "12345678-1234-5678-1234-567812345678",
+            "email": "tg-777-12345678",
+            "device_limit": 1,
+            "expires_at": expires_at,
+            "comment": "telegram user 777",
         }
     ]
 
@@ -145,6 +182,7 @@ async def test_create_access_propagates_xui_error_and_returns_no_fake_success(
             "email": "tg-777-12345678",
             "device_limit": 2,
             "comment": "telegram user 777",
+            "expires_at": None,
         }
     ]
 

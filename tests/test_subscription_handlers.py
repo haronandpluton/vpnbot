@@ -341,3 +341,92 @@ async def test_happ_fallback_callback_sends_fallback_instruction_and_answers_cal
         in callback.message.answer_calls[0]["text"]
     )
     assert callback.answer_calls == [{"text": None}]
+
+@pytest.mark.asyncio
+async def test_active_trial_subscription_does_not_offer_renewal():
+    expires_at = datetime(
+        2026,
+        8,
+        4,
+        12,
+        0,
+        tzinfo=timezone.utc,
+    )
+    FakeMySubscriptionService.subscriptions_result = (
+        SimpleNamespace(
+            status="active",
+            subscriptions=(
+                SimpleNamespace(
+                    subscription_id=91,
+                    status="active",
+                    device_limit=1,
+                    expires_at=expires_at,
+                    is_trial=True,
+                ),
+            ),
+        )
+    )
+    message = FakeMessage(
+        from_user=SimpleNamespace(id=777)
+    )
+
+    await my_subscription_command(
+        message,
+        session="session",
+    )
+
+    assert len(message.answer_calls) == 1
+    assert row_callbacks(
+        message.answer_calls[0]["reply_markup"]
+    ) == [
+        ["vpn_access:show_config:91"],
+        ["vpn_access:show_config:91"],
+        ["buy_vpn"],
+        [
+            "vpn_access:happ_android",
+            "vpn_access:happ_ios",
+        ],
+        ["vpn_access:happ_fallback"],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_expired_trial_subscription_routes_to_buy_instead_of_renewal():
+    expires_at = datetime(
+        2026,
+        8,
+        4,
+        12,
+        0,
+        tzinfo=timezone.utc,
+    )
+    FakeMySubscriptionService.subscriptions_result = (
+        SimpleNamespace(
+            status="active",
+            subscriptions=(
+                SimpleNamespace(
+                    subscription_id=91,
+                    status="subscription_expired",
+                    device_limit=1,
+                    expires_at=expires_at,
+                    is_trial=True,
+                ),
+            ),
+        )
+    )
+    message = FakeMessage(
+        from_user=SimpleNamespace(id=777)
+    )
+
+    await my_subscription_command(
+        message,
+        session="session",
+    )
+
+    result_message = message.answer_calls[0]
+
+    assert "Click “Buy VPN”" in result_message["text"]
+    assert "Renew Subscription" not in result_message["text"]
+    assert row_callbacks(
+        result_message["reply_markup"]
+    ) == [["buy_vpn"]]

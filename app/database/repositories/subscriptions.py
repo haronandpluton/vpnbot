@@ -92,6 +92,7 @@ class SubscriptionRepository(BaseRepository):
         device_limit: int,
         starts_at: datetime,
         expires_at: datetime,
+        is_trial: bool = False,
     ) -> Subscription:
         subscription = Subscription(
             user_id=user_id,
@@ -102,6 +103,7 @@ class SubscriptionRepository(BaseRepository):
             device_limit=device_limit,
             starts_at=starts_at,
             expires_at=expires_at,
+            is_trial=is_trial,
         )
         self.session.add(subscription)
         await self.session.flush()

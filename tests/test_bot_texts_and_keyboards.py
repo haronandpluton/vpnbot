@@ -10,7 +10,10 @@ from app.bot.keyboards.main_menu import (
     tariff_keyboard,
 )
 from app.bot.keyboards.payment import payment_check_keyboard
-from app.bot.keyboards.vpn_access import vpn_access_keyboard
+from app.bot.keyboards.vpn_access import (
+    expired_subscription_keyboard,
+    vpn_access_keyboard,
+)
 from app.bot.texts.vpn_access import (
     format_datetime,
     format_vpn_access_text,
@@ -18,6 +21,7 @@ from app.bot.texts.vpn_access import (
     happ_android_instruction_text,
     happ_fallback_text,
     happ_ios_instruction_text,
+    format_expired_vpn_subscription_text,
 )
 
 
@@ -104,6 +108,22 @@ def test_main_menu_keyboard_has_stable_user_actions():
     ]
     assert row_callbacks(markup) == [
         ["buy_vpn"],
+        ["my_subscription"],
+        ["download_vpn"],
+        ["faq", "support"],
+    ]
+
+def test_main_menu_keyboard_shows_trial_action_for_eligible_user():
+    markup = main_menu_keyboard(trial_eligible=True)
+
+    assert row_texts(markup) == [
+        ["GET 3 VPN DAYS"],
+        ["My Subscription"],
+        ["Download VPN"],
+        ["FAQ", "Support"],
+    ]
+    assert row_callbacks(markup) == [
+        ["activate_trial"],
         ["my_subscription"],
         ["download_vpn"],
         ["faq", "support"],
@@ -304,3 +324,55 @@ def test_admin_back_keyboard_returns_to_admin_home():
 
     assert row_texts(markup) == [["Назад в админ-меню"]]
     assert row_callbacks(markup) == [["admin_menu:home"]]
+
+def test_trial_vpn_access_keyboard_omits_renewal():
+    markup = vpn_access_keyboard(
+        subscription_id=77,
+        renewable=False,
+    )
+
+    assert row_texts(markup) == [
+        ["Connect VPN"],
+        ["Send Access Again"],
+        ["Buy VPN"],
+        ["Happ VPN: Android", "Happ VPN: iPhone"],
+        ["If Happ Does Not Open"],
+    ]
+    assert row_callbacks(markup) == [
+        ["vpn_access:show_config:77"],
+        ["vpn_access:show_config:77"],
+        ["buy_vpn"],
+        [
+            "vpn_access:happ_android",
+            "vpn_access:happ_ios",
+        ],
+        ["vpn_access:happ_fallback"],
+    ]
+
+
+def test_expired_trial_keyboard_routes_to_buy():
+    markup = expired_subscription_keyboard(
+        subscription_id=77,
+        renewable=False,
+    )
+
+    assert row_texts(markup) == [["Buy VPN"]]
+    assert row_callbacks(markup) == [["buy_vpn"]]
+
+
+def test_expired_trial_text_offers_purchase_not_renewal():
+    text = format_expired_vpn_subscription_text(
+        device_limit=1,
+        expires_at=datetime(
+            2030,
+            1,
+            4,
+            12,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        renewable=False,
+    )
+
+    assert "Click “Buy VPN”" in text
+    assert "Renew Subscription" not in text

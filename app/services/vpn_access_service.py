@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from app.config.settings import get_settings
 from app.services.xui_client import make_xui_client_from_settings
-
+from datetime import datetime
 
 DEFAULT_PUBLIC_BASE_URL = "https://connect.presentvpn.click"
 
@@ -62,9 +62,10 @@ class VpnAccessService:
         self.public_base_url = settings.vpn_subscription_public_base_url
 
     async def create_access(
-        self,
-        user_id: int,
-        device_limit: int,
+            self,
+            user_id: int,
+            device_limit: int,
+            expires_at: datetime | None = None,
     ) -> VpnAccessResult:
         access_uuid = str(uuid4())
         email = build_client_email(user_id, access_uuid)
@@ -73,6 +74,7 @@ class VpnAccessService:
             client_uuid=access_uuid,
             email=email,
             device_limit=device_limit,
+            expires_at=expires_at,
             comment=f"telegram user {user_id}",
         )
 

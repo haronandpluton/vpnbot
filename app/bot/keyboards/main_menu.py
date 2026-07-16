@@ -12,15 +12,24 @@ from app.config.tariffs import get_purchasable_tariffs, get_tariff
 TELEGRAM_STARS_PAYMENT_OPTION_CODE = "telegram_stars"
 
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
+def main_menu_keyboard(
+    *,
+    trial_eligible: bool = False,
+) -> InlineKeyboardMarkup:
+    if trial_eligible:
+        primary_button = InlineKeyboardButton(
+            text="GET 3 VPN DAYS",
+            callback_data="activate_trial",
+        )
+    else:
+        primary_button = InlineKeyboardButton(
+            text="Buy VPN",
+            callback_data="buy_vpn",
+        )
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Buy VPN",
-                    callback_data="buy_vpn",
-                )
-            ],
+            [primary_button],
             [
                 InlineKeyboardButton(
                     text="My Subscription",
@@ -45,7 +54,6 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             ],
         ]
     )
-
 
 def _format_price_usd(value: Decimal) -> str:
     return format(value.normalize(), "f")

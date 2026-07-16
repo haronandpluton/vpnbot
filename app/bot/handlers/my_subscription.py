@@ -39,7 +39,10 @@ async def send_my_subscriptions(
                 "status",
                 "active",
             )
-
+            is_trial = bool(
+                getattr(subscription, "is_trial", False)
+            )
+            renewable = not is_trial
             if subscription_status == "subscription_expired":
                 text = (
                     f"Subscription #{position}\n"
@@ -47,10 +50,12 @@ async def send_my_subscriptions(
                     f"{format_expired_vpn_subscription_text(
                         device_limit=subscription.device_limit,
                         expires_at=subscription.expires_at,
+                        renewable=renewable,
                     )}"
                 )
                 keyboard = expired_subscription_keyboard(
                     subscription_id=subscription.subscription_id,
+                    renewable=renewable,
                 )
             else:
                 text = (
@@ -63,6 +68,7 @@ async def send_my_subscriptions(
                 )
                 keyboard = vpn_access_keyboard(
                     subscription_id=subscription.subscription_id,
+                    renewable=renewable,
                 )
 
             await message.answer(

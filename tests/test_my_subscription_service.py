@@ -95,6 +95,7 @@ def make_subscription(
     uuid: str = "test-uuid",
     device_limit: int = 2,
     expires_at=None,
+    is_trial: bool = False,
 ):
     return SimpleNamespace(
         id=subscription_id,
@@ -106,6 +107,7 @@ def make_subscription(
         if expires_at is not None
         else datetime.now(timezone.utc) + timedelta(days=10),
         last_access_sent_at=None,
+        is_trial=is_trial,
     )
 
 
@@ -238,6 +240,7 @@ async def test_get_active_subscription_view_does_not_generate_config_or_commit()
         status=SubscriptionStatus.ACTIVE,
         uuid="active-uuid",
         device_limit=3,
+        is_trial=True,
     )
     vpn_access = FakeVpnAccessService()
     service = make_service(
@@ -259,6 +262,7 @@ async def test_get_active_subscription_view_does_not_generate_config_or_commit()
     assert subscription.last_access_sent_at is None
     assert vpn_access.get_config_calls == []
     assert service.session.commit_count == 0
+    assert result.is_trial is True
 
 
 @pytest.mark.asyncio
@@ -336,6 +340,7 @@ async def test_get_access_returns_existing_config_and_updates_last_access_sent_o
         uuid="active-uuid",
         device_limit=3,
         expires_at=old_expires_at,
+        is_trial=True,
     )
     subscription_repository = FakeSubscriptionRepository(
         active_subscription=subscription,
@@ -360,6 +365,7 @@ async def test_get_access_returns_existing_config_and_updates_last_access_sent_o
     assert result.device_limit == 3
     assert result.config_uri == "https://connect/active-uuid"
     assert result.message == "Доступ отправлен повторно."
+    assert result.is_trial is True
 
     assert subscription.uuid == "active-uuid"
     assert subscription.expires_at == old_expires_at
@@ -374,6 +380,9 @@ async def test_get_access_returns_existing_config_and_updates_last_access_sent_o
     ]
     assert service.session.commit_count == 1
 
+    result = await service.get_access_by_telegram_id(123456)
+
+    assert result.is_trial is True
 
 @pytest.mark.asyncio
 async def test_get_access_propagates_vpn_error_without_marking_access_sent_or_commit():

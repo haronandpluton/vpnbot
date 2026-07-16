@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-
+from datetime import datetime, timezone
 import app.services.xui_client as xui_module
 from app.services.xui_client import (
     XuiClient,
@@ -220,10 +220,18 @@ async def test_create_vless_client_builds_payload_and_posts_to_3xui(monkeypatch)
 
     client = XuiClient(make_config(base_url="https://xui.example/"))
 
+    expires_at = datetime(
+        2030,
+        1,
+        1,
+        tzinfo=timezone.utc,
+    )
+
     await client.create_vless_client(
         client_uuid="12345678-1234-5678-1234-567812345678",
         email="tg-7-12345678",
         device_limit=3,
+        expires_at=expires_at,
         comment="telegram user 7",
     )
 
@@ -244,7 +252,7 @@ async def test_create_vless_client_builds_payload_and_posts_to_3xui(monkeypatch)
                     "flow": "",
                     "security": "auto",
                     "totalGB": 0,
-                    "expiryTime": 0,
+                    "expiryTime": 1893456000000,
                     "limitIp": 3,
                     "tgId": 0,
                     "reset": 0,
@@ -311,3 +319,30 @@ def test_make_xui_client_from_settings_maps_settings_to_config():
         password="secret",
         inbound_id=99,
     )
+
+def test_expiry_time_ms_is_zero_when_expiry_is_not_configured():
+    assert XuiClient._to_expiry_time_ms(None) == 0
+
+
+def test_expiry_time_ms_converts_aware_datetime_to_unix_milliseconds():
+    expires_at = datetime(
+        2030,
+        1,
+        1,
+        0,
+        0,
+        0,
+        tzinfo=timezone.utc,
+    )
+
+    assert XuiClient._to_expiry_time_ms(expires_at) == 1893456000000
+
+
+def test_expiry_time_ms_rejects_naive_datetime():
+    expires_at = datetime(2030, 1, 1)
+
+    with pytest.raises(
+        XuiClientError,
+        match="expires_at must be timezone-aware",
+    ):
+        XuiClient._to_expiry_time_ms(expires_at)

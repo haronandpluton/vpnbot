@@ -20,6 +20,7 @@ class MySubscriptionResult:
     expires_at: datetime | None = None
     device_limit: int | None = None
     config_uri: str | None = None
+    is_trial: bool = False
     message: str | None = None
 
 
@@ -192,6 +193,9 @@ class MySubscriptionService:
             expires_at=subscription.expires_at,
             device_limit=subscription.device_limit,
             config_uri=config_uri,
+            is_trial=bool(
+                getattr(subscription, "is_trial", False)
+            ),
             message="Доступ отправлен повторно.",
         )
 
@@ -293,6 +297,9 @@ class MySubscriptionService:
                 subscription_status=subscription.status.value,
                 expires_at=subscription.expires_at,
                 device_limit=subscription.device_limit,
+                is_trial=bool(
+                    getattr(subscription, "is_trial", False)
+                ),
                 message="Срок подписки истек.",
             )
 
@@ -304,6 +311,9 @@ class MySubscriptionService:
                 subscription_status=subscription.status.value,
                 expires_at=subscription.expires_at,
                 device_limit=subscription.device_limit,
+                is_trial=bool(
+                    getattr(subscription, "is_trial", False)
+                ),
                 message="Подписка не активна.",
             )
 
@@ -314,5 +324,8 @@ class MySubscriptionService:
             subscription_status=subscription.status.value,
             expires_at=subscription.expires_at,
             device_limit=subscription.device_limit,
+            is_trial=bool(
+                getattr(subscription, "is_trial", False)
+            ),
             message="Активная подписка найдена.",
         )

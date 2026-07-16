@@ -27,15 +27,25 @@ def format_expired_vpn_subscription_text(
     *,
     device_limit: int | None,
     expires_at,
+    renewable: bool = True,
 ) -> str:
     expires_at_text = format_datetime(expires_at)
+
+    if renewable:
+        action_text = (
+            "Click “Renew Subscription” to restore access "
+            "with the same VPN key."
+        )
+    else:
+        action_text = (
+            "Click “Buy VPN” to continue with a paid subscription."
+        )
 
     return (
         "Your VPN subscription has expired.\n\n"
         f"Devices: {device_limit or '—'}\n"
         f"Was active until: {expires_at_text}\n\n"
-        "Click “Renew Subscription” to restore access "
-        "with the same VPN key."
+        f"{action_text}"
     )
 
 
