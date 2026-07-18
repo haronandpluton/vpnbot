@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import (
     CallbackQuery,
     Message,
+    MessageEntity,
     User as TelegramUser,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,12 @@ from app.bot.handlers.my_subscription import (
 from app.bot.keyboards.main_menu import main_menu_keyboard
 from app.bot.keyboards.vpn_access import vpn_access_keyboard
 from app.bot.texts.vpn_access import format_vpn_access_text
+from app.bot.utils.custom_emoji import (
+    GIFT_CUSTOM_EMOJI_ID,
+    ROBOT_CUSTOM_EMOJI_ID,
+    SPARKLE_CUSTOM_EMOJI_ID,
+    build_custom_emoji_entities,
+)
 from app.services.order_service import OrderService
 from app.services.trial_activation_service import (
     TrialActivationService,
@@ -23,7 +30,6 @@ from app.services.trial_activation_service import (
 
 logger = logging.getLogger(__name__)
 router = Router()
-
 
 def main_menu_text() -> str:
     return (
@@ -37,6 +43,13 @@ def main_menu_text() -> str:
         "subscription, the more present days you get ✨\n\n"
         "🎁 Get your 3 VPN days as a present now 🎁"
     )
+
+
+def main_menu_entities(
+    text: str,
+) -> list[MessageEntity]:
+    return build_custom_emoji_entities(text)
+
 
 async def _get_menu_trial_eligibility(
     *,
@@ -75,8 +88,11 @@ async def start_command(
         telegram_user=message.from_user,
     )
 
+    text = main_menu_text()
+
     await message.answer(
-        main_menu_text(),
+        text,
+        entities=main_menu_entities(text),
         reply_markup=main_menu_keyboard(
             trial_eligible=trial_eligible,
         ),
@@ -100,8 +116,11 @@ async def back_to_main_menu_callback(
         telegram_user=callback.from_user,
     )
 
+    text = main_menu_text()
+
     await callback.message.edit_text(
-        main_menu_text(),
+        text,
+        entities=main_menu_entities(text),
         reply_markup=main_menu_keyboard(
             trial_eligible=trial_eligible,
         ),

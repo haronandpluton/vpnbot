@@ -92,6 +92,57 @@ def test_main_menu_text_is_stable_entrypoint_copy():
     )
 
 
+def test_main_menu_entities_cover_gifts_robot_and_sparkles():
+    text = main_menu_text()
+    entities = start_module.main_menu_entities(text)
+
+    custom_emoji_ids = [
+        entity.custom_emoji_id
+        for entity in entities
+    ]
+
+    assert len(custom_emoji_ids) == 9
+    assert (
+        custom_emoji_ids.count(
+            start_module.GIFT_CUSTOM_EMOJI_ID
+        )
+        == 6
+    )
+    assert (
+        custom_emoji_ids.count(
+            start_module.ROBOT_CUSTOM_EMOJI_ID
+        )
+        == 1
+    )
+    assert (
+        custom_emoji_ids.count(
+            start_module.SPARKLE_CUSTOM_EMOJI_ID
+        )
+        == 2
+    )
+
+    encoded_text = text.encode("utf-16-le")
+
+    placeholders = [
+        encoded_text[
+            entity.offset * 2:
+            (entity.offset + entity.length) * 2
+        ].decode("utf-16-le")
+        for entity in entities
+    ]
+
+    expected_placeholder_by_id = {
+        start_module.GIFT_CUSTOM_EMOJI_ID: "🎁",
+        start_module.ROBOT_CUSTOM_EMOJI_ID: "🤖",
+        start_module.SPARKLE_CUSTOM_EMOJI_ID: "✨",
+    }
+
+    assert placeholders == [
+        expected_placeholder_by_id[entity.custom_emoji_id]
+        for entity in entities
+    ]
+
+
 @pytest.mark.asyncio
 async def test_start_command_sends_buy_menu_for_ineligible_user(
     monkeypatch,
@@ -136,6 +187,12 @@ async def test_start_command_sends_buy_menu_for_ineligible_user(
     assert session.rollback_count == 0
 
     assert message.answer_calls[0]["text"] == main_menu_text()
+    assert (
+        message.answer_calls[0]["entities"]
+        == start_module.main_menu_entities(
+            main_menu_text()
+        )
+    )
     assert_callback_rows(
         message.answer_calls[0]["reply_markup"],
         [
@@ -218,6 +275,12 @@ async def test_back_to_main_menu_callback_uses_current_trial_state(
 
     assert session.commit_count == 1
     assert callback.message.edit_text_calls[0]["text"] == main_menu_text()
+    assert (
+        callback.message.edit_text_calls[0]["entities"]
+        == start_module.main_menu_entities(
+            main_menu_text()
+        )
+    )
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
         [
@@ -466,7 +529,9 @@ async def test_select_payment_happy_path_creates_order_invoice_and_payment_keybo
     assert "Access period: 66 days" in text
     assert "Price: 7.50 USD" in text
     assert "Payment currency: BTC" in text
-    assert callback.message.edit_text_calls[0]["parse_mode"] == "HTML"
+    edit_call = callback.message.edit_text_calls[0]
+    assert "parse_mode" not in edit_call
+    assert edit_call["entities"]
     assert_callback_rows(
         callback.message.edit_text_calls[0]["reply_markup"],
         [[None], ["check_payment:23"], ["dev_confirm_payment:23"]],

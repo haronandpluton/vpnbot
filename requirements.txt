@@ -1,4 +1,4 @@
-aiogram==3.20.0.post0
+aiogram==3.25.0
 SQLAlchemy==2.0.41
 alembic==1.16.1
 asyncpg==0.30.0

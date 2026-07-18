@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.main_menu import payment_method_keyboard, tariff_keyboard
 from app.bot.keyboards.payment import payment_check_keyboard
+from app.bot.utils.custom_emoji import build_custom_emoji_entities
 from app.common.enums import TariffCode
 from app.config.payment_options import (
     get_payment_option,
@@ -88,16 +89,22 @@ def _tariff_details_text(
 
 @router.message(Command("buy"))
 async def buy_command(message: Message):
+    text = "Choose a plan 🎁"
+
     await message.answer(
-        "Choose a plan 🎁",
+        text,
+        entities=build_custom_emoji_entities(text),
         reply_markup=tariff_keyboard(),
     )
 
 
 @router.callback_query(F.data == "buy_vpn")
 async def buy_vpn_callback(callback: CallbackQuery):
+    text = "Choose a plan 🎁"
+
     await callback.message.edit_text(
-        "Choose a plan 🎁",
+        text,
+        entities=build_custom_emoji_entities(text),
         reply_markup=tariff_keyboard(),
     )
     await callback.answer()
@@ -136,8 +143,11 @@ async def select_tariff_callback(callback: CallbackQuery):
         )
         return
 
+    text = _tariff_details_text(tariff)
+
     await callback.message.edit_text(
-        _tariff_details_text(tariff),
+        text,
+        entities=build_custom_emoji_entities(text),
         reply_markup=payment_method_keyboard(
             tariff.code.value,
             telegram_stars_enabled=(
@@ -177,11 +187,14 @@ async def select_renewal_tariff_callback(callback: CallbackQuery):
         )
         return
 
+    text = _tariff_details_text(
+        tariff,
+        target_subscription_id=subscription_id,
+    )
+
     await callback.message.edit_text(
-        _tariff_details_text(
-            tariff,
-            target_subscription_id=subscription_id,
-        ),
+        text,
+        entities=build_custom_emoji_entities(text),
         reply_markup=payment_method_keyboard(
             tariff.code.value,
             target_subscription_id=subscription_id,
@@ -345,12 +358,12 @@ async def select_payment_callback(
 
     await callback.message.edit_text(
         text,
+        entities=build_custom_emoji_entities(text),
         reply_markup=payment_check_keyboard(
             order.id,
             payment_url=payment_url,
             payment_url_text="Pay with CryptoBot",
             show_dev_button=settings.dev_mode,
         ),
-        parse_mode="HTML",
     )
     await callback.answer()

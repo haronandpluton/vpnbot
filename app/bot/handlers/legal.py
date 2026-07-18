@@ -12,6 +12,8 @@ from aiogram.types import (
     Message,
 )
 
+from app.bot.utils.custom_emoji import build_custom_emoji_entities
+
 router = Router()
 
 LEGAL_DIR = Path(__file__).resolve().parents[2] / "legal"
@@ -165,6 +167,9 @@ async def send_legal_document(
 
         await callback.message.answer(
             chunk,
+            entities=build_custom_emoji_entities(
+                chunk
+            ),
             reply_markup=(
                 rules_back_keyboard()
                 if is_last

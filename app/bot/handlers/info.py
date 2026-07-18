@@ -1,10 +1,16 @@
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.main_menu import back_to_main_menu_keyboard
+from app.bot.utils.custom_emoji import build_custom_emoji_entities
 from app.config.settings import get_settings
 from app.database.repositories.users import UserRepository
 from app.services.my_subscription_service import MySubscriptionService
@@ -313,17 +319,18 @@ async def profile_command(
 @router.message(Command("present"))
 async def present_command(message: Message):
     text = (
-        "Present Program\n\n"
-        "This section is reserved for future gift subscriptions and invitations.\n\n"
-        "The present program is not active yet. "
-        "You can buy VPN access for yourself with /buy."
+        "Every subscription already includes a present. "
+        "Purchase any plan and automatically receive "
+        "extra VPN days. The longer your subscription, "
+        "the more present days you get 🎁"
     )
 
     await message.answer(
         text,
+        entities=build_custom_emoji_entities(text),
         reply_markup=back_to_main_menu_keyboard(),
     )
-    
+
 
 @router.callback_query(F.data == "download_vpn")
 async def download_vpn_callback(callback: CallbackQuery):

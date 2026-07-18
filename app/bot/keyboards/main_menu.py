@@ -2,6 +2,10 @@ from decimal import Decimal
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from app.bot.utils.custom_emoji import (
+    GIFT_CUSTOM_EMOJI_ID,
+    STAR_CUSTOM_EMOJI_ID,
+)
 from app.common.enums import TariffCode
 from app.config.payment_options import (
     CRYPTOBOT_PAYMENT_OPTION_CODES,
@@ -78,9 +82,10 @@ def tariff_keyboard(
                 InlineKeyboardButton(
                     text=(
                         f"{_format_tariff_button_price(tariff.price_usd)}$ — "
-                        f"{tariff.title}"
+                        f"{tariff.title.replace(' 🎁', '')}"
                     ),
                     callback_data=callback_data,
+                    icon_custom_emoji_id=GIFT_CUSTOM_EMOJI_ID,
                 )
             ]
         )
@@ -161,10 +166,11 @@ def payment_method_keyboard(
             [
                 InlineKeyboardButton(
                     text=(
-                        f"⭐ Telegram Stars — "
+                        f"Telegram Stars — "
                         f"{tariff.stars_price} XTR"
                     ),
                     callback_data=stars_callback,
+                    icon_custom_emoji_id=STAR_CUSTOM_EMOJI_ID,
                 )
             ]
         )

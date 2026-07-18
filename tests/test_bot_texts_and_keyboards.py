@@ -10,6 +10,10 @@ from app.bot.keyboards.main_menu import (
     tariff_keyboard,
 )
 from app.bot.keyboards.payment import payment_check_keyboard
+from app.bot.utils.custom_emoji import (
+    GIFT_CUSTOM_EMOJI_ID,
+    STAR_CUSTOM_EMOJI_ID,
+)
 from app.bot.keyboards.vpn_access import (
     expired_subscription_keyboard,
     vpn_access_keyboard,
@@ -134,9 +138,9 @@ def test_tariff_keyboard_exposes_current_tariff_callbacks_and_back_button():
     markup = tariff_keyboard()
 
     assert row_texts(markup) == [
-        ["4$ — 33 days (30 days + 3 days 🎁)"],
-        ["7,5$ — 66 days (60 days + 6 days 🎁)"],
-        ["11$ — 99 days (90 days + 9 days 🎁)"],
+        ["4$ — 33 days (30 days + 3 days)"],
+        ["7,5$ — 66 days (60 days + 6 days)"],
+        ["11$ — 99 days (90 days + 9 days)"],
         ["Back"],
     ]
     assert row_callbacks(markup) == [
@@ -189,7 +193,7 @@ def test_payment_method_keyboard_shows_stars_when_enabled():
         ["BTC", "ETH"],
         ["TON", "LTC"],
         ["BNB", "TRX"],
-        ["⭐ Telegram Stars — 600 XTR"],
+        ["Telegram Stars — 600 XTR"],
         ["Back"],
     ]
 
@@ -222,7 +226,7 @@ def test_payment_method_keyboard_uses_renew_stars_callback():
     )
 
     assert row_texts(markup)[-2:] == [
-        ["⭐ Telegram Stars — 900 XTR"],
+        ["Telegram Stars — 900 XTR"],
         ["Back"],
     ]
 
@@ -230,6 +234,61 @@ def test_payment_method_keyboard_uses_renew_stars_callback():
         ["renew_stars:77:period_3_months"],
         ["renew_subscription:77"],
     ]
+
+
+
+def test_tariff_keyboard_uses_custom_gift_icons():
+    markup = tariff_keyboard()
+
+    tariff_buttons = [
+        row[0]
+        for row in markup.inline_keyboard[:-1]
+    ]
+
+    assert [
+        button.icon_custom_emoji_id
+        for button in tariff_buttons
+    ] == [
+        GIFT_CUSTOM_EMOJI_ID,
+        GIFT_CUSTOM_EMOJI_ID,
+        GIFT_CUSTOM_EMOJI_ID,
+    ]
+
+    assert (
+        markup.inline_keyboard[-1][0].icon_custom_emoji_id
+        is None
+    )
+
+
+def test_payment_method_keyboard_uses_custom_star_icon():
+    purchase_markup = payment_method_keyboard(
+        "period_2_months",
+        telegram_stars_enabled=True,
+    )
+    renewal_markup = payment_method_keyboard(
+        "period_3_months",
+        target_subscription_id=77,
+        telegram_stars_enabled=True,
+    )
+
+    purchase_star_button = purchase_markup.inline_keyboard[-2][0]
+    renewal_star_button = renewal_markup.inline_keyboard[-2][0]
+
+    assert (
+        purchase_star_button.icon_custom_emoji_id
+        == STAR_CUSTOM_EMOJI_ID
+    )
+    assert (
+        renewal_star_button.icon_custom_emoji_id
+        == STAR_CUSTOM_EMOJI_ID
+    )
+
+    assert purchase_star_button.text == (
+        "Telegram Stars — 600 XTR"
+    )
+    assert renewal_star_button.text == (
+        "Telegram Stars — 900 XTR"
+    )
 
 
 def test_back_to_main_menu_keyboard_returns_single_stable_callback():
