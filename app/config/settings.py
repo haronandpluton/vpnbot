@@ -85,6 +85,35 @@ class Settings(BaseSettings):
     cryptobot_api_token: str = Field(default="", alias="CRYPTOBOT_API_TOKEN")
     cryptobot_asset: str = Field(default="USDT", alias="CRYPTOBOT_ASSET")
     cryptobot_expires_in: int = Field(default=900, alias="CRYPTOBOT_EXPIRES_IN")
+    cryptobot_background_sync_enabled: bool = Field(
+        default=False,
+        alias="CRYPTOBOT_BACKGROUND_SYNC_ENABLED",
+    )
+    cryptobot_background_sync_interval_seconds: int = Field(
+        default=20,
+        alias="CRYPTOBOT_BACKGROUND_SYNC_INTERVAL_SECONDS",
+        gt=0,
+        le=3600,
+    )
+    cryptobot_background_sync_initial_delay_seconds: int = Field(
+        default=10,
+        alias="CRYPTOBOT_BACKGROUND_SYNC_INITIAL_DELAY_SECONDS",
+        ge=0,
+        le=3600,
+    )
+    cryptobot_background_sync_batch_size: int = Field(
+        default=25,
+        alias="CRYPTOBOT_BACKGROUND_SYNC_BATCH_SIZE",
+        gt=0,
+        le=500,
+    )
+    cryptobot_notification_claim_ttl_seconds: int = Field(
+        default=300,
+        alias="CRYPTOBOT_NOTIFICATION_CLAIM_TTL_SECONDS",
+        gt=0,
+        le=86400,
+    )
+
     telegram_stars_enabled: bool = Field(
         default=False,
         alias="TELEGRAM_STARS_ENABLED",

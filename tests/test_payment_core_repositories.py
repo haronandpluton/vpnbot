@@ -35,6 +35,9 @@ class FakeExecuteResult:
     def scalars(self):
         return FakeScalarResult(self.items)
 
+    def all(self):
+        return self.items
+
 
 class FakeSession:
     def __init__(self, *, scalar_value=None, items=None, fail_flush: bool = False) -> None:
@@ -624,3 +627,173 @@ async def test_payment_event_repository_mark_processed_allows_empty_processing_s
     assert event.error_message is None
     assert event.processed_at is not None
     assert session.flush_count == 1
+
+
+@pytest.mark.asyncio
+async def test_pending_cryptobot_order_ids_returns_selected_batch():
+    session = FakeSession(items=[101, 102, 103])
+    repository = OrderRepository(session)
+
+    result = await repository.get_pending_cryptobot_order_ids(
+        limit=3,
+        after_id=100,
+    )
+
+    assert result == [101, 102, 103]
+    assert len(session.execute_calls) == 1
+
+    statement = str(session.execute_calls[0])
+    assert "orders.id >" in statement
+    assert "orders.destination_memo_tag IS NOT NULL" in statement
+    assert "payment_options.code IN" in statement
+
+
+@pytest.mark.asyncio
+async def test_pending_cryptobot_order_ids_skips_query_for_nonpositive_limit():
+    session = FakeSession(items=[101])
+    repository = OrderRepository(session)
+
+    result = await repository.get_pending_cryptobot_order_ids(limit=0)
+
+    assert result == []
+    assert session.execute_calls == []
+
+
+@pytest.mark.asyncio
+async def test_pending_cryptobot_notifications_maps_database_rows():
+    session = FakeSession(
+        items=[
+            (70, 23, 123456789),
+            (71, 24, 987654321),
+        ]
+    )
+    repository = PaymentEventRepository(session)
+
+    result = await repository.get_pending_cryptobot_notifications(
+        limit=2,
+        after_event_id=69,
+    )
+
+    assert len(result) == 2
+    assert result[0].event_id == 70
+    assert result[0].order_id == 23
+    assert result[0].telegram_id == 123456789
+    assert result[1].event_id == 71
+    assert result[1].order_id == 24
+    assert result[1].telegram_id == 987654321
+
+    statement = str(session.execute_calls[0])
+    assert "payment_events.notification_sent_at IS NULL" in statement
+    assert "payment_events.id >" in statement
+    assert "orders.activated_subscription_id IS NOT NULL" in statement
+
+
+@pytest.mark.asyncio
+async def test_pending_cryptobot_notifications_skips_query_for_nonpositive_limit():
+    session = FakeSession()
+    repository = PaymentEventRepository(session)
+
+    result = await repository.get_pending_cryptobot_notifications(limit=0)
+
+    assert result == []
+    assert session.execute_calls == []
+
+
+@pytest.mark.asyncio
+async def test_cryptobot_notification_claim_is_atomic():
+    claimed_at = datetime(2026, 7, 19, 6, 0, tzinfo=UTC)
+    stale_before = claimed_at - timedelta(minutes=5)
+    session = FakeSession(scalar_value=70)
+    repository = PaymentEventRepository(session)
+
+    result = await repository.claim_notification(
+        70,
+        claim_token="worker-token-1",
+        claimed_at=claimed_at,
+        stale_before=stale_before,
+    )
+
+    assert result is True
+    assert len(session.execute_calls) == 1
+
+    statement = str(session.execute_calls[0])
+    assert "payment_events.notification_sent_at IS NULL" in statement
+    assert "payment_events.notification_claimed_at IS NULL" in statement
+    assert "payment_events.notification_claimed_at <" in statement
+
+
+@pytest.mark.asyncio
+async def test_cryptobot_notification_claim_returns_false_when_not_acquired():
+    session = FakeSession(scalar_value=None)
+    repository = PaymentEventRepository(session)
+
+    result = await repository.claim_notification(
+        70,
+        claim_token="worker-token-2",
+        claimed_at=datetime.now(UTC),
+        stale_before=datetime.now(UTC) - timedelta(minutes=5),
+    )
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_mark_notification_sent_requires_owned_claim():
+    sent_at = datetime(2026, 7, 19, 6, 5, tzinfo=UTC)
+    session = FakeSession(scalar_value=70)
+    repository = PaymentEventRepository(session)
+
+    result = await repository.mark_notification_sent(
+        70,
+        claim_token="worker-token-1",
+        sent_at=sent_at,
+    )
+
+    assert result is True
+
+    statement = str(session.execute_calls[0])
+    assert "payment_events.notification_claim_token =" in statement
+    assert "payment_events.notification_sent_at IS NULL" in statement
+
+
+@pytest.mark.asyncio
+async def test_mark_notification_sent_rejects_foreign_or_expired_claim():
+    session = FakeSession(scalar_value=None)
+    repository = PaymentEventRepository(session)
+
+    result = await repository.mark_notification_sent(
+        70,
+        claim_token="foreign-token",
+    )
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_release_notification_claim_requires_owned_claim():
+    session = FakeSession(scalar_value=70)
+    repository = PaymentEventRepository(session)
+
+    result = await repository.release_notification_claim(
+        70,
+        claim_token="worker-token-1",
+    )
+
+    assert result is True
+
+    statement = str(session.execute_calls[0])
+    assert "payment_events.notification_claim_token =" in statement
+    assert "payment_events.notification_sent_at IS NULL" in statement
+
+
+@pytest.mark.asyncio
+async def test_release_notification_claim_rejects_foreign_claim():
+    session = FakeSession(scalar_value=None)
+    repository = PaymentEventRepository(session)
+
+    result = await repository.release_notification_claim(
+        70,
+        claim_token="foreign-token",
+    )
+
+    assert result is False
