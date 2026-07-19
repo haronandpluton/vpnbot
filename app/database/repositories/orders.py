@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from app.common.enums import CurrencyCode, NetworkCode, TariffCode
-from app.database.models import Order
+from app.config.payment_options import CRYPTOBOT_PAYMENT_OPTION_CODES
+from app.database.models import Order, PaymentOption
 from app.database.repositories.base import BaseRepository
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.payment_method import PaymentMethod
@@ -44,6 +45,43 @@ class OrderRepository(BaseRepository):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_pending_cryptobot_order_ids(
+        self,
+        *,
+        limit: int,
+        after_id: int = 0,
+    ) -> list[int]:
+        """
+        Return non-expired CryptoBot orders eligible for invoice polling.
+
+        Only identifiers are returned so callers do not keep ORM instances
+        or database transactions open while calling the external provider.
+        """
+        if limit <= 0:
+            return []
+
+        now = datetime.now(UTC)
+
+        stmt = (
+            select(Order.id)
+            .join(
+                PaymentOption,
+                PaymentOption.id == Order.payment_option_id,
+            )
+            .where(
+                Order.status == OrderStatus.WAITING_PAYMENT,
+                Order.expires_at > now,
+                Order.id > after_id,
+                PaymentOption.code.in_(CRYPTOBOT_PAYMENT_OPTION_CODES),
+                Order.destination_memo_tag.is_not(None),
+            )
+            .order_by(Order.id.asc())
+            .limit(limit)
+        )
+
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def create(
         self,

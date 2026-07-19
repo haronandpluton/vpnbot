@@ -1,11 +1,18 @@
+import logging
+
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.payment_adapters.cryptobot import CryptoBotAPIError
+from app.services.cryptobot_payment_notification_service import (
+    CryptoBotPaymentNotificationService,
+)
 from app.services.cryptobot_payment_service import CryptoBotPaymentService
 from app.services.order_service import OrderService
 from app.services.payment_check_service import PaymentCheckService
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -35,7 +42,9 @@ async def check_payment_callback(
         return
 
     try:
-        await CryptoBotPaymentService(session).sync_paid_invoice_and_activate(order_id)
+        sync_result = await CryptoBotPaymentService(
+            session
+        ).sync_paid_invoice_and_activate(order_id)
     except CryptoBotAPIError:
         await callback.message.answer(
             "Could not check the payment through CryptoBot. Try again in a few seconds."
@@ -43,7 +52,62 @@ async def check_payment_callback(
         await callback.answer()
         return
 
+    synced_event = (
+        sync_result.get("event")
+        if isinstance(sync_result, dict)
+        else None
+    )
+    synced_event_id = getattr(synced_event, "id", None)
+
     result = await PaymentCheckService(session).check_order_payment(order_id)
+
+    event_id = synced_event_id or getattr(result, "event_id", None)
+
+    if result.status == "activated":
+        if event_id is None:
+            logger.error(
+                "Activated CryptoBot order has no payment event: "
+                "order_id=%s telegram_id=%s",
+                order.id,
+                callback.from_user.id,
+            )
+            await callback.answer(
+                "Payment confirmed. VPN access is active.",
+                show_alert=True,
+            )
+            return
+        try:
+            delivery = await CryptoBotPaymentNotificationService(
+                session
+            ).deliver(
+                event_id=event_id,
+                order_id=order.id,
+                telegram_id=callback.from_user.id,
+                send_message=callback.message.answer,
+            )
+        except Exception:
+            logger.exception(
+                "Manual CryptoBot notification failed: "
+                "event_id=%s order_id=%s telegram_id=%s",
+                event_id,
+                order.id,
+                callback.from_user.id,
+            )
+            await callback.answer(
+                "Payment confirmed. VPN access is active.",
+                show_alert=True,
+            )
+            return
+
+        if delivery.delivered:
+            await callback.answer()
+            return
+
+        await callback.answer(
+            "Payment confirmed. VPN access is active.",
+            show_alert=delivery.reason == "send_failed",
+        )
+        return
 
     if result.status == "waiting_payment":
         text = "Payment has not been found yet. If you have already paid, check again in a few seconds."

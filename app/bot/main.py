@@ -44,6 +44,9 @@ from app.bot.middlewares.db_session import DbSessionMiddleware
 from app.bot.middlewares.dev_commands_guard import DevCommandsGuardMiddleware
 from app.config.settings import get_settings
 from app.database.session import SessionLocal
+from app.services.cryptobot_background_sync_scheduler import (
+    CryptoBotBackgroundSyncScheduler,
+)
 from app.services.order_expiration_scheduler import OrderExpirationScheduler
 from app.services.subscription_expiration_scheduler import SubscriptionExpirationScheduler
 from app.services.subscription_meta_retry_scheduler import (
@@ -51,6 +54,42 @@ from app.services.subscription_meta_retry_scheduler import (
 )
 from app.web.volet_sci_server import VoletSciWebServer
 logger = logging.getLogger(__name__)
+
+
+def create_scheduler_tasks(bot: Bot) -> list[asyncio.Task[None]]:
+    return [
+        asyncio.create_task(
+            SubscriptionExpirationScheduler(SessionLocal).run_forever(),
+            name="subscription-expiration-scheduler",
+        ),
+        asyncio.create_task(
+            OrderExpirationScheduler(SessionLocal).run_forever(),
+            name="order-expiration-scheduler",
+        ),
+        asyncio.create_task(
+            SubscriptionMetaRetryScheduler(SessionLocal).run_forever(),
+            name="subscription-meta-retry-scheduler",
+        ),
+        asyncio.create_task(
+            CryptoBotBackgroundSyncScheduler(
+                SessionLocal,
+                bot,
+            ).run_forever(),
+            name="cryptobot-background-sync-scheduler",
+        ),
+    ]
+
+
+async def stop_scheduler_tasks(
+    scheduler_tasks: list[asyncio.Task[None]],
+) -> None:
+    for task in scheduler_tasks:
+        task.cancel()
+
+    await asyncio.gather(
+        *scheduler_tasks,
+        return_exceptions=True,
+    )
 
 
 async def main() -> None:
@@ -103,20 +142,7 @@ async def main() -> None:
     else:
         logger.info("DEV_MODE=false: dev/test-роутеры не загружены")
 
-    scheduler_tasks = [
-        asyncio.create_task(
-            SubscriptionExpirationScheduler(SessionLocal).run_forever(),
-            name="subscription-expiration-scheduler",
-        ),
-        asyncio.create_task(
-            OrderExpirationScheduler(SessionLocal).run_forever(),
-            name="order-expiration-scheduler",
-        ),
-        asyncio.create_task(
-            SubscriptionMetaRetryScheduler(SessionLocal).run_forever(),
-            name="subscription-meta-retry-scheduler",
-        ),
-    ]
+    scheduler_tasks = create_scheduler_tasks(bot)
 
     volet_sci_web_server = None
 
@@ -130,10 +156,7 @@ async def main() -> None:
         if volet_sci_web_server is not None:
             await volet_sci_web_server.stop()
 
-        for task in scheduler_tasks:
-            task.cancel()
-
-        await asyncio.gather(*scheduler_tasks, return_exceptions=True)
+        await stop_scheduler_tasks(scheduler_tasks)
 
 
 if __name__ == "__main__":

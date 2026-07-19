@@ -392,6 +392,12 @@ class CryptoBotPaymentService:
         if invoice_id is None:
             return None
 
+        # End the read-only database transaction before the external
+        # CryptoBot request. SessionLocal uses expire_on_commit=False,
+        # so the immutable order payment snapshot remains available for
+        # validation after the network call.
+        await self.session.commit()
+
         invoice = await self._client().get_invoice(invoice_id)
         if not invoice:
             return None

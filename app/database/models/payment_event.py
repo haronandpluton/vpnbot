@@ -83,6 +83,20 @@ class PaymentEvent(Base, TimestampMixin):
         DateTime(timezone=True),
         nullable=True,
     )
+    notification_claimed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    notification_claim_token: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    notification_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
 
     payment = relationship("Payment", backref="payment_events")
     order = relationship("Order", backref="payment_events")

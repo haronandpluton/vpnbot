@@ -375,12 +375,14 @@ async def test_bot_main_cancels_scheduler_tasks_in_finally(monkeypatch):
     assert tasks_by_name["subscription-expiration-scheduler"].cancel_count == 1
     assert tasks_by_name["order-expiration-scheduler"].cancel_count == 1
     assert tasks_by_name["subscription-meta-retry-scheduler"].cancel_count == 1
+    assert tasks_by_name["cryptobot-background-sync-scheduler"].cancel_count == 1
     assert (
         "gather",
         [
             "subscription-expiration-scheduler",
             "order-expiration-scheduler",
             "subscription-meta-retry-scheduler",
+            "cryptobot-background-sync-scheduler",
         ],
         True,
     ) in CALLS
