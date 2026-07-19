@@ -40,8 +40,7 @@ def main_menu_text() -> str:
         "🎁 Unique Present Days Program 🎁\n\n"
         "✨ Every subscription already includes a present. Purchase any "
         "plan and automatically receive extra VPN days. The longer your "
-        "subscription, the more present days you get ✨\n\n"
-        "🎁 Get your 3 VPN days as a present now 🎁"
+        "subscription, the more present days you get ✨"
     )
 
 
