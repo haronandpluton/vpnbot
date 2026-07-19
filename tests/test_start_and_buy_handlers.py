@@ -87,8 +87,7 @@ def test_main_menu_text_is_stable_entrypoint_copy():
         "🎁 Unique Present Days Program 🎁\n\n"
         "✨ Every subscription already includes a present. Purchase any "
         "plan and automatically receive extra VPN days. The longer your "
-        "subscription, the more present days you get ✨\n\n"
-        "🎁 Get your 3 VPN days as a present now 🎁"
+        "subscription, the more present days you get ✨"
     )
 
 
@@ -101,12 +100,12 @@ def test_main_menu_entities_cover_gifts_robot_and_sparkles():
         for entity in entities
     ]
 
-    assert len(custom_emoji_ids) == 9
+    assert len(custom_emoji_ids) == 7
     assert (
         custom_emoji_ids.count(
             start_module.GIFT_CUSTOM_EMOJI_ID
         )
-        == 6
+        == 4
     )
     assert (
         custom_emoji_ids.count(
