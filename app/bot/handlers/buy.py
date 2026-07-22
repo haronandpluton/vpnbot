@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.main_menu import payment_method_keyboard, tariff_keyboard
 from app.bot.keyboards.payment import payment_check_keyboard
+from app.bot.utils.callback_query import edit_callback_message
 from app.bot.utils.custom_emoji import build_custom_emoji_entities
 from app.common.enums import TariffCode
 from app.config.payment_options import (
@@ -100,14 +101,16 @@ async def buy_command(message: Message):
 
 @router.callback_query(F.data == "buy_vpn")
 async def buy_vpn_callback(callback: CallbackQuery):
+    await callback.answer()
+
     text = "Choose a plan 🎁"
 
-    await callback.message.edit_text(
+    await edit_callback_message(
+        callback.message,
         text,
         entities=build_custom_emoji_entities(text),
         reply_markup=tariff_keyboard(),
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("renew_subscription:"))

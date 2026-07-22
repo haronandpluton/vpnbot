@@ -16,6 +16,7 @@ from app.bot.handlers.my_subscription import (
 from app.bot.keyboards.main_menu import main_menu_keyboard
 from app.bot.keyboards.vpn_access import vpn_access_keyboard
 from app.bot.texts.vpn_access import format_vpn_access_text
+from app.bot.utils.callback_query import edit_callback_message
 from app.bot.utils.custom_emoji import build_custom_emoji_entities
 from app.services.order_service import OrderService
 from app.services.trial_activation_service import (
@@ -105,6 +106,8 @@ async def back_to_main_menu_callback(
         )
         return
 
+    await callback.answer()
+
     trial_eligible = await _get_menu_trial_eligibility(
         session=session,
         telegram_user=callback.from_user,
@@ -112,14 +115,15 @@ async def back_to_main_menu_callback(
 
     text = main_menu_text()
 
-    await callback.message.edit_text(
+    await edit_callback_message(
+        callback.message,
         text,
         entities=main_menu_entities(text),
         reply_markup=main_menu_keyboard(
             trial_eligible=trial_eligible,
         ),
     )
-    await callback.answer()
+
 
 @router.callback_query(F.data == "activate_trial")
 async def activate_trial_callback(
@@ -217,6 +221,7 @@ async def activate_trial_callback(
         ),
     )
 
+
 @router.callback_query(F.data == "my_subscription")
 async def my_subscription_callback(
     callback: CallbackQuery,
@@ -229,10 +234,10 @@ async def my_subscription_callback(
         )
         return
 
+    await callback.answer()
+
     await send_my_subscriptions(
         message=callback.message,
         session=session,
         telegram_id=callback.from_user.id,
     )
-
-    await callback.answer()

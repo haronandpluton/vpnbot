@@ -33,8 +33,14 @@ class FakeTelegramBadRequest(Exception):
 
 
 class FakeMessage:
-    def __init__(self, *, edit_error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        edit_error: Exception | None = None,
+        events: list[str] | None = None,
+    ) -> None:
         self.edit_error = edit_error
+        self.events = events if events is not None else []
         self.edit_text_calls: list[dict] = []
         self.answer_calls: list[dict] = []
 
@@ -47,6 +53,8 @@ class FakeMessage:
         )
 
     async def edit_text(self, text: str, **kwargs) -> None:
+        self.events.append("edit_text")
+
         if self.edit_error is not None:
             raise self.edit_error
 
@@ -55,10 +63,15 @@ class FakeMessage:
 
 class FakeCallback:
     def __init__(self, *, edit_error: Exception | None = None) -> None:
-        self.message = FakeMessage(edit_error=edit_error)
+        self.events: list[str] = []
+        self.message = FakeMessage(
+            edit_error=edit_error,
+            events=self.events,
+        )
         self.answer_calls: list[dict] = []
 
     async def answer(self, text: str | None = None, **kwargs) -> None:
+        self.events.append("answer")
         self.answer_calls.append({"text": text, **kwargs})
 
 
@@ -188,6 +201,7 @@ async def test_download_vpn_callback_edits_to_platform_selection_and_answers():
         ["back_to_main_menu"],
     ]
     assert callback.answer_calls == [{"text": None}]
+    assert callback.events[:2] == ["answer", "edit_text"]
 
 
 @pytest.mark.asyncio
@@ -276,6 +290,7 @@ async def test_faq_callback_edits_to_faq_and_back_to_main_menu():
         ["back_to_main_menu"]
     ]
     assert callback.answer_calls == [{"text": None}]
+    assert callback.events[:2] == ["answer", "edit_text"]
 
 
 @pytest.mark.asyncio
@@ -311,6 +326,7 @@ async def test_support_callback_shows_contact_state_and_support_keyboard(
         ["support:vpn"],
     ]
     assert callback.answer_calls == [{"text": None}]
+    assert callback.events[:2] == ["answer", "edit_text"]
 
 
 @pytest.mark.asyncio

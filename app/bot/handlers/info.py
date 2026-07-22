@@ -10,6 +10,7 @@ from aiogram.types import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.keyboards.main_menu import back_to_main_menu_keyboard
+from app.bot.utils.callback_query import edit_callback_message
 from app.bot.utils.custom_emoji import build_custom_emoji_entities
 from app.config.settings import get_settings
 from app.database.repositories.users import UserRepository
@@ -334,6 +335,8 @@ async def present_command(message: Message):
 
 @router.callback_query(F.data == "download_vpn")
 async def download_vpn_callback(callback: CallbackQuery):
+    await callback.answer()
+
     text = (
         "Download VPN\n\n"
         "Install a VPN client before payment or connection.\n\n"
@@ -342,11 +345,11 @@ async def download_vpn_callback(callback: CallbackQuery):
         "Choose your platform:"
     )
 
-    await callback.message.edit_text(
+    await edit_callback_message(
+        callback.message,
         text,
         reply_markup=download_platform_keyboard(),
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data == "download_vpn:ios")
@@ -451,6 +454,8 @@ async def download_vpn_installed_callback(callback: CallbackQuery):
 
 @router.callback_query(F.data == "faq")
 async def faq_callback(callback: CallbackQuery):
+    await callback.answer()
+
     text = (
         "FAQ\n\n"
         "1. How do I start using the VPN?\n"
@@ -476,15 +481,17 @@ async def faq_callback(callback: CallbackQuery):
         "Access will stop working. Renew the subscription to restore it."
     )
 
-    await callback.message.edit_text(
+    await edit_callback_message(
+        callback.message,
         text,
         reply_markup=back_to_main_menu_keyboard(),
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data == "support")
 async def support_callback(callback: CallbackQuery):
+    await callback.answer()
+
     settings = get_settings()
     support_username = settings.support_username.strip()
 
@@ -503,11 +510,11 @@ async def support_callback(callback: CallbackQuery):
         "Before contacting support, prepare the Order ID, txid, payment amount, network, and a screenshot of the error."
     )
 
-    await callback.message.edit_text(
+    await edit_callback_message(
+        callback.message,
         text,
         reply_markup=support_keyboard(),
     )
-    await callback.answer()
 
 
 @router.callback_query(F.data == "support:payment")

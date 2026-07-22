@@ -17,6 +17,7 @@ from app.bot.handlers.start import (
     activate_trial_callback,
     back_to_main_menu_callback,
     main_menu_text,
+    my_subscription_callback,
     start_command,
 )
 from app.bot.utils.custom_emoji import (
@@ -75,6 +76,31 @@ class FakeSession:
 
     async def rollback(self) -> None:
         self.rollback_count += 1
+
+
+class OrderedMessage:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+
+    async def edit_text(self, text: str, **kwargs) -> None:
+        self.events.append("edit_text")
+
+
+class OrderedCallback:
+    def __init__(self, *, data: str) -> None:
+        self.data = data
+        self.from_user = SimpleNamespace(
+            id=123,
+            username="ivan",
+            first_name="Ivan",
+            last_name="Redeemer",
+            language_code="ru",
+        )
+        self.events: list[str] = []
+        self.message = OrderedMessage(self.events)
+
+    async def answer(self, text: str | None = None, **kwargs) -> None:
+        self.events.append("answer")
 
 
 def assert_callback_rows(markup, expected):
@@ -298,6 +324,45 @@ async def test_back_to_main_menu_callback_uses_current_trial_state(
 
 
 @pytest.mark.asyncio
+async def test_back_to_main_menu_answers_before_database_and_edit(monkeypatch):
+    session = FakeSession()
+    callback = OrderedCallback(data="back_to_main_menu")
+
+    class FakeOrderService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def get_or_create_user(self, **kwargs):
+            callback.events.append("database")
+            return SimpleNamespace(id=7, trial_eligible=True)
+
+    monkeypatch.setattr(start_module, "OrderService", FakeOrderService)
+
+    await back_to_main_menu_callback(callback, session=session)
+
+    assert callback.events == ["answer", "database", "edit_text"]
+
+
+@pytest.mark.asyncio
+async def test_my_subscription_answers_before_loading_subscriptions(monkeypatch):
+    session = FakeSession()
+    callback = OrderedCallback(data="my_subscription")
+
+    async def fake_send_my_subscriptions(**kwargs):
+        callback.events.append("load_subscriptions")
+
+    monkeypatch.setattr(
+        start_module,
+        "send_my_subscriptions",
+        fake_send_my_subscriptions,
+    )
+
+    await my_subscription_callback(callback, session=session)
+
+    assert callback.events == ["answer", "load_subscriptions"]
+
+
+@pytest.mark.asyncio
 async def test_buy_command_sends_tariff_keyboard():
     message = FakeMessage()
 
@@ -332,6 +397,15 @@ async def test_buy_vpn_callback_edits_to_tariff_keyboard_and_answers_callback():
         ],
     )
     assert callback.answer_calls == [{"text": None}]
+
+
+@pytest.mark.asyncio
+async def test_buy_vpn_answers_before_editing_message():
+    callback = OrderedCallback(data="buy_vpn")
+
+    await buy_vpn_callback(callback)
+
+    assert callback.events == ["answer", "edit_text"]
 
 
 @pytest.mark.asyncio
