@@ -19,6 +19,11 @@ from app.bot.handlers.start import (
     main_menu_text,
     start_command,
 )
+from app.bot.utils.custom_emoji import (
+    GIFT_CUSTOM_EMOJI_ID,
+    ROBOT_CUSTOM_EMOJI_ID,
+    SPARKLE_CUSTOM_EMOJI_ID,
+)
 from app.common.enums import TariffCode
 from app.payment_adapters.cryptobot import CryptoBotAPIError
 
@@ -103,19 +108,19 @@ def test_main_menu_entities_cover_gifts_robot_and_sparkles():
     assert len(custom_emoji_ids) == 7
     assert (
         custom_emoji_ids.count(
-            start_module.GIFT_CUSTOM_EMOJI_ID
+            GIFT_CUSTOM_EMOJI_ID
         )
         == 4
     )
     assert (
         custom_emoji_ids.count(
-            start_module.ROBOT_CUSTOM_EMOJI_ID
+            ROBOT_CUSTOM_EMOJI_ID
         )
         == 1
     )
     assert (
         custom_emoji_ids.count(
-            start_module.SPARKLE_CUSTOM_EMOJI_ID
+            SPARKLE_CUSTOM_EMOJI_ID
         )
         == 2
     )
@@ -131,9 +136,9 @@ def test_main_menu_entities_cover_gifts_robot_and_sparkles():
     ]
 
     expected_placeholder_by_id = {
-        start_module.GIFT_CUSTOM_EMOJI_ID: "🎁",
-        start_module.ROBOT_CUSTOM_EMOJI_ID: "🤖",
-        start_module.SPARKLE_CUSTOM_EMOJI_ID: "✨",
+        GIFT_CUSTOM_EMOJI_ID: "🎁",
+        ROBOT_CUSTOM_EMOJI_ID: "🤖",
+        SPARKLE_CUSTOM_EMOJI_ID: "✨",
     }
 
     assert placeholders == [
@@ -700,7 +705,7 @@ async def test_activate_trial_callback_replaces_trial_button_and_sends_access(
 
     access_message = callback.message.answer_calls[0]
 
-    assert "Your 3 free VPN days are active." in (
+    assert "Your free 3-day VPN access has been claimed. Go to My Subscription" in (
         access_message["text"]
     )
     assert "Active until: 04.01.2030 12:00" in (

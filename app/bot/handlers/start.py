@@ -16,12 +16,7 @@ from app.bot.handlers.my_subscription import (
 from app.bot.keyboards.main_menu import main_menu_keyboard
 from app.bot.keyboards.vpn_access import vpn_access_keyboard
 from app.bot.texts.vpn_access import format_vpn_access_text
-from app.bot.utils.custom_emoji import (
-    GIFT_CUSTOM_EMOJI_ID,
-    ROBOT_CUSTOM_EMOJI_ID,
-    SPARKLE_CUSTOM_EMOJI_ID,
-    build_custom_emoji_entities,
-)
+from app.bot.utils.custom_emoji import build_custom_emoji_entities
 from app.services.order_service import OrderService
 from app.services.trial_activation_service import (
     TrialActivationService,
@@ -211,7 +206,7 @@ async def activate_trial_callback(
     )
 
     await callback.message.answer(
-        "Your 3 free VPN days are active.\n\n"
+        "Your free 3-day VPN access has been claimed. Go to My Subscription\n\n"
         + format_vpn_access_text(
             device_limit=1,
             expires_at=result.expires_at,

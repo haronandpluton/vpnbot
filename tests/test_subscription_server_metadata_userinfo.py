@@ -10,6 +10,7 @@ from pathlib import Path
 
 SUB_SERVER_PATH = Path("deploy/vpn-subscription/sub_server.py")
 VALID_UUID = "22222222-2222-4222-8222-222222222222"
+ACTIVE_EXPIRE = 4_102_444_800
 
 
 def load_sub_server_without_startup():
@@ -81,7 +82,7 @@ def test_load_subscriptions_meta_keeps_last_good_data_during_partial_write(tmp_p
             "upload": 0,
             "download": 0,
             "total": 0,
-            "expire": 1784603873,
+            "expire": ACTIVE_EXPIRE,
         }
     }
     meta_file.write_text(json.dumps(expected), encoding="utf-8")
@@ -106,7 +107,7 @@ def test_subscription_userinfo_uses_exported_metadata_values(tmp_path):
                     "upload": 100,
                     "download": 200,
                     "total": 0,
-                    "expire": 1784603873,
+                    "expire": ACTIVE_EXPIRE,
                 }
             }
         ),
@@ -115,7 +116,7 @@ def test_subscription_userinfo_uses_exported_metadata_values(tmp_path):
     module.SUBSCRIPTIONS_META_FILE = meta_file
 
     assert module.build_subscription_userinfo(VALID_UUID) == (
-        "upload=100; download=200; total=0; expire=1784603873"
+        f"upload=100; download=200; total=0; expire={ACTIVE_EXPIRE}"
     )
 
 
@@ -140,7 +141,7 @@ def test_subscription_userinfo_sanitizes_invalid_metadata_values(tmp_path):
                     "upload": "bad",
                     "download": None,
                     "total": "0",
-                    "expire": "1784603873",
+                    "expire": str(ACTIVE_EXPIRE),
                 }
             }
         ),
@@ -149,7 +150,7 @@ def test_subscription_userinfo_sanitizes_invalid_metadata_values(tmp_path):
     module.SUBSCRIPTIONS_META_FILE = meta_file
 
     assert module.build_subscription_userinfo(VALID_UUID) == (
-        "upload=0; download=0; total=0; expire=1784603873"
+        f"upload=0; download=0; total=0; expire={ACTIVE_EXPIRE}"
     )
 
 
@@ -166,7 +167,7 @@ def test_root_subscription_endpoint_sends_subscription_userinfo_header(tmp_path)
                     "upload": 0,
                     "download": 0,
                     "total": 0,
-                    "expire": 1784603873,
+                    "expire": ACTIVE_EXPIRE,
                 }
             }
         ),
@@ -178,7 +179,7 @@ def test_root_subscription_endpoint_sends_subscription_userinfo_header(tmp_path)
     assert harness.responses == [200]
     assert harness.header_map["profile-update-interval"] == "1"
     assert harness.header_map["subscription-userinfo"] == (
-        "upload=0; download=0; total=0; expire=1784603873"
+        f"upload=0; download=0; total=0; expire={ACTIVE_EXPIRE}"
     )
     assert int(harness.header_map["Content-Length"]) == len(harness.body)
 
@@ -199,7 +200,7 @@ def test_sub_fallback_endpoint_sends_subscription_userinfo_header(tmp_path):
                     "upload": 0,
                     "download": 0,
                     "total": 0,
-                    "expire": 1784603873,
+                    "expire": ACTIVE_EXPIRE,
                 }
             }
         ),
@@ -211,7 +212,7 @@ def test_sub_fallback_endpoint_sends_subscription_userinfo_header(tmp_path):
     assert harness.responses == [200]
     assert harness.header_map["profile-update-interval"] == "1"
     assert harness.header_map["subscription-userinfo"] == (
-        "upload=0; download=0; total=0; expire=1784603873"
+        f"upload=0; download=0; total=0; expire={ACTIVE_EXPIRE}"
     )
     assert int(harness.header_map["Content-Length"]) == len(harness.body)
 
