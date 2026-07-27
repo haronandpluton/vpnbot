@@ -186,6 +186,10 @@ def build_subscription_url(client_uuid: str) -> str:
     return f"{PUBLIC_BASE_URL}/{client_uuid}"
 
 
+def build_v2raytun_deep_link(subscription_url: str) -> str:
+    return f"v2raytun://import/{subscription_url}"
+
+
 def get_happ_encrypted_link(subscription_url: str) -> str | None:
     payload = json.dumps({"url": subscription_url}).encode("utf-8")
 
@@ -258,6 +262,9 @@ def build_connect_page(
 
     deep_link = f"happ://add/{subscription_url}"
     safe_deep_link = html.escape(deep_link, quote=True)
+
+    v2raytun_deep_link = build_v2raytun_deep_link(subscription_url)
+    safe_v2raytun_deep_link = html.escape(v2raytun_deep_link, quote=True)
 
     deep_link_json = json.dumps(deep_link, ensure_ascii=False)
     subscription_json = json.dumps(subscription_url, ensure_ascii=False)
@@ -378,6 +385,10 @@ def build_connect_page(
 
         <a id="openBtn" class="btn success" href="{safe_deep_link}" rel="noopener">
             Open Manually
+        </a>
+
+        <a id="openV2RayTunBtn" class="btn primary" href="{safe_v2raytun_deep_link}" rel="noopener">
+            Open in v2RayTun
         </a>
 
         <div class="muted" id="hint" style="margin-top:10px"></div>
