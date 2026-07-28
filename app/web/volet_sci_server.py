@@ -1,6 +1,6 @@
 import json
 import logging
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from aiohttp import web
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -11,17 +11,14 @@ from app.payment_adapters.volet_sci.form import (
     build_volet_sci_form_data,
     build_volet_sci_html,
 )
-from app.payment_core.enums.order_status import OrderStatus
-
-from app.services.payment_activation_service import PaymentActivationService
-
 from app.payment_adapters.volet_sci.verifier import (
     VoletSciVerificationError,
     normalize_volet_sci_order_id,
     redact_volet_sci_status_payload,
     verify_volet_sci_status_hash,
 )
-
+from app.payment_core.enums.order_status import OrderStatus
+from app.services.payment_activation_service import PaymentActivationService
 
 logger = logging.getLogger(__name__)
 
@@ -520,7 +517,7 @@ class VoletSciWebServer:
 
         try:
             amount = Decimal(data.get("ac_amount", "0"))
-        except Exception:
+        except (InvalidOperation, TypeError, ValueError):
             logger.warning(
                 "Volet SCI callback invalid amount: order_id=%s payload=%s",
                 order_id,

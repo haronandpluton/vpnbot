@@ -298,7 +298,7 @@ def test_resolve_output_path_resolves_relative_path_under_project_root(tmp_path)
 
 
 def test_to_unix_timestamp_treats_naive_datetime_as_utc():
-    value = datetime(2026, 7, 5, 12, 0, 0)
+    value = datetime(2026, 7, 5, 12, 0, 0)  # noqa: DTZ001 - intentionally naive UTC input
 
     assert SubscriptionMetaSyncService._to_unix_timestamp(value) == int(
         value.replace(tzinfo=timezone.utc).timestamp()

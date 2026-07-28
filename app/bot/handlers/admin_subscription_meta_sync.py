@@ -33,7 +33,7 @@ async def admin_sync_subscriptions_command(
 
     try:
         result = await SubscriptionMetaSyncService(session).sync()
-    except Exception as error:
+    except Exception as error:  # noqa: BLE001 - admin boundary must report any sync failure
         await session.rollback()
 
         await AdminActionLogService(session).create_action_by_admin_telegram_id(

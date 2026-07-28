@@ -99,8 +99,8 @@ def _format_actions(title: str, items) -> str:
         return f"<b>{title}</b>\n\nЗаписей нет."
 
     parts: list[str] = [
-        f"<b>{title}</b>\n"
-        f"Найдено: {len(items)}\n\n"
+        (f"<b>{title}</b>\n"
+        f"Найдено: {len(items)}\n\n")
     ]
 
     for item in items:

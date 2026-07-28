@@ -37,10 +37,9 @@ def _split_messages(blocks: list[str], limit: int = TELEGRAM_MESSAGE_LIMIT) -> l
     current = ""
 
     for block in blocks:
-        if len(current) + len(block) > limit:
-            if current:
-                messages.append(current)
-                current = ""
+        if len(current) + len(block) > limit and current:
+            messages.append(current)
+            current = ""
 
         current += block
 
@@ -71,9 +70,9 @@ async def admin_active_subscriptions_command(
         return
 
     blocks: list[str] = [
-        "<b>Активные подписки</b>\n"
+        ("<b>Активные подписки</b>\n"
         "Ближайшие к окончанию первые.\n"
-        f"Найдено: {len(items)}\n\n"
+        f"Найдено: {len(items)}\n\n")
     ]
 
     for item in items:

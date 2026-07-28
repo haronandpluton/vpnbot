@@ -16,9 +16,9 @@ def format_vpn_access_text(
         "Your VPN subscription is active.\n\n"
         f"Devices: {device_limit or '—'}\n"
         f"Active until: {expires_at_text}\n\n"
-        "Use Happ VPN to connect.\n\n"
-        "Click “Connect VPN”, then open the connection page. "
-        "Happ VPN should open automatically and import the subscription."
+        "Use Happ VPN or v2RayTun to connect.\n\n"
+        "Click “Connect VPN”, then choose the app. "
+        "The selected app will open and import the subscription."
     )
 
 
@@ -51,12 +51,10 @@ def format_expired_vpn_subscription_text(
 
 def format_vpn_config_text(config_uri: str) -> str:
     return (
-        "VPN connection page:\n\n"
-        "Click the button below to open the connection page. Happ VPN "
-        "should then open automatically and import the subscription.\n\n"
-        "If automatic opening does not work, the page will have an "
-        "“Open Manually” button and a backup “Copy” button.\n\n"
-        "Backup link:\n"
+        "VPN Connection\n\n"
+        "Choose a VPN app below. The selected app will open and "
+        "import your subscription.\n\n"
+        "Backup connection page:\n"
         f"<code>{config_uri}</code>"
     )
 

@@ -65,10 +65,9 @@ def _split_messages(blocks: list[str], limit: int = TELEGRAM_MESSAGE_LIMIT) -> l
     current = ""
 
     for block in blocks:
-        if len(current) + len(block) > limit:
-            if current:
-                messages.append(current)
-                current = ""
+        if len(current) + len(block) > limit and current:
+            messages.append(current)
+            current = ""
 
         current += block
 
@@ -152,9 +151,11 @@ def _format_admin_actions_text(items) -> str:
         )
 
     blocks: list[str] = [
-        "<b>Журнал действий</b>\n"
-        "Последние 20 записей.\n"
-        f"Найдено: {len(items)}\n\n"
+        (
+            "<b>Журнал действий</b>\n"
+            "Последние 20 записей.\n"
+            f"Найдено: {len(items)}\n\n"
+        )
     ]
 
     for item in items:
@@ -273,8 +274,8 @@ async def _send_invalid_payments_callback(
         return
 
     blocks: list[str] = [
-        "<b>Некорректные платежи</b>\n"
-        "Последние 10 записей:\n\n"
+        ("<b>Некорректные платежи</b>\n"
+        "Последние 10 записей:\n\n")
     ]
 
     for item in items:
@@ -333,9 +334,9 @@ async def _send_active_subscriptions_callback(
         return
 
     blocks: list[str] = [
-        "<b>Активные подписки</b>\n"
+        ("<b>Активные подписки</b>\n"
         "Ближайшие к окончанию первые.\n"
-        f"Найдено: {len(items)}\n\n"
+        f"Найдено: {len(items)}\n\n")
     ]
 
     for item in items:

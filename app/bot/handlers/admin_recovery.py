@@ -3,12 +3,11 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.keyboards.vpn_access import vpn_access_keyboard
+from app.bot.texts.vpn_access import format_vpn_access_text
 from app.config.settings import get_settings
 from app.services.admin_action_log_service import AdminActionLogService
 from app.services.admin_recovery_service import AdminRecoveryService
-
-from app.bot.keyboards.vpn_access import vpn_access_keyboard
-from app.bot.texts.vpn_access import format_vpn_access_text
 
 router = Router()
 
@@ -133,7 +132,7 @@ async def admin_resend_config_command(
                 subscription_id=result.subscription_id,
             ),
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - delivery boundary must report any send failure
         await message.answer(
             "Конфиг подготовлен, но не удалось отправить пользователю в Telegram.\n\n"
             f"Order ID: {result.order_id}\n"

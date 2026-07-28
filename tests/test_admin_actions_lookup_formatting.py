@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app.bot.handlers.admin_actions_lookup import _format_actions, _split_text
@@ -19,7 +19,7 @@ def make_action(payload: str):
         subscription_id=50,
         reason="<manual reason>",
         payload=payload,
-        created_at=datetime(2026, 7, 6, 11, 45, 0),
+        created_at=datetime(2026, 7, 6, 11, 45, 0, tzinfo=timezone.utc),
     )
 
 

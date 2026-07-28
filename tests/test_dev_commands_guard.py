@@ -6,7 +6,10 @@ import pytest
 
 import app.bot.middlewares.dev_commands_guard as guard_module
 import app.bot.utils.access as access_module
-from app.bot.middlewares.dev_commands_guard import DEV_COMMANDS, DevCommandsGuardMiddleware
+from app.bot.middlewares.dev_commands_guard import (
+    DEV_COMMANDS,
+    DevCommandsGuardMiddleware,
+)
 
 
 class FakeMessage:

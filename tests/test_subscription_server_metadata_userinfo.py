@@ -7,7 +7,6 @@ import os
 import types
 from pathlib import Path
 
-
 SUB_SERVER_PATH = Path("deploy/vpn-subscription/sub_server.py")
 VALID_UUID = "22222222-2222-4222-8222-222222222222"
 ACTIVE_EXPIRE = 4_102_444_800

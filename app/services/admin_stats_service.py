@@ -94,6 +94,6 @@ class AdminStatsService:
         value = result.scalar_one()
 
         if value is None:
-            return Decimal("0")
+            return Decimal(0)
 
         return Decimal(str(value))

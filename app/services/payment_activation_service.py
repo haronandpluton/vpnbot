@@ -15,7 +15,6 @@ from app.payment_core.enums.payment_status import PaymentStatus
 from app.services.payment_event_service import PaymentEventService
 from app.services.subscription_service import SubscriptionService
 
-
 logger = logging.getLogger(__name__)
 
 SUBSCRIPTION_ACTIVATION_ERROR_TYPE = "subscription_activation_failed"

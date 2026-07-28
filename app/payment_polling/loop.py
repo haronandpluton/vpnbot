@@ -40,7 +40,7 @@ class PaymentPollingLoop:
 
                 results.extend(adapter_results)
 
-            except Exception as error:
+            except Exception as error: # noqa: BLE001 - isolate failures between payment adapters
                 print("ADAPTER ERROR:")
                 print("adapter =", adapter.name)
                 print("error =", repr(error))

@@ -135,8 +135,8 @@ def _build_user_card_text(result) -> str:
     text_parts: list[str] = [
         "<b>Admin User Lookup</b>\n",
         _format_user_block(user),
-        "<b>Summary</b>\n"
-        f"Invalid payments count: {result.invalid_payments_count}\n",
+        ("<b>Summary</b>\n"
+        f"Invalid payments count: {result.invalid_payments_count}\n"),
     ]
 
     text_parts.append("<b>Last orders</b>\n")

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 SCRIPT_PATH = Path("scripts/sync_subscriptions_meta.ps1")
 
 

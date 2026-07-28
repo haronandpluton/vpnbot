@@ -195,7 +195,6 @@ class FakeCryptoBotPaymentService:
         if error is not None:
             raise error
 
-        return None
 
 
 class FakeNotificationService:

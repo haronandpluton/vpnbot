@@ -1,10 +1,10 @@
 from dataclasses import dataclass
+from datetime import datetime
 from urllib.parse import quote, urlencode
 from uuid import uuid4
 
 from app.config.settings import get_settings
 from app.services.xui_client import make_xui_client_from_settings
-from datetime import datetime
 
 DEFAULT_PUBLIC_BASE_URL = "https://connect.presentvpn.click"
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -22,17 +22,17 @@ from app.payment_core.enums.payment_method import PaymentMethod
 from app.payment_core.enums.payment_status import PaymentStatus
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.payment_polling.processor import PaymentPollingProcessor
+from app.services.order_service import OrderService
 from app.services.payment_activation_service import PaymentActivationService
 from app.services.telegram_stars_payment_service import (
     TelegramStarsPaymentService,
 )
 
-from app.services.order_service import OrderService
 
 class NaiveDateTime(datetime):
     @classmethod
     def now(cls, tz=None):
-        current = datetime.now()
+        current = datetime.now(UTC).replace(tzinfo=None)
         return cls(
             current.year,
             current.month,
@@ -241,7 +241,7 @@ async def create_user_stars_order(
         session,
         *,
         telegram_id: int = 777001,
-        stars_amount: Decimal = Decimal("300"),
+        stars_amount: Decimal = Decimal(300),
         duration_days: int = 33,
 ):
     user_repo = UserRepository(session)
@@ -314,7 +314,7 @@ def make_tx(
 @pytest.mark.asyncio
 async def test_polling_confirmed_payment_activates_subscription_once(session_factory):
     async with session_factory() as session:
-        user, option, order = await create_user_option_and_order(session)
+        user, _option, order = await create_user_option_and_order(session)
 
         event, payment, subscription, config_uri = await PaymentPollingProcessor(
             session

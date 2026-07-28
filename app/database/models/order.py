@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Numeric, String, DateTime, text
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.enums import CurrencyCode, NetworkCode, TariffCode

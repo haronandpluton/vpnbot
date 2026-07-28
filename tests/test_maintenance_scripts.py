@@ -210,7 +210,7 @@ async def test_expire_subscriptions_once_script_enables_metadata_sync_and_prints
 
 
 def test_export_subscriptions_meta_timestamp_helper_treats_naive_datetime_as_utc():
-    naive = datetime(2026, 8, 5, 12, 0)
+    naive = datetime(2026, 8, 5, 12, 0)  # noqa: DTZ001 - intentionally naive UTC input
     aware = datetime(2026, 8, 5, 12, 0, tzinfo=timezone.utc)
 
     assert export_meta_script.to_unix_timestamp(naive) == export_meta_script.to_unix_timestamp(
@@ -231,7 +231,7 @@ async def test_export_subscriptions_meta_script_writes_happ_metadata_json(
         ),
         SimpleNamespace(
             uuid="uuid-expired",
-            expires_at=datetime(2026, 7, 5, 12, 0),
+            expires_at=datetime(2026, 7, 5, 12, 0), # noqa: DTZ001 - intentionally naive UTC input
         ),
     ]
     fake_session = FakeExportSession(rows)

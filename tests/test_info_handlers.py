@@ -18,13 +18,13 @@ from app.bot.handlers.info import (
     download_vpn_windows_callback,
     faq_callback,
     installed_continue_keyboard,
+    paysupport_command,
     platform_download_keyboard,
     support_back_keyboard,
     support_callback,
     support_keyboard,
     support_payment_callback,
     support_vpn_callback,
-    paysupport_command,
 )
 
 

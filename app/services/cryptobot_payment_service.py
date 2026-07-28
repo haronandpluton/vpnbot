@@ -179,10 +179,10 @@ class CryptoBotPaymentService:
         invoice: dict[str, Any],
     ) -> tuple[Decimal, str | None]:
         if str(invoice.get("invoice_id")) != str(invoice_id):
-            return Decimal("0"), "wrong_invoice"
+            return Decimal(0), "wrong_invoice"
 
         if invoice.get("payload") != f"order:{order.id}":
-            return Decimal("0"), "wrong_payload"
+            return Decimal(0), "wrong_payload"
 
         selected_asset = self._selected_asset(order)
         currency_type = invoice.get("currency_type")
@@ -197,7 +197,7 @@ class CryptoBotPaymentService:
                 raise CryptoBotAPIError("Paid fiat invoice has no fiat field")
 
             if str(fiat).upper() != "USD":
-                return Decimal("0"), "wrong_fiat"
+                return Decimal(0), "wrong_fiat"
 
             invoice_amount = invoice.get("amount")
             if invoice_amount is None:
@@ -208,7 +208,7 @@ class CryptoBotPaymentService:
                 field_name="amount",
             )
             if amount_usd != Decimal(str(order.price_usd)):
-                return Decimal("0"), "wrong_amount"
+                return Decimal(0), "wrong_amount"
 
             paid_amount = invoice.get("paid_amount")
             if paid_amount is None:
@@ -242,7 +242,7 @@ class CryptoBotPaymentService:
                 raise CryptoBotAPIError("Paid crypto invoice has no asset")
 
             if str(asset).upper() != selected_asset:
-                return Decimal("0"), "wrong_currency"
+                return Decimal(0), "wrong_currency"
 
             invoice_amount_raw = invoice.get("amount")
             if invoice_amount_raw is None:

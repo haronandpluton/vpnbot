@@ -5,13 +5,12 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.keyboards.vpn_access import vpn_access_keyboard
+from app.bot.texts.vpn_access import format_vpn_access_text
 from app.common.enums import TariffCode
 from app.payment_adapters.base import NormalizedTransaction
 from app.payment_polling.processor import PaymentPollingProcessor
 from app.services.order_service import OrderService
-
-from app.bot.keyboards.vpn_access import vpn_access_keyboard
-from app.bot.texts.vpn_access import format_vpn_access_text
 
 router = Router()
 
@@ -59,7 +58,7 @@ async def dev_create_active_subscription_command(
     )
 
     processor = PaymentPollingProcessor(session)
-    event, payment, subscription, config_uri = await processor.process_transaction(tx)
+    event, payment, subscription, _config_uri = await processor.process_transaction(tx)
 
     text = (
         "Dev-подписка создана и активирована.\n\n"

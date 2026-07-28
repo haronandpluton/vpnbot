@@ -251,7 +251,7 @@ async def test_activation_passes_allow_expired_order_only_when_requested():
 
     await service.process_confirmed_payment_event_and_activate(
         order_id=23,
-        amount=Decimal("300"),
+        amount=Decimal(300),
         provider="telegram_stars",
         event_type="successful_payment",
         external_event_id="charge-123",
@@ -261,7 +261,7 @@ async def test_activation_passes_allow_expired_order_only_when_requested():
     assert service.payment_event_service.calls == [
         {
             "order_id": 23,
-            "amount": Decimal("300"),
+            "amount": Decimal(300),
             "provider": "telegram_stars",
             "event_type": "successful_payment",
             "external_event_id": "charge-123",

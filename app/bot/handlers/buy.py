@@ -22,7 +22,6 @@ from app.payment_adapters.cryptobot import CryptoBotAPIError
 from app.services.cryptobot_payment_service import CryptoBotPaymentService
 from app.services.order_service import OrderService
 
-
 router = Router()
 
 
@@ -315,7 +314,7 @@ async def select_payment_callback(
         invoice = await CryptoBotPaymentService(session).ensure_invoice_for_order(
             order.id
         )
-    except CryptoBotAPIError as exc:
+    except CryptoBotAPIError:
         await session.rollback()
         await callback.message.answer(
             "Could not create a CryptoBot invoice. "
@@ -325,7 +324,7 @@ async def select_payment_callback(
             "Invoice creation error",
             show_alert=True,
         )
-        raise exc
+        raise
 
     payment_url = (
         invoice.get("bot_invoice_url")

@@ -6,6 +6,7 @@ from typing import Any, cast
 
 import pytest
 from sqlalchemy.dialects import postgresql
+
 from app.common.enums import CurrencyCode, NetworkCode
 from app.database.models import PaymentOption, Subscription, User
 from app.database.repositories.payment_options import PaymentOptionRepository

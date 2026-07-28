@@ -6,7 +6,6 @@ import json
 import types
 from pathlib import Path
 
-
 SUB_SERVER_PATH = Path("deploy/vpn-subscription/sub_server.py")
 VALID_UUID = "33333333-3333-4333-8333-333333333333"
 

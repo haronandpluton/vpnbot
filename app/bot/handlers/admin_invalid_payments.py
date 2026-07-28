@@ -64,8 +64,8 @@ async def admin_invalid_payments_command(
         return
 
     chunks: list[str] = [
-        "<b>Некорректные платежи</b>\n"
-        "Последние 10 записей:\n"
+        ("<b>Некорректные платежи</b>\n"
+        "Последние 10 записей:\n")
     ]
 
     for item in items:

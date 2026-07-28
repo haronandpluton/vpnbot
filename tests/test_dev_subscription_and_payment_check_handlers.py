@@ -14,7 +14,6 @@ from app.bot.handlers.test_payment_check import (
 )
 from app.common.enums import TariffCode
 
-
 CALL_LOG: list[str] = []
 
 

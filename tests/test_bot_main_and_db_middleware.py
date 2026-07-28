@@ -7,7 +7,6 @@ import pytest
 import app.bot.main as bot_main_module
 from app.bot.middlewares.db_session import DbSessionMiddleware
 
-
 CALLS: list[tuple] = []
 
 

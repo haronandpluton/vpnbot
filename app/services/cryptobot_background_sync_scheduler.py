@@ -21,7 +21,6 @@ from app.services.cryptobot_payment_notification_service import (
 )
 from app.services.cryptobot_payment_service import CryptoBotPaymentService
 
-
 logger = logging.getLogger(__name__)
 
 CRYPTOBOT_INVOICE_SYNC_ERROR_TYPE = "cryptobot_invoice_sync_failed"

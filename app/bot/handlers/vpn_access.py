@@ -21,6 +21,10 @@ async def legacy_show_vpn_config_callback(callback: CallbackQuery):
     )
 
 
+def _client_connect_url(config_uri: str, client: str) -> str:
+    separator = "&" if "?" in config_uri else "?"
+    return f"{config_uri}{separator}client={client}"
+
 @router.callback_query(F.data.startswith("vpn_access:show_config:"))
 async def show_vpn_config_callback(
     callback: CallbackQuery,
@@ -59,6 +63,15 @@ async def show_vpn_config_callback(
         await callback.answer("No active subscription found.", show_alert=True)
         return
 
+    happ_url = _client_connect_url(
+        result.config_uri,
+        "happ",
+    )
+    v2raytun_url = _client_connect_url(
+        result.config_uri,
+        "v2raytun",
+    )
+
     await callback.message.answer(
         format_vpn_config_text(result.config_uri),
         parse_mode="HTML",
@@ -67,9 +80,15 @@ async def show_vpn_config_callback(
                 [
                     InlineKeyboardButton(
                         text="Open in Happ VPN",
-                        url=result.config_uri,
+                        url=happ_url,
                     )
-                ]
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="Open in v2RayTun",
+                        url=v2raytun_url,
+                    )
+                ],
             ]
         ),
     )

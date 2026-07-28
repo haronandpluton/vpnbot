@@ -1,0 +1,22 @@
+﻿[lint]
+
+[lint.per-file-ignores]
+
+# Historical Alembic migrations are immutable.
+"app/database/migrations/**" = [
+    "I001",
+    "UP007",
+    "UP035",
+]
+
+# Test fakes intentionally keep shared mutable state at class level.
+"tests/**" = [
+    "RUF012",
+    "UP037",
+]
+
+# These tests intentionally load the standalone gateway module
+# without executing its __main__ block.
+"tests/test_subscription_server_*.py" = [
+    "S102",
+]

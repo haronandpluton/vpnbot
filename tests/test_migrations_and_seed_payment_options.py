@@ -16,7 +16,6 @@ from app.config.payment_options import PAYMENT_OPTIONS
 from app.database.base import Base
 from app.database.models import PaymentOption
 
-
 MIGRATION_PATH = Path("app/database/migrations/versions/120a64c0ed0a_initial_schema.py")
 
 EXPECTED_TABLES = {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -28,7 +29,6 @@ from app.bot.utils.custom_emoji import (
 from app.common.enums import TariffCode
 from app.payment_adapters.cryptobot import CryptoBotAPIError
 
-from datetime import datetime, timezone
 
 class FakeMessage:
     def __init__(self, *, from_user=None) -> None:

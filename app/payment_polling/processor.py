@@ -1,6 +1,6 @@
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
-import logging
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +10,6 @@ from app.payment_adapters.base import NormalizedTransaction
 from app.payment_core.enums.order_status import OrderStatus
 from app.services.payment_activation_service import PaymentActivationService
 from app.services.payment_event_service import PaymentEventService
-
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class PaymentPollingProcessor:
         if late_order is not None:
             late_order_id_for_log = late_order.id
 
-            event, payment, expired_order = (
+            event, payment, _expired_order = (
                 await self.payment_event_service.process_detected_event(
                     order_id=late_order_id_for_log,
                     amount=tx.amount,
@@ -125,7 +124,7 @@ class PaymentPollingProcessor:
     ):
         order_id_for_log = order.id
 
-        event, payment, invalid_order = (
+        event, payment, _invalid_order = (
             await self.payment_event_service.process_invalid_event(
                 order_id=order_id_for_log,
                 amount=tx.amount,

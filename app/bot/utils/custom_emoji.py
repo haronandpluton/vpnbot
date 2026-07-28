@@ -2,7 +2,6 @@ from collections.abc import Mapping
 
 from aiogram.types import MessageEntity
 
-
 GIFT_CUSTOM_EMOJI_ID = "5203996991054432397"
 ROBOT_CUSTOM_EMOJI_ID = "5287684458881756303"
 SPARKLE_CUSTOM_EMOJI_ID = "5325547803936572038"

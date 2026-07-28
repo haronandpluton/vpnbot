@@ -104,7 +104,7 @@ class SubscriptionExpirationService:
             try:
                 sync_result = await self._sync_metadata_safely()
                 sync_status = self._sync_result_to_text(sync_result)
-            except Exception as exc:
+            except Exception as exc: # noqa: BLE001 - post-commit sync failure must not undo expiration
                 sync_status = "sync_failed"
                 sync_error = str(exc)
 
@@ -126,7 +126,9 @@ class SubscriptionExpirationService:
         Импорт держим внутри метода, чтобы сервис истечения не ломал импорт проекта,
         если sync-модуль временно меняется.
         """
-        from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
+        from app.services.subscription_meta_sync_service import (
+            SubscriptionMetaSyncService,
+        )
 
         sync_service = SubscriptionMetaSyncService(self.session)
 

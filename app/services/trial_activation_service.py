@@ -18,7 +18,6 @@ from app.services.subscription_meta_sync_service import (
 )
 from app.services.vpn_access_service import VpnAccessService
 
-
 logger = logging.getLogger(__name__)
 
 TRIAL_DURATION_DAYS = 3

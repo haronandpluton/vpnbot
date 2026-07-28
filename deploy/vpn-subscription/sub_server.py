@@ -10,7 +10,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from uuid import UUID
 
-
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
@@ -206,8 +205,8 @@ def get_happ_encrypted_link(subscription_url: str) -> str | None:
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             body = response.read().decode("utf-8").strip()
-    except Exception as error:
-        print(f"Happ crypto API error: {error}")
+    except Exception:
+        logger.exception("Happ crypto API request failed.")
         return None
 
     if not body:
@@ -254,19 +253,31 @@ def build_connect_page(
     client_uuid: str,
     device: str,
     subscription_url: str,
+    client: str = "happ",
     vless_link: str | None = None,
 ) -> str:
     safe_device = html.escape(device or "device")
     safe_subscription_url = html.escape(subscription_url, quote=True)
     safe_uuid_short = html.escape(client_uuid[:8])
 
-    deep_link = f"happ://add/{subscription_url}"
+    normalized_client = client.strip().lower()
+
+    if normalized_client == "happ":
+        app_name = "Happ VPN"
+        client_scheme = "happ"
+        deep_link = f"happ://add/{subscription_url}"
+    elif normalized_client == "v2raytun":
+        app_name = "v2RayTun"
+        client_scheme = "v2raytun"
+        deep_link = build_v2raytun_deep_link(subscription_url)
+    else:
+        raise ValueError(f"Unsupported VPN client: {client}")
+
+    safe_app_name = html.escape(app_name)
     safe_deep_link = html.escape(deep_link, quote=True)
 
-    v2raytun_deep_link = build_v2raytun_deep_link(subscription_url)
-    safe_v2raytun_deep_link = html.escape(v2raytun_deep_link, quote=True)
-
     deep_link_json = json.dumps(deep_link, ensure_ascii=False)
+    client_scheme_json = json.dumps(client_scheme, ensure_ascii=False)
     subscription_json = json.dumps(subscription_url, ensure_ascii=False)
 
     return f"""<!doctype html>
@@ -378,17 +389,13 @@ def build_connect_page(
         <div class="row">
             <div>🔗</div>
             <div>
-                <div id="status"><b>Trying to open Happ VPN…</b></div>
+                <div id="status"><b>Trying to open {safe_app_name}…</b></div>
                 <div class="muted">If nothing happens, click the button below.</div>
             </div>
         </div>
 
         <a id="openBtn" class="btn success" href="{safe_deep_link}" rel="noopener">
             Open Manually
-        </a>
-
-        <a id="openV2RayTunBtn" class="btn primary" href="{safe_v2raytun_deep_link}" rel="noopener">
-            Open in v2RayTun
         </a>
 
         <div class="muted" id="hint" style="margin-top:10px"></div>
@@ -398,10 +405,10 @@ def build_connect_page(
         <h1>If the app did not open automatically</h1>
 
         <ol>
-            <li>Click <b>Copy</b>.</li>
-            <li>Open Happ VPN.</li>
-            <li>Click <b>+</b> in the upper corner.</li>
-            <li>Select <b>Import/Paste from Clipboard</b>.</li>
+            <li>Click <b>Open Manually</b> above.</li>
+            <li>If that does not work, click <b>Copy</b>.</li>
+            <li>Open {safe_app_name}.</li>
+            <li>Import the copied link as <b>Subscription / URL</b>.</li>
         </ol>
 
         <div class="field-row">
@@ -416,6 +423,7 @@ def build_connect_page(
 
     <script>
         const DEEP_LINK = {deep_link_json};
+        const CLIENT_SCHEME = {client_scheme_json};
         const SUBSCRIPTION_URL = {subscription_json};
 
         const hint = document.getElementById("hint");
@@ -424,10 +432,14 @@ def build_connect_page(
         if (/android|iphone|ipad|ipod/.test(userAgent)) {{
             hint.textContent = "If prompted to open the app, confirm it.";
         }} else {{
-            hint.innerHTML = "If you see “Allow this page to open <code>happ</code>”, click “Allow”.";
-        }}
+            hint.innerHTML =
+                "If you see “Allow this page to open <code>" +
+                CLIENT_SCHEME +
+                "</code>”, click “Allow”.";
+                    }}
 
-        const AUTO_OPEN_KEY = "vpn_auto_open_" + SUBSCRIPTION_URL;
+        const AUTO_OPEN_KEY =
+            "vpn_auto_open_" + CLIENT_SCHEME + "_" + SUBSCRIPTION_URL;
 
         if (!sessionStorage.getItem(AUTO_OPEN_KEY)) {{
             sessionStorage.setItem(AUTO_OPEN_KEY, "1");
@@ -582,6 +594,23 @@ class Handler(BaseHTTPRequestHandler):
 
         query_params = urllib.parse.parse_qs(query)
         device = query_params.get("device", ["unknown"])[0]
+        client = query_params.get("client", ["happ"])[0].strip().lower()
+
+        if client not in {"happ", "v2raytun"}:
+            body = b"unsupported client"
+
+            self.send_response(400)
+            self.send_header(
+                "Content-Type",
+                "text/plain; charset=utf-8",
+            )
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            self.close_connection = True
+            return
 
         subscription_url = build_subscription_url(token)
         vless_link = build_vless_link(token)
@@ -590,19 +619,24 @@ class Handler(BaseHTTPRequestHandler):
             client_uuid=token,
             device=device,
             subscription_url=subscription_url,
+            client=client,
             vless_link=vless_link,
         )
 
         body = page.encode("utf-8")
 
         self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header(
+            "Content-Type",
+            "text/html; charset=utf-8",
+        )
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
         self.close_connection = True
+
 
     def log_message(self, format, *args):
         logger.info(

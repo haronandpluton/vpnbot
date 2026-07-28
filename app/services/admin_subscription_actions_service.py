@@ -4,10 +4,10 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
 from app.database.models import Subscription
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.admin_action_log_service import AdminActionLogService
+from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
 
 
 @dataclass

@@ -6,6 +6,8 @@ from aiogram.types import (
     CallbackQuery,
     Message,
     MessageEntity,
+)
+from aiogram.types import (
     User as TelegramUser,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +24,6 @@ from app.services.order_service import OrderService
 from app.services.trial_activation_service import (
     TrialActivationService,
 )
-
 
 logger = logging.getLogger(__name__)
 router = Router()

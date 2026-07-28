@@ -2,7 +2,6 @@
 
 from importlib import import_module
 
-
 migration = import_module(
     "app.database.migrations.versions."
     "f56eb2e7770c_add_cryptobot_payment_notification_state"

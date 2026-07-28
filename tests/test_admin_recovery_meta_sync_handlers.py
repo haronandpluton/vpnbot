@@ -12,7 +12,9 @@ from app.bot.handlers.admin_recovery import (
     _parse_id_from_command,
     admin_resend_config_command,
 )
-from app.bot.handlers.admin_subscription_meta_sync import admin_sync_subscriptions_command
+from app.bot.handlers.admin_subscription_meta_sync import (
+    admin_sync_subscriptions_command,
+)
 
 
 class FakeEditableMessage:
@@ -244,9 +246,9 @@ async def test_resend_config_sends_usage_for_invalid_args():
         ("user_not_found", "Order #23 найден, но пользователь не найден."),
         (
             "subscription_not_found",
-            "Нельзя отправить конфиг.\n\n"
+            ("Нельзя отправить конфиг.\n\n"
             "Order ID: 23\n"
-            "Подписка по этому заказу не найдена.",
+            "Подписка по этому заказу не найдена."),
         ),
     ],
 )

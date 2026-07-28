@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from html import escape
 from typing import Any
 
@@ -36,7 +36,7 @@ class VoletSciFormData:
         return result
 
 
-def format_volet_amount(amount: Decimal | int | float | str) -> str:
+def format_volet_amount(amount: Decimal | float | str) -> str:
     decimal_amount = Decimal(str(amount))
     return str(decimal_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
@@ -58,7 +58,7 @@ def build_volet_sci_form_data(
     *,
     settings: Settings,
     order_id: int | str,
-    amount: Decimal | int | float | str,
+    amount: Decimal | float | str,
     comments: str = "",
     currency: str | None = None,
 ) -> VoletSciFormData:

@@ -15,7 +15,6 @@ from app.config.settings import get_settings
 from app.database.repositories.payment_events import PaymentEventRepository
 from app.database.repositories.system_errors import SystemErrorRecordRepository
 
-
 logger = logging.getLogger(__name__)
 
 CRYPTOBOT_NOTIFICATION_ERROR_TYPE = "cryptobot_notification_failed"

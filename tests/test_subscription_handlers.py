@@ -95,6 +95,8 @@ def row_callbacks(markup):
 def row_urls(markup):
     return [[button.url for button in row] for row in markup.inline_keyboard]
 
+def row_texts(markup):
+    return [[button.text for button in row] for row in markup.inline_keyboard]
 
 @pytest.mark.asyncio
 async def test_my_subscription_sends_separate_card_for_each_active_subscription():
@@ -153,24 +155,24 @@ async def test_my_subscription_sends_separate_card_for_each_active_subscription(
     [
         (
             "user_not_found",
-            "I could not find your profile yet.\n\n"
-            "Create an order first or start the bot with /start.",
+            ("I could not find your profile yet.\n\n"
+            "Create an order first or start the bot with /start."),
         ),
         (
             "subscription_not_found",
-            "No active subscriptions found.\n\n"
+            ("No active subscriptions found.\n\n"
             "If you have already paid, click “Check Payment” "
-            "in the order message.",
+            "in the order message."),
         ),
         (
             "subscription_expired",
-            "All subscriptions have expired.\n\n"
-            "Open a subscription and click “Renew Subscription”.",
+            ("All subscriptions have expired.\n\n"
+            "Open a subscription and click “Renew Subscription”."),
         ),
         (
             "unknown",
-            "Could not determine the subscription status.\n\n"
-            "Contact support.",
+            ("Could not determine the subscription status.\n\n"
+            "Contact support."),
         ),
     ],
 )
@@ -281,29 +283,58 @@ async def test_show_vpn_config_callback_reports_unavailable_selected_subscriptio
 
 @pytest.mark.asyncio
 async def test_show_vpn_config_callback_sends_selected_subscription_config():
+    config_uri = (
+        "https://connect.example/connect/"
+        "sub-uuid-77?device=android"
+    )
+
     FakeMySubscriptionService.access_result = SimpleNamespace(
         status="active",
-        config_uri="https://connect.example/sub-uuid-77",
+        config_uri=config_uri,
     )
     callback = FakeCallback(
         from_user=SimpleNamespace(id=123),
         data="vpn_access:show_config:77",
     )
 
-    await show_vpn_config_callback(callback, session="session")
+    await show_vpn_config_callback(
+        callback,
+        session="session",
+    )
 
     assert FakeMySubscriptionService.instances[0].access_calls == [
-        {"telegram_id": 123, "subscription_id": 77}
+        {
+            "telegram_id": 123,
+            "subscription_id": 77,
+        }
     ]
-    assert "VPN connection page:" in callback.message.answer_calls[0]["text"]
-    assert (
-        "<code>https://connect.example/sub-uuid-77</code>"
-        in callback.message.answer_calls[0]["text"]
-    )
-    assert callback.message.answer_calls[0]["parse_mode"] == "HTML"
-    assert row_urls(callback.message.answer_calls[0]["reply_markup"]) == [
-        ["https://connect.example/sub-uuid-77"]
+
+    result_message = callback.message.answer_calls[0]
+
+    assert "VPN Connection" in result_message["text"]
+    assert f"<code>{config_uri}</code>" in result_message["text"]
+    assert result_message["parse_mode"] == "HTML"
+
+    assert row_texts(result_message["reply_markup"]) == [
+        ["Open in Happ VPN"],
+        ["Open in v2RayTun"],
     ]
+
+    assert row_urls(result_message["reply_markup"]) == [
+        [
+            (
+                "https://connect.example/connect/"
+                "sub-uuid-77?device=android&client=happ"
+            )
+        ],
+        [
+            (
+                "https://connect.example/connect/"
+                "sub-uuid-77?device=android&client=v2raytun"
+            )
+        ],
+    ]
+
     assert callback.answer_calls == [{"text": None}]
 
 

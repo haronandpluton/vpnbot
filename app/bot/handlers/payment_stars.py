@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import logging
 import json
+import logging
 
 from aiogram import F, Router
 from aiogram.types import (
@@ -10,9 +10,9 @@ from aiogram.types import (
     Message,
     PreCheckoutQuery,
 )
-from app.bot.keyboards.vpn_access import vpn_access_keyboard
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.keyboards.vpn_access import vpn_access_keyboard
 from app.common.enums import TariffCode
 from app.config.payment_options import get_payment_option
 from app.config.settings import get_settings

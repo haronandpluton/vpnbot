@@ -7,7 +7,9 @@ import pytest
 import app.services.order_expiration_scheduler as order_scheduler_module
 import app.services.subscription_expiration_scheduler as subscription_scheduler_module
 from app.services.order_expiration_scheduler import OrderExpirationScheduler
-from app.services.subscription_expiration_scheduler import SubscriptionExpirationScheduler
+from app.services.subscription_expiration_scheduler import (
+    SubscriptionExpirationScheduler,
+)
 
 
 class FakeSessionContext:

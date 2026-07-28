@@ -7,7 +7,9 @@ import pytest
 
 import app.services.admin_subscription_actions_service as actions_module
 from app.payment_core.enums.subscription_status import SubscriptionStatus
-from app.services.admin_subscription_actions_service import AdminSubscriptionActionsService
+from app.services.admin_subscription_actions_service import (
+    AdminSubscriptionActionsService,
+)
 
 
 class FakeSession:

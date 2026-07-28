@@ -6,7 +6,9 @@ from types import SimpleNamespace
 import pytest
 
 import app.services.subscription_meta_retry_scheduler as scheduler_module
-from app.services.subscription_meta_retry_scheduler import SubscriptionMetaRetryScheduler
+from app.services.subscription_meta_retry_scheduler import (
+    SubscriptionMetaRetryScheduler,
+)
 
 
 class FakeSessionContext:

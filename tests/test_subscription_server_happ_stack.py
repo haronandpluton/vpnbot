@@ -6,7 +6,6 @@ import json
 import types
 from pathlib import Path
 
-
 SUB_SERVER_PATH = Path("deploy/vpn-subscription/sub_server.py")
 VALID_UUID = "11111111-1111-4111-8111-111111111111"
 UNKNOWN_UUID = "99999999-9999-4999-8999-999999999999"
@@ -133,7 +132,7 @@ def test_subscription_url_uses_public_root_uuid_endpoint_not_sub_path():
     assert "/sub/" not in module.build_subscription_url(VALID_UUID)
 
 
-def test_connect_page_contains_happ_add_deep_link_copy_fallback_and_once_guard():
+def test_connect_page_defaults_to_happ_and_keeps_copy_fallback():
     module = load_sub_server_without_startup()
     subscription_url = f"https://connect.example.com/{VALID_UUID}"
 
@@ -145,14 +144,20 @@ def test_connect_page_contains_happ_add_deep_link_copy_fallback_and_once_guard()
 
     assert f"happ://add/{subscription_url}" in page
     assert f'value="{subscription_url}"' in page
+
+    assert 'const CLIENT_SCHEME = "happ"' in page
+    assert (
+        '"vpn_auto_open_" + CLIENT_SCHEME + "_" + SUBSCRIPTION_URL'
+        in page
+    )
+
     assert "sessionStorage" in page
-    assert "vpn_auto_open_" in page
     assert "setTimeout(function ()" in page
     assert "location.href = DEEP_LINK" in page
     assert "Open Manually" in page
     assert "Copy" in page
-    assert "/sub/" not in page
 
+    assert "/sub/" not in page
 
 def test_root_subscription_endpoint_returns_base64_vless_and_required_headers(
     tmp_path,
@@ -200,7 +205,7 @@ def test_sub_fallback_endpoint_returns_same_subscription_payload_and_headers(
     assert decoded.startswith(f"vless://{VALID_UUID}@eu-vpn.example.com:443")
 
 
-def test_connect_endpoint_returns_html_setup_page_with_safe_headers(tmp_path):
+def test_connect_endpoint_defaults_to_happ_for_backward_compatibility(tmp_path):
     module = load_sub_server_without_startup()
     write_allowed_metadata(module, tmp_path)
     module.PUBLIC_BASE_URL = "https://connect.example.com"
@@ -218,9 +223,17 @@ def test_connect_endpoint_returns_html_setup_page_with_safe_headers(tmp_path):
     assert harness.handler.close_connection is True
 
     page = harness.body.decode("utf-8")
+
     assert "Device: <b>ios</b>" in page
-    assert f"happ://add/https://connect.example.com/{VALID_UUID}" in page
-    assert f'value="https://connect.example.com/{VALID_UUID}"' in page
+    assert (
+        f"happ://add/https://connect.example.com/{VALID_UUID}"
+        in page
+    )
+    assert 'const CLIENT_SCHEME = "happ"' in page
+    assert (
+        f'value="https://connect.example.com/{VALID_UUID}"'
+        in page
+    )
     assert "sessionStorage" in page
 
 

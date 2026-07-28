@@ -6,7 +6,6 @@ import json
 import types
 from pathlib import Path
 
-
 SUB_SERVER_PATH = Path("deploy/vpn-subscription/sub_server.py")
 VALID_UUID = "11111111-1111-4111-8111-111111111111"
 
@@ -82,7 +81,7 @@ def test_v2raytun_deep_link_imports_existing_root_subscription_url():
     assert "/sub/" not in module.build_v2raytun_deep_link(subscription_url)
 
 
-def test_connect_page_contains_v2raytun_button_for_same_subscription():
+def test_connect_page_uses_v2raytun_deep_link_when_selected():
     module = load_sub_server_without_startup()
     subscription_url = f"https://connect.example.com/{VALID_UUID}"
 
@@ -90,50 +89,136 @@ def test_connect_page_contains_v2raytun_button_for_same_subscription():
         client_uuid=VALID_UUID,
         device="ios",
         subscription_url=subscription_url,
+        client="v2raytun",
     )
 
     assert f"v2raytun://import/{subscription_url}" in page
-    assert 'id="openV2RayTunBtn"' in page
-    assert "Open in v2RayTun" in page
+    assert 'const CLIENT_SCHEME = "v2raytun"' in page
+    assert "Trying to open v2RayTun" in page
     assert f'value="{subscription_url}"' in page
-    assert f"v2raytun://import/https://connect.example.com/sub/{VALID_UUID}" not in page
+
+    assert 'id="openV2RayTunBtn"' not in page
+    assert f"happ://add/{subscription_url}" not in page
+    assert "/sub/" not in page
 
 
-def test_v2raytun_support_does_not_replace_happ_auto_open():
+def test_happ_and_v2raytun_have_independent_auto_open_keys():
     module = load_sub_server_without_startup()
     subscription_url = f"https://connect.example.com/{VALID_UUID}"
 
-    page = module.build_connect_page(
+    happ_page = module.build_connect_page(
         client_uuid=VALID_UUID,
         device="android",
         subscription_url=subscription_url,
+        client="happ",
     )
 
-    assert f"happ://add/{subscription_url}" in page
-    assert 'const DEEP_LINK = "happ://add/' in page
-    assert "location.href = DEEP_LINK" in page
-    assert "sessionStorage" in page
-    assert f"v2raytun://import/{subscription_url}" in page
+    v2raytun_page = module.build_connect_page(
+        client_uuid=VALID_UUID,
+        device="android",
+        subscription_url=subscription_url,
+        client="v2raytun",
+    )
+
+    assert 'const CLIENT_SCHEME = "happ"' in happ_page
+    assert 'const CLIENT_SCHEME = "v2raytun"' in v2raytun_page
+
+    for page in (happ_page, v2raytun_page):
+        assert (
+            '"vpn_auto_open_" + CLIENT_SCHEME + "_" + SUBSCRIPTION_URL'
+            in page
+        )
+        assert "location.href = DEEP_LINK" in page
+        assert "sessionStorage" in page
 
 
-def test_v2raytun_uses_existing_subscription_payload_without_raw_link_on_connect_page(
+def test_v2raytun_uses_existing_subscription_payload_without_raw_vless(
     tmp_path,
 ):
     module = load_sub_server_without_startup()
     write_allowed_metadata(module, tmp_path)
+
     module.PUBLIC_BASE_URL = "https://connect.example.com"
     module.VPN_HOST = "eu-vpn.example.com"
     module.VPN_WS_HOST = "eu-vpn.example.com"
     module.VPN_SNI = "eu-vpn.example.com"
 
-    root = HandlerHarness(module, path=f"/{VALID_UUID}").do_get()
-    connect = HandlerHarness(module, path=f"/connect/{VALID_UUID}?device=ios").do_get()
+    root = HandlerHarness(
+        module,
+        path=f"/{VALID_UUID}",
+    ).do_get()
+
+    connect = HandlerHarness(
+        module,
+        path=(
+            f"/connect/{VALID_UUID}"
+            "?device=ios&client=v2raytun"
+        ),
+    ).do_get()
 
     assert root.responses == [200]
     assert root.header_map["profile-update-interval"] == "1"
+
     decoded = base64.b64decode(root.body).decode("utf-8")
-    assert decoded.startswith(f"vless://{VALID_UUID}@eu-vpn.example.com:443")
+    assert decoded.startswith(
+        f"vless://{VALID_UUID}@eu-vpn.example.com:443"
+    )
+
+    assert connect.responses == [200]
 
     page = connect.body.decode("utf-8")
-    assert f"v2raytun://import/https://connect.example.com/{VALID_UUID}" in page
+
+    assert (
+        f"v2raytun://import/"
+        f"https://connect.example.com/{VALID_UUID}"
+        in page
+    )
+
     assert f"vless://{VALID_UUID}@" not in page
+
+def test_connect_endpoint_routes_explicit_v2raytun_client(tmp_path):
+    module = load_sub_server_without_startup()
+    write_allowed_metadata(module, tmp_path)
+    module.PUBLIC_BASE_URL = "https://connect.example.com"
+
+    harness = HandlerHarness(
+        module,
+        path=(
+            f"/connect/{VALID_UUID}"
+            "?device=android&client=v2raytun"
+        ),
+    ).do_get()
+
+    assert harness.responses == [200]
+
+    page = harness.body.decode("utf-8")
+
+    assert (
+        f"v2raytun://import/"
+        f"https://connect.example.com/{VALID_UUID}"
+        in page
+    )
+    assert 'const CLIENT_SCHEME = "v2raytun"' in page
+    assert f"happ://add/https://connect.example.com/{VALID_UUID}" not in page
+
+
+def test_connect_endpoint_rejects_unknown_client(tmp_path):
+    module = load_sub_server_without_startup()
+    write_allowed_metadata(module, tmp_path)
+
+    harness = HandlerHarness(
+        module,
+        path=(
+            f"/connect/{VALID_UUID}"
+            "?device=android&client=unknown"
+        ),
+    ).do_get()
+
+    assert harness.responses == [400]
+    assert harness.header_map["Content-Type"] == (
+        "text/plain; charset=utf-8"
+    )
+    assert harness.header_map["Cache-Control"] == "no-store"
+    assert harness.header_map["Connection"] == "close"
+    assert harness.body == b"unsupported client"
+    assert harness.handler.close_connection is True

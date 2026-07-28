@@ -10,22 +10,22 @@ from app.bot.keyboards.main_menu import (
     tariff_keyboard,
 )
 from app.bot.keyboards.payment import payment_check_keyboard
-from app.bot.utils.custom_emoji import (
-    GIFT_CUSTOM_EMOJI_ID,
-    STAR_CUSTOM_EMOJI_ID,
-)
 from app.bot.keyboards.vpn_access import (
     expired_subscription_keyboard,
     vpn_access_keyboard,
 )
 from app.bot.texts.vpn_access import (
     format_datetime,
+    format_expired_vpn_subscription_text,
     format_vpn_access_text,
     format_vpn_config_text,
     happ_android_instruction_text,
     happ_fallback_text,
     happ_ios_instruction_text,
-    format_expired_vpn_subscription_text,
+)
+from app.bot.utils.custom_emoji import (
+    GIFT_CUSTOM_EMOJI_ID,
+    STAR_CUSTOM_EMOJI_ID,
 )
 
 
@@ -48,15 +48,19 @@ def test_format_datetime_handles_none_and_formats_without_timezone_suffix():
     assert format_datetime(value) == "05.07.2026 12:34"
 
 
-def test_format_vpn_access_text_contains_device_limit_expiry_and_happ_instruction():
+def test_format_vpn_access_text_contains_device_limit_expiry_and_client_choice():
     expires_at = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
 
-    text = format_vpn_access_text(device_limit=3, expires_at=expires_at)
+    text = format_vpn_access_text(
+        device_limit=3,
+        expires_at=expires_at,
+    )
 
     assert "Your VPN subscription is active." in text
     assert "Devices: 3" in text
     assert "Active until: 01.08.2026 12:00" in text
     assert "Happ VPN" in text
+    assert "v2RayTun" in text
     assert "Connect VPN" in text
 
 
@@ -67,15 +71,19 @@ def test_format_vpn_access_text_uses_dash_for_missing_device_limit_and_missing_e
     assert "Active until: not specified" in text
 
 
-def test_format_vpn_config_text_contains_config_uri_in_html_code_block_and_fallback_instructions():
-    text = format_vpn_config_text("https://connect.example/sub-uuid")
+def test_format_vpn_config_text_contains_client_choice_and_backup_uri():
+    text = format_vpn_config_text(
+        "https://connect.example/connect/sub-uuid?device=android"
+    )
 
-    assert "VPN connection page:" in text
-    assert "Open Manually" in text
-    assert "Copy" in text
-    assert "<code>https://connect.example/sub-uuid</code>" in text
-
-
+    assert "VPN Connection" in text
+    assert "Choose a VPN app below." in text
+    assert "Backup connection page:" in text
+    assert (
+        "<code>https://connect.example/connect/"
+        "sub-uuid?device=android</code>"
+        in text
+    )
 def test_happ_android_instruction_text_contains_ordered_android_steps():
     text = happ_android_instruction_text()
 

@@ -15,7 +15,9 @@ from app.services.admin_lookup_service import (
     decimal_to_str,
     enum_to_str,
 )
-from app.services.admin_subscription_lookup_service import AdminSubscriptionLookupService
+from app.services.admin_subscription_lookup_service import (
+    AdminSubscriptionLookupService,
+)
 from app.services.admin_user_lookup_service import AdminUserLookupService
 
 
@@ -374,7 +376,7 @@ def test_enum_to_str_handles_none_enum_and_plain_value():
 
 def test_decimal_to_str_handles_none_zero_integers_and_fractional_values():
     assert decimal_to_str(None) == "—"
-    assert decimal_to_str(Decimal("0")) == "0"
+    assert decimal_to_str(Decimal(0)) == "0"
     assert decimal_to_str(Decimal("4.00000000")) == "4"
     assert decimal_to_str(Decimal("4.25000000")) == "4.25"
     assert decimal_to_str(Decimal("0.12345678")) == "0.12345678"

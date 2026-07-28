@@ -100,7 +100,10 @@ class SubscriptionMetaSyncService:
                 try:
                     await self.session.rollback()
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Session rollback failed after successful subscription metadata sync.",
+                        exc_info=True,
+                    )
 
                 return SubscriptionMetaSafeSyncResult(
                     ok=True,

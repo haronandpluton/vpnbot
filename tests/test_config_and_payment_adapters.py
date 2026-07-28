@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from decimal import Decimal
 
 import pytest
@@ -73,7 +74,7 @@ def test_tariff_configs_are_frozen_and_key_matches_code():
     }
     assert all(key == tariff.code for key, tariff in TARIFFS.items())
 
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         get_tariff(TariffCode.PERIOD_1_MONTH).price_usd = Decimal("0.01")
 
 

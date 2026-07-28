@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.exc import IntegrityError
+
 from app.common.enums import CurrencyCode, NetworkCode
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.payment_status import PaymentStatus
@@ -423,7 +424,7 @@ async def test_confirmed_event_recovers_after_concurrent_unique_violation():
 
     result = await service.process_confirmed_event(
         order_id=23,
-        amount=Decimal("300"),
+        amount=Decimal(300),
         provider="telegram_stars",
         event_type="successful_payment",
         external_event_id="charge-123",
@@ -488,7 +489,7 @@ async def test_existing_event_for_another_order_is_rejected():
     ):
         await service.process_confirmed_event(
             order_id=23,
-            amount=Decimal("300"),
+            amount=Decimal(300),
             provider="telegram_stars",
             event_type="successful_payment",
             external_event_id="charge-123",

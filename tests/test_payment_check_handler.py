@@ -11,7 +11,6 @@ from app.services.cryptobot_payment_notification_service import (
     CRYPTOBOT_PAYMENT_CONFIRMED_TEXT,
 )
 
-
 CALL_LOG: list[tuple[str, int]] = []
 
 

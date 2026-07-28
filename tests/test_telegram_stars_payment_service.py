@@ -72,7 +72,7 @@ def make_order(
     *,
     status: OrderStatus = OrderStatus.WAITING_PAYMENT,
     payment_method: PaymentMethod = PaymentMethod.TELEGRAM_STARS,
-    expected_amount: Decimal = Decimal("300"),
+    expected_amount: Decimal = Decimal(300),
     expires_at: datetime | None = None,
 ):
     return SimpleNamespace(
@@ -495,7 +495,7 @@ async def test_successful_payment_activates_order_through_payment_core():
     assert activation_service.calls == [
         {
             "order_id": 41,
-            "amount": Decimal("300"),
+            "amount": Decimal(300),
             "provider": "telegram_stars",
             "event_type": "successful_payment",
             "external_event_id": "charge-123",

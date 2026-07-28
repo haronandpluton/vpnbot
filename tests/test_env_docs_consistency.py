@@ -4,7 +4,6 @@ from pathlib import Path
 
 from app.config.settings import Settings
 
-
 ENV_EXAMPLE = Path(".env.example")
 RUN_LOCAL_DOC = Path("docs/RUN_LOCAL.md")
 PRODUCTION_DOC = Path("docs/PRODUCTION_READINESS.md")

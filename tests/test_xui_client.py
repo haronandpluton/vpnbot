@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import httpx
 import pytest
-from datetime import datetime, timezone
+
 import app.services.xui_client as xui_module
 from app.services.xui_client import (
     XuiClient,
@@ -339,7 +340,7 @@ def test_expiry_time_ms_converts_aware_datetime_to_unix_milliseconds():
 
 
 def test_expiry_time_ms_rejects_naive_datetime():
-    expires_at = datetime(2030, 1, 1)
+    expires_at = datetime(2030, 1, 1) # noqa: DTZ001 - intentionally naive invalid input
 
     with pytest.raises(
         XuiClientError,

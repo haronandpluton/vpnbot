@@ -24,7 +24,6 @@ from app.payment_core.enums.payment_method import PaymentMethod
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.subscription_service import SubscriptionService
 
-
 TEST_DATABASE_ENV = "VPNBOT_TEST_POSTGRES_URL"
 
 

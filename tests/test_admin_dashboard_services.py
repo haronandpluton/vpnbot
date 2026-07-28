@@ -292,7 +292,7 @@ async def test_admin_stats_confirmed_revenue_total_converts_none_and_numeric_val
     none_session = FakeStatsSession(values=[None])
     none_service = AdminStatsService(none_session)
 
-    assert await none_service._confirmed_revenue_total() == Decimal("0")
+    assert await none_service._confirmed_revenue_total() == Decimal(0)
 
     numeric_session = FakeStatsSession(values=["45.67"])
     numeric_service = AdminStatsService(numeric_session)
