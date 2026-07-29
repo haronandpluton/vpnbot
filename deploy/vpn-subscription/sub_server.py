@@ -41,7 +41,7 @@ VPN_SNI = os.getenv("VPN_UPSTREAM_SNI", VPN_HOST)
 
 PROFILE_TITLE = os.getenv(
     "VPN_SUBSCRIPTION_PROFILE_TITLE",
-    "❤️ PRESENT VPN",
+    "🎁 PRESENT VPN",
 ).strip() or "PRESENT VPN"
 
 SERVER_DISPLAY_NAME = os.getenv(

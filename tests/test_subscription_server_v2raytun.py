@@ -165,7 +165,7 @@ def test_v2raytun_uses_existing_subscription_payload_without_raw_vless(
     assert root.responses == [200]
     assert root.header_map["profile-update-interval"] == "1"
     assert decode_base64_header(root.header_map["profile-title"]) == (
-        "❤️ PRESENT VPN"
+        "🎁 PRESENT VPN"
     )
     assert "Days left:" in decode_base64_header(root.header_map["announce"])
     assert root.header_map["subscription-userinfo"].endswith(
@@ -192,14 +192,14 @@ def test_v2raytun_uses_existing_subscription_payload_without_raw_vless(
 def test_v2raytun_receives_branding_and_clickable_announce_headers(tmp_path):
     module = load_sub_server_without_startup()
     write_allowed_metadata(module, tmp_path)
-    module.PROFILE_TITLE = "❤️ PRESENT VPN"
+    module.PROFILE_TITLE = "🎁 PRESENT VPN"
     module.TELEGRAM_BOT_URL = "https://t.me/PresentVPNBot"
 
     harness = HandlerHarness(module, path=f"/{VALID_UUID}").do_get()
 
     assert harness.responses == [200]
     assert decode_base64_header(harness.header_map["profile-title"]) == (
-        "❤️ PRESENT VPN"
+        "🎁 PRESENT VPN"
     )
     assert harness.header_map["announce-url"] == "https://t.me/PresentVPNBot"
     announce = decode_base64_header(harness.header_map["announce"])

@@ -191,7 +191,7 @@ def test_root_subscription_endpoint_returns_base64_vless_and_required_headers(
         "expire=9999999999"
     )
     assert decode_base64_header(harness.header_map["profile-title"]) == (
-        "❤️ PRESENT VPN"
+        "🎁 PRESENT VPN"
     )
     assert "Days left:" in decode_base64_header(harness.header_map["announce"])
     assert harness.header_map["Cache-Control"] == "no-store"
@@ -265,7 +265,7 @@ def test_subscription_metadata_headers_include_branding_links_and_dynamic_days(
     expire = 2_000_000_000
     write_allowed_metadata(module, tmp_path, expire=expire)
 
-    module.PROFILE_TITLE = "❤️ PRESENT VPN"
+    module.PROFILE_TITLE = "🎁 PRESENT VPN"
     module.TELEGRAM_BOT_URL = "https://t.me/PresentVPNBot"
     module.PROFILE_WEB_PAGE_URL = "https://presentvpn.example.com"
     module.ACTIVE_ANNOUNCE_TEMPLATE = (
@@ -284,7 +284,7 @@ def test_subscription_metadata_headers_include_branding_links_and_dynamic_days(
 
     headers = module.build_subscription_metadata_headers(VALID_UUID)
 
-    assert decode_base64_header(headers["profile-title"]) == "❤️ PRESENT VPN"
+    assert decode_base64_header(headers["profile-title"]) == "🎁 PRESENT VPN"
     assert headers["support-url"] == "https://t.me/PresentVPNBot"
     assert headers["announce-url"] == "https://t.me/PresentVPNBot"
     assert headers["profile-web-page-url"] == "https://presentvpn.example.com"
