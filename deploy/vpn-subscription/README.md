@@ -24,7 +24,7 @@ Telegram bot / EU backend
 
 ```text
 PUBLIC gateway: https://connect.presentvpn.click
-VPN upstream:    lab83607.hostkey.in:443
+VPN upstream:    eu1.presentvpn.click:443
 ```
 
 Публичный домен не должен автоматически подставляться в VLESS-профиль.
@@ -127,11 +127,11 @@ VPN_SUBSCRIPTION_BIND_PORT=2097
 VPN_SUBSCRIPTION_META_FILE=/opt/vpn-subscription/subscriptions_meta.json
 VPN_SUBSCRIPTION_PUBLIC_BASE_URL=https://connect.presentvpn.click
 
-VPN_UPSTREAM_HOST=lab83607.hostkey.in
+VPN_UPSTREAM_HOST=eu1.presentvpn.click
 VPN_UPSTREAM_PORT=443
 VPN_UPSTREAM_WS_PATH=/ws-test
-VPN_UPSTREAM_WS_HOST=lab83607.hostkey.in
-VPN_UPSTREAM_SNI=lab83607.hostkey.in
+VPN_UPSTREAM_WS_HOST=eu1.presentvpn.click
+VPN_UPSTREAM_SNI=eu1.presentvpn.click
 ```
 
 ## Файлы deployment

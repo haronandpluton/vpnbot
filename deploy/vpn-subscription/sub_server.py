@@ -32,7 +32,7 @@ PUBLIC_BASE_URL = os.getenv(
     "https://connect.presentvpn.click",
 ).rstrip("/")
 
-VPN_HOST = os.getenv("VPN_UPSTREAM_HOST", "lab83607.hostkey.in")
+VPN_HOST = os.getenv("VPN_UPSTREAM_HOST", "eu1.presentvpn.click")
 VPN_PORT = int(os.getenv("VPN_UPSTREAM_PORT", "443"))
 VPN_WS_PATH = os.getenv("VPN_UPSTREAM_WS_PATH", "/ws-test")
 VPN_WS_HOST = os.getenv("VPN_UPSTREAM_WS_HOST", VPN_HOST)

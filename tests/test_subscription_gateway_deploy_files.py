@@ -38,7 +38,7 @@ def test_gateway_env_example_keeps_public_and_upstream_hosts_separate():
     assert (
         "VPN_SUBSCRIPTION_PUBLIC_BASE_URL=https://connect.presentvpn.click" in text
     )
-    assert "VPN_UPSTREAM_HOST=lab83607.hostkey.in" in text
+    assert "VPN_UPSTREAM_HOST=eu1.presentvpn.click" in text
     assert "VPN_SUBSCRIPTION_BIND_HOST=127.0.0.1" in text
 
 
@@ -59,3 +59,22 @@ def test_gateway_env_example_contains_subscription_branding():
         "Manage subscription: {telegram} • Days left: {days_left}"
         in text
     )
+
+
+def test_gateway_uses_current_frankfurt_upstream():
+    env_text = (DEPLOY_DIR / "vpn-subscription.env.example").read_text(
+        encoding="utf-8"
+    )
+    server_text = (DEPLOY_DIR / "sub_server.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "VPN_UPSTREAM_HOST=eu1.presentvpn.click" in env_text
+    assert "VPN_UPSTREAM_WS_HOST=eu1.presentvpn.click" in env_text
+    assert "VPN_UPSTREAM_SNI=eu1.presentvpn.click" in env_text
+    assert "VPN_UPSTREAM_PORT=443" in env_text
+    assert "VPN_UPSTREAM_WS_PATH=/ws-test" in env_text
+
+    assert '"eu1.presentvpn.click"' in server_text
+    assert "lab83607.hostkey.in" not in env_text
+    assert "lab83607.hostkey.in" not in server_text
