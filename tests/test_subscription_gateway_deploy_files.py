@@ -83,3 +83,21 @@ def test_gateway_uses_current_frankfurt_upstream():
     assert '"eu1.presentvpn.click"' in server_text
     assert "lab83607.hostkey.in" not in env_text
     assert "lab83607.hostkey.in" not in server_text
+
+def test_gateway_env_example_contains_happ_advanced_banner_settings():
+    text = (DEPLOY_DIR / "vpn-subscription.env.example").read_text(
+        encoding="utf-8"
+    )
+
+    assert "VPN_SUBSCRIPTION_HAPP_PROVIDER_ID=" in text
+    assert "VPN_SUBSCRIPTION_HAPP_INFO_COLOR=blue" in text
+    assert (
+        "VPN_SUBSCRIPTION_HAPP_INFO_TEMPLATE="
+        "Manage subscription | {telegram} | Days left: {days_left} | "
+        "Expires: {expires_at}"
+        in text
+    )
+    assert (
+        "VPN_SUBSCRIPTION_HAPP_INFO_BUTTON_TEXT=Telegram bot"
+        in text
+    )

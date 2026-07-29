@@ -412,3 +412,71 @@ def test_default_server_display_name_is_current_frankfurt_node(monkeypatch):
     fragment = urllib.parse.unquote(link.split("#", 1)[1])
 
     assert fragment == "🇩🇪 Frankfurt"
+
+def test_happ_advanced_banner_headers_with_provider_id(tmp_path):
+    module = load_sub_server_without_startup()
+    write_allowed_metadata(
+        module,
+        tmp_path,
+        expire=2_000_000_000,
+        status="active",
+    )
+
+    module.HAPP_PROVIDER_ID = "test-provider"
+    module.HAPP_INFO_COLOR = "blue"
+    module.HAPP_INFO_TEMPLATE = (
+        "Manage subscription | {telegram} | "
+        "Days left: {days_left} | Expires: {expires_at}"
+    )
+    module.HAPP_INFO_BUTTON_TEXT = "Telegram bot"
+    module.TELEGRAM_BOT_URL = "https://t.me/VPN_FORBOT"
+
+    headers = module.build_subscription_metadata_headers(VALID_UUID)
+
+    assert headers["providerid"] == "test-provider"
+    assert headers["sub-info-color"] == "blue"
+
+    assert "Manage subscription" in headers["sub-info-text"]
+    assert "@VPN_FORBOT" in headers["sub-info-text"]
+    assert "Days left:" in headers["sub-info-text"]
+    assert "Expires:" in headers["sub-info-text"]
+
+    assert headers["sub-info-button-text"] == "Telegram bot"
+    assert (
+        headers["sub-info-button-link"]
+        == "https://t.me/VPN_FORBOT"
+    )
+
+    assert headers["sub-expire"] == "1"
+    assert (
+        headers["sub-expire-button-link"]
+        == "https://t.me/VPN_FORBOT"
+    )
+
+    # Existing thin announcement remains as fallback.
+    assert "announce" in headers
+    assert "subscription-userinfo" in headers
+    assert "profile-title" in headers
+
+
+def test_happ_advanced_banner_is_absent_without_provider_id(tmp_path):
+    module = load_sub_server_without_startup()
+    write_allowed_metadata(module, tmp_path)
+
+    module.HAPP_PROVIDER_ID = ""
+
+    headers = module.build_subscription_metadata_headers(VALID_UUID)
+
+    assert "providerid" not in headers
+    assert "sub-info-color" not in headers
+    assert "sub-info-text" not in headers
+    assert "sub-info-button-text" not in headers
+    assert "sub-info-button-link" not in headers
+    assert "sub-expire" not in headers
+    assert "sub-expire-button-link" not in headers
+
+    # Legacy/current subscription metadata keeps working.
+    assert "profile-update-interval" in headers
+    assert "subscription-userinfo" in headers
+    assert "profile-title" in headers
+    assert "announce" in headers

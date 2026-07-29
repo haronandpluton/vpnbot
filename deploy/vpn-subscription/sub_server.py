@@ -75,6 +75,29 @@ EXPIRED_ANNOUNCE_TEMPLATE = os.getenv(
     "Subscription expired on {expires_at} • Renew via {telegram}",
 ).strip()
 
+HAPP_PROVIDER_ID = os.getenv(
+    "VPN_SUBSCRIPTION_HAPP_PROVIDER_ID",
+    "",
+).strip()
+
+HAPP_INFO_COLOR = os.getenv(
+    "VPN_SUBSCRIPTION_HAPP_INFO_COLOR",
+    "blue",
+).strip().lower()
+
+if HAPP_INFO_COLOR not in {"red", "blue", "green"}:
+    HAPP_INFO_COLOR = "blue"
+
+HAPP_INFO_TEMPLATE = os.getenv(
+    "VPN_SUBSCRIPTION_HAPP_INFO_TEMPLATE",
+    "Manage subscription | {telegram} | Days left: {days_left} | Expires: {expires_at}",
+).strip()
+
+HAPP_INFO_BUTTON_TEXT = os.getenv(
+    "VPN_SUBSCRIPTION_HAPP_INFO_BUTTON_TEXT",
+    "Telegram bot",
+).strip()
+
 HAPP_CRYPTO_API_URL = "https://crypto.happ.su/api-v2.php"
 
 _subscriptions_meta_cache: dict = {}
@@ -303,6 +326,36 @@ def build_announce_text(
     return text[:200]
 
 
+def build_happ_info_text(
+    client_uuid: str,
+    *,
+    now: int | None = None,
+) -> str:
+    days_left = get_subscription_days_left(client_uuid, now=now)
+    days_value = "unknown" if days_left is None else str(days_left)
+
+    values = {
+        "telegram": get_telegram_label(),
+        "website": get_website_label(),
+        "days_left": days_value,
+        "expires_at": get_subscription_expiry_date(client_uuid),
+    }
+
+    try:
+        text = HAPP_INFO_TEMPLATE.format(**values)
+    except (KeyError, ValueError):
+        logger.error(
+            "Invalid VPN_SUBSCRIPTION_HAPP_INFO_TEMPLATE; using fallback"
+        )
+        text = (
+            f"Manage subscription | {values['telegram']} "
+            f"| Days left: {days_value} "
+            f"| Expires: {values['expires_at']}"
+        )
+
+    # Happ documents a 200 character maximum for sub-info-text.
+    return text[:200]
+
 def build_subscription_metadata_headers(client_uuid: str) -> dict[str, str]:
     headers = {
         "profile-update-interval": "1",
@@ -319,6 +372,20 @@ def build_subscription_metadata_headers(client_uuid: str) -> dict[str, str]:
 
     if PROFILE_WEB_PAGE_URL:
         headers["profile-web-page-url"] = PROFILE_WEB_PAGE_URL
+
+    if HAPP_PROVIDER_ID:
+        headers["providerid"] = HAPP_PROVIDER_ID
+        headers["sub-info-color"] = HAPP_INFO_COLOR
+        headers["sub-info-text"] = build_happ_info_text(client_uuid)
+
+        if HAPP_INFO_BUTTON_TEXT and TELEGRAM_BOT_URL:
+            headers["sub-info-button-text"] = HAPP_INFO_BUTTON_TEXT[:25]
+            headers["sub-info-button-link"] = TELEGRAM_BOT_URL
+
+        headers["sub-expire"] = "1"
+
+        if TELEGRAM_BOT_URL:
+            headers["sub-expire-button-link"] = TELEGRAM_BOT_URL
 
     return headers
 
