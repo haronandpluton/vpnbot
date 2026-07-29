@@ -78,6 +78,7 @@ def test_load_subscriptions_meta_keeps_last_good_data_during_partial_write(tmp_p
     meta_file = tmp_path / "subscriptions_meta.json"
     expected = {
         VALID_UUID: {
+            "status": "active",
             "upload": 0,
             "download": 0,
             "total": 0,
@@ -103,6 +104,7 @@ def test_subscription_userinfo_uses_exported_metadata_values(tmp_path):
         json.dumps(
             {
                 VALID_UUID: {
+                    "status": "active",
                     "upload": 100,
                     "download": 200,
                     "total": 0,
@@ -137,6 +139,7 @@ def test_subscription_userinfo_sanitizes_invalid_metadata_values(tmp_path):
         json.dumps(
             {
                 VALID_UUID: {
+                    "status": "active",
                     "upload": "bad",
                     "download": None,
                     "total": "0",
@@ -163,6 +166,7 @@ def test_root_subscription_endpoint_sends_subscription_userinfo_header(tmp_path)
         json.dumps(
             {
                 VALID_UUID: {
+                    "status": "active",
                     "upload": 0,
                     "download": 0,
                     "total": 0,
@@ -196,6 +200,7 @@ def test_sub_fallback_endpoint_sends_subscription_userinfo_header(tmp_path):
         json.dumps(
             {
                 VALID_UUID: {
+                    "status": "active",
                     "upload": 0,
                     "download": 0,
                     "total": 0,
@@ -217,3 +222,72 @@ def test_sub_fallback_endpoint_sends_subscription_userinfo_header(tmp_path):
 
     decoded = base64.b64decode(harness.body).decode("utf-8")
     assert decoded.startswith(f"vless://{VALID_UUID}@vpn.example.com:443")
+
+
+def test_metadata_refresh_after_renewal_updates_status_expiry_and_payload(tmp_path):
+    module = load_sub_server_without_startup()
+    module.VPN_HOST = "vpn.example.com"
+    module.VPN_WS_HOST = "vpn.example.com"
+    module.VPN_SNI = "vpn.example.com"
+    module.TELEGRAM_BOT_URL = "https://t.me/VPN_FORBOT"
+
+    meta_file = tmp_path / "subscriptions_meta.json"
+    old_expire = 1_700_000_000
+    new_expire = 4_102_444_800
+
+    meta_file.write_text(
+        json.dumps(
+            {
+                VALID_UUID: {
+                    "status": "expired",
+                    "upload": 0,
+                    "download": 0,
+                    "total": 0,
+                    "expire": old_expire,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    module.SUBSCRIPTIONS_META_FILE = meta_file
+    module._subscriptions_meta_cache = {}
+    module._subscriptions_meta_last_seen_mtime_ns = None
+
+    expired = HandlerHarness(module, path=f"/{VALID_UUID}").do_get()
+    expired_payload = base64.b64decode(expired.body).decode("utf-8")
+
+    assert "127.0.0.1:9" in expired_payload
+    assert expired.header_map["subscription-userinfo"].endswith(
+        f"expire={old_expire}"
+    )
+
+    previous_mtime = meta_file.stat().st_mtime_ns
+    meta_file.write_text(
+        json.dumps(
+            {
+                VALID_UUID: {
+                    "status": "active",
+                    "upload": 0,
+                    "download": 0,
+                    "total": 0,
+                    "expire": new_expire,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    os.utime(
+        meta_file,
+        ns=(previous_mtime + 1_000_000, previous_mtime + 1_000_000),
+    )
+
+    renewed = HandlerHarness(module, path=f"/{VALID_UUID}").do_get()
+    renewed_payload = base64.b64decode(renewed.body).decode("utf-8")
+
+    assert renewed.header_map["subscription-userinfo"].endswith(
+        f"expire={new_expire}"
+    )
+    assert renewed_payload.startswith(
+        f"vless://{VALID_UUID}@vpn.example.com:443"
+    )
+    assert "127.0.0.1:9" not in renewed_payload

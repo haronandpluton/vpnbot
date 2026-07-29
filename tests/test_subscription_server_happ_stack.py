@@ -20,12 +20,19 @@ def load_sub_server_without_startup():
     return module
 
 
-def write_allowed_metadata(module, tmp_path, *, expire: int = 9999999999) -> None:
+def write_allowed_metadata(
+    module,
+    tmp_path,
+    *,
+    expire: int = 9999999999,
+    status: str = "active",
+) -> None:
     meta_file = tmp_path / "subscriptions_meta.json"
     meta_file.write_text(
         json.dumps(
             {
                 VALID_UUID: {
+                    "status": status,
                     "upload": 0,
                     "download": 0,
                     "total": 0,
@@ -261,15 +268,18 @@ def test_subscription_metadata_headers_include_branding_links_and_dynamic_days(
     module.PROFILE_TITLE = "❤️ PRESENT VPN"
     module.TELEGRAM_BOT_URL = "https://t.me/PresentVPNBot"
     module.PROFILE_WEB_PAGE_URL = "https://presentvpn.example.com"
-    module.ANNOUNCE_TEMPLATE = (
-        "Manage subscription: {telegram} • Days left: {days_left}"
+    module.ACTIVE_ANNOUNCE_TEMPLATE = (
+        "Manage: {website} • {telegram} • Days left: {days_left}"
+    )
+    module.EXPIRED_ANNOUNCE_TEMPLATE = (
+        "Subscription expired on {expires_at} • Renew via {telegram}"
     )
 
     now = expire - 26 * 86400
 
     assert module.get_subscription_days_left(VALID_UUID, now=now) == 26
     assert module.build_announce_text(VALID_UUID, now=now) == (
-        "Manage subscription: @PresentVPNBot • Days left: 26"
+        "Manage: presentvpn.example.com • @PresentVPNBot • Days left: 26"
     )
 
     headers = module.build_subscription_metadata_headers(VALID_UUID)
@@ -315,6 +325,42 @@ def test_root_endpoint_exposes_clickable_telegram_and_profile_links(tmp_path):
     assert harness.header_map["profile-web-page-url"] == (
         "https://presentvpn.example.com"
     )
+
+
+def test_expired_subscription_uses_expired_banner_and_keeps_exact_expiry(
+    tmp_path,
+):
+    module = load_sub_server_without_startup()
+    expire = 1_700_000_000
+    write_allowed_metadata(
+        module,
+        tmp_path,
+        expire=expire,
+        status="expired",
+    )
+    module.TELEGRAM_BOT_URL = "https://t.me/VPN_FORBOT"
+    module.PROFILE_WEB_PAGE_URL = "https://presentvpn.example.com"
+    module.EXPIRED_ANNOUNCE_TEMPLATE = (
+        "Subscription expired on {expires_at} • Renew via {telegram}"
+    )
+
+    harness = HandlerHarness(module, path=f"/{VALID_UUID}").do_get()
+
+    announce = decode_base64_header(harness.header_map["announce"])
+
+    assert harness.responses == [200]
+    assert "Subscription expired on" in announce
+    assert "@VPN_FORBOT" in announce
+    assert harness.header_map["subscription-userinfo"].endswith(
+        f"expire={expire}"
+    )
+    assert harness.header_map["support-url"] == "https://t.me/VPN_FORBOT"
+    assert harness.header_map["profile-web-page-url"] == (
+        "https://presentvpn.example.com"
+    )
+
+    decoded = base64.b64decode(harness.body).decode("utf-8")
+    assert "127.0.0.1:9" in decoded
 
 
 def test_health_endpoint_is_public_and_does_not_depend_on_metadata():

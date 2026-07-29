@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime, timezone
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -58,9 +59,20 @@ PROFILE_WEB_PAGE_URL = os.getenv(
     "",
 ).strip()
 
-ANNOUNCE_TEMPLATE = os.getenv(
+LEGACY_ANNOUNCE_TEMPLATE = os.getenv(
     "VPN_SUBSCRIPTION_ANNOUNCE_TEMPLATE",
-    "Manage subscription: {telegram} • Days left: {days_left}",
+    "",
+).strip()
+
+ACTIVE_ANNOUNCE_TEMPLATE = os.getenv(
+    "VPN_SUBSCRIPTION_ACTIVE_ANNOUNCE_TEMPLATE",
+    LEGACY_ANNOUNCE_TEMPLATE
+    or "Manage subscription • {telegram} • Days left: {days_left}",
+).strip()
+
+EXPIRED_ANNOUNCE_TEMPLATE = os.getenv(
+    "VPN_SUBSCRIPTION_EXPIRED_ANNOUNCE_TEMPLATE",
+    "Subscription expired on {expires_at} • Renew via {telegram}",
 ).strip()
 
 HAPP_CRYPTO_API_URL = "https://crypto.happ.su/api-v2.php"
@@ -123,12 +135,25 @@ def _safe_int(value, default: int = 0) -> int:
         return default
 
 
-def get_subscription_meta(client_uuid: str) -> dict[str, int]:
+def _safe_status(value) -> str:
+    if not isinstance(value, str):
+        return ""
+
+    normalized = value.strip().lower()
+
+    if normalized in {"active", "expired", "disabled"}:
+        return normalized
+
+    return ""
+
+
+def get_subscription_meta(client_uuid: str) -> dict[str, int | str]:
     data = load_subscriptions_meta()
     raw_meta = data.get(client_uuid)
 
     if not isinstance(raw_meta, dict):
         return {
+            "status": "",
             "upload": 0,
             "download": 0,
             "total": 0,
@@ -136,6 +161,7 @@ def get_subscription_meta(client_uuid: str) -> dict[str, int]:
         }
 
     return {
+        "status": _safe_status(raw_meta.get("status")),
         "upload": _safe_int(raw_meta.get("upload")),
         "download": _safe_int(raw_meta.get("download")),
         "total": _safe_int(raw_meta.get("total")),
@@ -178,6 +204,47 @@ def get_subscription_days_left(
     return (remaining_seconds + 86400 - 1) // 86400
 
 
+def get_subscription_effective_status(
+    client_uuid: str,
+    *,
+    now: int | None = None,
+) -> str:
+    meta = get_subscription_meta(client_uuid)
+    status = str(meta["status"])
+    expire = int(meta["expire"])
+    current_time = int(time.time()) if now is None else int(now)
+
+    if status in {"expired", "disabled"}:
+        return "expired"
+
+    if expire > 0 and expire <= current_time:
+        return "expired"
+
+    return "active"
+
+
+def get_subscription_expiry_date(client_uuid: str) -> str:
+    expire = int(get_subscription_meta(client_uuid)["expire"])
+
+    if expire <= 0:
+        return "unknown"
+
+    return datetime.fromtimestamp(
+        expire,
+        tz=timezone.utc,
+    ).strftime("%d.%m.%Y")
+
+
+def get_website_label() -> str:
+    if not PROFILE_WEB_PAGE_URL:
+        return "website"
+
+    parsed = urllib.parse.urlparse(PROFILE_WEB_PAGE_URL)
+    host = parsed.netloc.strip()
+
+    return host or "website"
+
+
 def get_telegram_label() -> str:
     if not TELEGRAM_BOT_URL:
         return "Telegram bot"
@@ -198,20 +265,40 @@ def build_announce_text(
 ) -> str:
     days_left = get_subscription_days_left(client_uuid, now=now)
     days_value = "∞" if days_left is None else str(days_left)
+    effective_status = get_subscription_effective_status(
+        client_uuid,
+        now=now,
+    )
+    template = (
+        EXPIRED_ANNOUNCE_TEMPLATE
+        if effective_status == "expired"
+        else ACTIVE_ANNOUNCE_TEMPLATE
+    )
+
+    values = {
+        "telegram": get_telegram_label(),
+        "website": get_website_label(),
+        "days_left": days_value,
+        "expires_at": get_subscription_expiry_date(client_uuid),
+    }
 
     try:
-        text = ANNOUNCE_TEMPLATE.format(
-            telegram=get_telegram_label(),
-            days_left=days_value,
-        )
+        text = template.format(**values)
     except (KeyError, ValueError):
         logger.error(
-            "Invalid VPN_SUBSCRIPTION_ANNOUNCE_TEMPLATE; using fallback"
+            "Invalid subscription announce template; using fallback"
         )
-        text = (
-            f"Manage subscription: {get_telegram_label()} "
-            f"• Days left: {days_value}"
-        )
+
+        if effective_status == "expired":
+            text = (
+                f"Subscription expired on {values['expires_at']} "
+                f"• Renew via {values['telegram']}"
+            )
+        else:
+            text = (
+                f"Manage subscription • {values['telegram']} "
+                f"• Days left: {days_value}"
+            )
 
     return text[:200]
 
@@ -270,15 +357,10 @@ def build_expired_vless_link(client_uuid: str) -> str:
 
 
 def is_subscription_expired(client_uuid: str, *, now: int | None = None) -> bool:
-    meta = get_subscription_meta(client_uuid)
-    expire = meta["expire"]
-
-    if expire <= 0:
-        return False
-
-    current_time = int(time.time()) if now is None else int(now)
-
-    return expire <= current_time
+    return get_subscription_effective_status(
+        client_uuid,
+        now=now,
+    ) == "expired"
 
 
 def build_subscription_payload(client_uuid: str) -> bytes:

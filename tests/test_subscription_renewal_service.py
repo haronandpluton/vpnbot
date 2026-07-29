@@ -143,7 +143,12 @@ class FakeMetaSyncService:
         self.session = session
 
     async def sync_safely(self, **kwargs):
-        self.__class__.calls.append(kwargs)
+        self.__class__.calls.append(
+            {
+                **kwargs,
+                "_commit_count": self.session.commit_count,
+            }
+        )
         return SimpleNamespace(ok=True)
 
 
@@ -269,6 +274,13 @@ async def test_active_subscription_renewal_preserves_uuid_and_origin_order():
         {"uuid": "existing-uuid", "device_limit": 1}
     ]
     assert config_uri == "https://connect/existing-uuid"
+    assert len(FakeMetaSyncService.calls) == 1
+    sync_call = FakeMetaSyncService.calls[0]
+    assert sync_call["_commit_count"] == 1
+    assert sync_call["reason"] == "post_payment_subscription_change"
+    assert sync_call["payload"]["activation_mode"] == "renewed"
+    assert sync_call["payload"]["expires_at"] == subscription.expires_at.isoformat()
+    assert sync_call["payload"]["status"] == "active"
 
 
 @pytest.mark.asyncio
@@ -295,6 +307,12 @@ async def test_expired_subscription_renewal_starts_from_current_time():
     assert result.expires_at <= after_call + timedelta(days=33, seconds=1)
     assert result.order_id == 10
     assert order.activated_subscription_id == 50
+    assert len(FakeMetaSyncService.calls) == 1
+    sync_call = FakeMetaSyncService.calls[0]
+    assert sync_call["_commit_count"] == 1
+    assert sync_call["payload"]["activation_mode"] == "renewed"
+    assert sync_call["payload"]["expires_at"] == result.expires_at.isoformat()
+    assert sync_call["payload"]["status"] == "active"
 
 
 @pytest.mark.asyncio

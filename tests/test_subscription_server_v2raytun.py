@@ -24,6 +24,7 @@ def write_allowed_metadata(module, tmp_path) -> None:
         json.dumps(
             {
                 VALID_UUID: {
+                    "status": "active",
                     "upload": 0,
                     "download": 0,
                     "total": 0,
@@ -204,6 +205,45 @@ def test_v2raytun_receives_branding_and_clickable_announce_headers(tmp_path):
     announce = decode_base64_header(harness.header_map["announce"])
     assert "@PresentVPNBot" in announce
     assert "Days left:" in announce
+
+
+def test_v2raytun_receives_expired_announcement_and_exact_expiry(tmp_path):
+    module = load_sub_server_without_startup()
+    meta_file = tmp_path / "subscriptions_meta.json"
+    expire = 1_700_000_000
+    meta_file.write_text(
+        json.dumps(
+            {
+                VALID_UUID: {
+                    "status": "expired",
+                    "upload": 0,
+                    "download": 0,
+                    "total": 0,
+                    "expire": expire,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    module.SUBSCRIPTIONS_META_FILE = meta_file
+    module._subscriptions_meta_cache = {}
+    module._subscriptions_meta_last_seen_mtime_ns = None
+    module.TELEGRAM_BOT_URL = "https://t.me/VPN_FORBOT"
+    module.EXPIRED_ANNOUNCE_TEMPLATE = (
+        "Subscription expired on {expires_at} • Renew via {telegram}"
+    )
+
+    harness = HandlerHarness(module, path=f"/{VALID_UUID}").do_get()
+
+    announce = decode_base64_header(harness.header_map["announce"])
+
+    assert harness.responses == [200]
+    assert "Subscription expired on" in announce
+    assert "@VPN_FORBOT" in announce
+    assert harness.header_map["announce-url"] == "https://t.me/VPN_FORBOT"
+    assert harness.header_map["subscription-userinfo"].endswith(
+        f"expire={expire}"
+    )
 
 
 def test_connect_endpoint_routes_explicit_v2raytun_client(tmp_path):

@@ -224,7 +224,9 @@ class SubscriptionMetaSyncService:
             stderr=stderr,
         )
 
-    async def _build_metadata(self) -> tuple[dict[str, dict[str, int]], int]:
+    async def _build_metadata(
+        self,
+    ) -> tuple[dict[str, dict[str, int | str]], int]:
         stmt = select(Subscription).where(
             Subscription.status.in_(
                 [
@@ -238,7 +240,7 @@ class SubscriptionMetaSyncService:
         result = await self.session.execute(stmt)
         subscriptions = result.scalars().all()
 
-        data: dict[str, dict[str, int]] = {}
+        data: dict[str, dict[str, int | str]] = {}
         skipped_count = 0
         now = datetime.now(timezone.utc)
         disabled_expire = int(now.timestamp()) - 60
@@ -258,6 +260,7 @@ class SubscriptionMetaSyncService:
                 expire = self._to_unix_timestamp(subscription.expires_at)
 
             data[str(subscription.uuid)] = {
+                "status": subscription.status.value,
                 "expire": expire,
                 "upload": 0,
                 "download": 0,
@@ -353,7 +356,7 @@ class SubscriptionMetaSyncService:
     @staticmethod
     def _write_metadata_atomically(
         output_path: Path,
-        data: dict[str, dict[str, int]],
+        data: dict[str, dict[str, int | str]],
     ) -> None:
         temporary_path = output_path.with_name(
             f".{output_path.name}.{uuid4().hex}.tmp"

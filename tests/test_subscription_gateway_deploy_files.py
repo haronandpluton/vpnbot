@@ -55,8 +55,13 @@ def test_gateway_env_example_contains_subscription_branding():
     )
     assert "VPN_SUBSCRIPTION_PROFILE_WEB_PAGE_URL=" in text
     assert (
-        "VPN_SUBSCRIPTION_ANNOUNCE_TEMPLATE="
-        "Manage subscription: {telegram} • Days left: {days_left}"
+        "VPN_SUBSCRIPTION_ACTIVE_ANNOUNCE_TEMPLATE="
+        "Manage subscription • {telegram} • Days left: {days_left}"
+        in text
+    )
+    assert (
+        "VPN_SUBSCRIPTION_EXPIRED_ANNOUNCE_TEMPLATE="
+        "Subscription expired on {expires_at} • Renew via {telegram}"
         in text
     )
 

@@ -237,12 +237,14 @@ async def test_build_metadata_exports_active_and_expired_subscriptions_and_skips
     assert skipped_count == 2
     assert set(data) == {"active-uuid", "expired-uuid"}
     assert data["active-uuid"] == {
+        "status": "active",
         "expire": int(active_expires_at.timestamp()),
         "upload": 0,
         "download": 0,
         "total": 0,
     }
     assert data["expired-uuid"] == {
+        "status": "expired",
         "expire": int(expired_expires_at.timestamp()),
         "upload": 0,
         "download": 0,
@@ -271,6 +273,7 @@ async def test_build_metadata_exports_disabled_subscription_as_already_expired_e
 
     assert skipped_count == 0
     assert set(data) == {"disabled-uuid"}
+    assert data["disabled-uuid"]["status"] == "disabled"
     assert data["disabled-uuid"]["upload"] == 0
     assert data["disabled-uuid"]["download"] == 0
     assert data["disabled-uuid"]["total"] == 0
@@ -317,6 +320,7 @@ async def test_sync_writes_metadata_file_creates_parent_directory_and_returns_up
         return (
             {
                 "uuid-1": {
+                    "status": "active",
                     "expire": 123,
                     "upload": 0,
                     "download": 0,
@@ -345,6 +349,7 @@ async def test_sync_writes_metadata_file_creates_parent_directory_and_returns_up
     )
     assert json.loads(output_path.read_text(encoding="utf-8")) == {
         "uuid-1": {
+            "status": "active",
             "expire": 123,
             "upload": 0,
             "download": 0,
