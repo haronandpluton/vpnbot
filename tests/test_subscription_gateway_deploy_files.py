@@ -40,3 +40,22 @@ def test_gateway_env_example_keeps_public_and_upstream_hosts_separate():
     )
     assert "VPN_UPSTREAM_HOST=lab83607.hostkey.in" in text
     assert "VPN_SUBSCRIPTION_BIND_HOST=127.0.0.1" in text
+
+
+def test_gateway_env_example_contains_subscription_branding():
+    text = (DEPLOY_DIR / "vpn-subscription.env.example").read_text(
+        encoding="utf-8"
+    )
+
+    assert "VPN_SUBSCRIPTION_PROFILE_TITLE=❤ PRESENT VPN" in text
+    assert "VPN_SUBSCRIPTION_SERVER_NAME=🇩🇪 Frankfurt" in text
+    assert (
+        "VPN_SUBSCRIPTION_TELEGRAM_URL=https://t.me/VPN_FORBOT"
+        in text
+    )
+    assert "VPN_SUBSCRIPTION_PROFILE_WEB_PAGE_URL=" in text
+    assert (
+        "VPN_SUBSCRIPTION_ANNOUNCE_TEMPLATE="
+        "Manage subscription: {telegram} • Days left: {days_left}"
+        in text
+    )
