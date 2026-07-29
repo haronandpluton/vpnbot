@@ -38,6 +38,11 @@ def write_allowed_metadata(module, tmp_path) -> None:
     module._subscriptions_meta_last_seen_mtime_ns = None
 
 
+def decode_base64_header(value: str) -> str:
+    assert value.startswith("base64:")
+    return base64.b64decode(value[len("base64:"):]).decode("utf-8")
+
+
 class HandlerHarness:
     def __init__(self, module, *, path: str) -> None:
         self.handler = object.__new__(module.Handler)
@@ -158,6 +163,13 @@ def test_v2raytun_uses_existing_subscription_payload_without_raw_vless(
 
     assert root.responses == [200]
     assert root.header_map["profile-update-interval"] == "1"
+    assert decode_base64_header(root.header_map["profile-title"]) == (
+        "❤️ PRESENT VPN"
+    )
+    assert "Days left:" in decode_base64_header(root.header_map["announce"])
+    assert root.header_map["subscription-userinfo"].endswith(
+        "expire=9999999999"
+    )
 
     decoded = base64.b64decode(root.body).decode("utf-8")
     assert decoded.startswith(
@@ -175,6 +187,24 @@ def test_v2raytun_uses_existing_subscription_payload_without_raw_vless(
     )
 
     assert f"vless://{VALID_UUID}@" not in page
+
+def test_v2raytun_receives_branding_and_clickable_announce_headers(tmp_path):
+    module = load_sub_server_without_startup()
+    write_allowed_metadata(module, tmp_path)
+    module.PROFILE_TITLE = "❤️ PRESENT VPN"
+    module.TELEGRAM_BOT_URL = "https://t.me/PresentVPNBot"
+
+    harness = HandlerHarness(module, path=f"/{VALID_UUID}").do_get()
+
+    assert harness.responses == [200]
+    assert decode_base64_header(harness.header_map["profile-title"]) == (
+        "❤️ PRESENT VPN"
+    )
+    assert harness.header_map["announce-url"] == "https://t.me/PresentVPNBot"
+    announce = decode_base64_header(harness.header_map["announce"])
+    assert "@PresentVPNBot" in announce
+    assert "Days left:" in announce
+
 
 def test_connect_endpoint_routes_explicit_v2raytun_client(tmp_path):
     module = load_sub_server_without_startup()

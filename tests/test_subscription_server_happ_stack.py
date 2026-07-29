@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import types
+import urllib.parse
 from pathlib import Path
 
 SUB_SERVER_PATH = Path("deploy/vpn-subscription/sub_server.py")
@@ -37,6 +38,11 @@ def write_allowed_metadata(module, tmp_path, *, expire: int = 9999999999) -> Non
     module.SUBSCRIPTIONS_META_FILE = meta_file
     module._subscriptions_meta_cache = {}
     module._subscriptions_meta_last_seen_mtime_ns = None
+
+
+def decode_base64_header(value: str) -> str:
+    assert value.startswith("base64:")
+    return base64.b64decode(value[len("base64:"):]).decode("utf-8")
 
 
 class HandlerHarness:
@@ -107,6 +113,7 @@ def test_vless_link_separates_public_gateway_from_eu_vpn_upstream():
     module.VPN_WS_PATH = "/ws-test"
     module.VPN_WS_HOST = "eu-vpn.example.com"
     module.VPN_SNI = "eu-vpn.example.com"
+    module.SERVER_DISPLAY_NAME = "🇫🇷 France #01"
 
     link = module.build_vless_link(VALID_UUID)
 
@@ -119,7 +126,7 @@ def test_vless_link_separates_public_gateway_from_eu_vpn_upstream():
     assert "sni=eu-vpn.example.com" in link
     assert "fp=chrome" in link
     assert "alpn=http%2F1.1" in link
-    assert link.endswith("#vpn-11111111")
+    assert urllib.parse.unquote(link.split("#", 1)[1]) == "🇫🇷 France #01"
 
 
 def test_subscription_url_uses_public_root_uuid_endpoint_not_sub_path():
@@ -173,6 +180,13 @@ def test_root_subscription_endpoint_returns_base64_vless_and_required_headers(
     assert harness.responses == [200]
     assert harness.header_map["Content-Type"] == "text/plain; charset=utf-8"
     assert harness.header_map["profile-update-interval"] == "1"
+    assert harness.header_map["subscription-userinfo"].endswith(
+        "expire=9999999999"
+    )
+    assert decode_base64_header(harness.header_map["profile-title"]) == (
+        "❤️ PRESENT VPN"
+    )
+    assert "Days left:" in decode_base64_header(harness.header_map["announce"])
     assert harness.header_map["Cache-Control"] == "no-store"
     assert harness.header_map["Connection"] == "close"
     assert int(harness.header_map["Content-Length"]) == len(harness.body)
@@ -237,6 +251,72 @@ def test_connect_endpoint_defaults_to_happ_for_backward_compatibility(tmp_path):
     assert "sessionStorage" in page
 
 
+def test_subscription_metadata_headers_include_branding_links_and_dynamic_days(
+    tmp_path,
+):
+    module = load_sub_server_without_startup()
+    expire = 2_000_000_000
+    write_allowed_metadata(module, tmp_path, expire=expire)
+
+    module.PROFILE_TITLE = "❤️ PRESENT VPN"
+    module.TELEGRAM_BOT_URL = "https://t.me/PresentVPNBot"
+    module.PROFILE_WEB_PAGE_URL = "https://presentvpn.example.com"
+    module.ANNOUNCE_TEMPLATE = (
+        "Manage subscription: {telegram} • Days left: {days_left}"
+    )
+
+    now = expire - 26 * 86400
+
+    assert module.get_subscription_days_left(VALID_UUID, now=now) == 26
+    assert module.build_announce_text(VALID_UUID, now=now) == (
+        "Manage subscription: @PresentVPNBot • Days left: 26"
+    )
+
+    headers = module.build_subscription_metadata_headers(VALID_UUID)
+
+    assert decode_base64_header(headers["profile-title"]) == "❤️ PRESENT VPN"
+    assert headers["support-url"] == "https://t.me/PresentVPNBot"
+    assert headers["announce-url"] == "https://t.me/PresentVPNBot"
+    assert headers["profile-web-page-url"] == "https://presentvpn.example.com"
+
+    # Unicode branding must stay ASCII-safe at HTTP header level.
+    headers["profile-title"].encode("latin-1")
+    headers["announce"].encode("latin-1")
+
+
+def test_subscription_payload_contains_exactly_one_real_server_entry(tmp_path):
+    module = load_sub_server_without_startup()
+    write_allowed_metadata(module, tmp_path)
+    module.VPN_HOST = "eu-vpn.example.com"
+    module.VPN_WS_HOST = "eu-vpn.example.com"
+    module.VPN_SNI = "eu-vpn.example.com"
+    module.SERVER_DISPLAY_NAME = "🇫🇷 France #01"
+
+    payload = module.build_subscription_payload(VALID_UUID)
+    decoded = base64.b64decode(payload).decode("utf-8")
+    lines = [line for line in decoded.splitlines() if line]
+
+    assert len(lines) == 1
+    assert lines[0].startswith(f"vless://{VALID_UUID}@eu-vpn.example.com:443")
+    assert urllib.parse.unquote(lines[0].split("#", 1)[1]) == "🇫🇷 France #01"
+
+
+def test_root_endpoint_exposes_clickable_telegram_and_profile_links(tmp_path):
+    module = load_sub_server_without_startup()
+    write_allowed_metadata(module, tmp_path)
+    module.TELEGRAM_BOT_URL = "https://t.me/PresentVPNBot"
+    module.PROFILE_WEB_PAGE_URL = "https://presentvpn.example.com"
+
+    harness = HandlerHarness(module, path=f"/{VALID_UUID}").do_get()
+
+    assert harness.responses == [200]
+    assert harness.header_map["support-url"] == "https://t.me/PresentVPNBot"
+    assert harness.header_map["announce-url"] == "https://t.me/PresentVPNBot"
+    assert harness.header_map["profile-web-page-url"] == (
+        "https://presentvpn.example.com"
+    )
+
+
 def test_health_endpoint_is_public_and_does_not_depend_on_metadata():
     module = load_sub_server_without_startup()
 
@@ -273,3 +353,16 @@ def test_unknown_or_forbidden_paths_return_expected_statuses(tmp_path):
     ).do_get()
     assert forbidden_connect.responses == [403]
     assert forbidden_connect.body == b"forbidden"
+
+
+def test_default_server_display_name_is_current_frankfurt_node(monkeypatch):
+    monkeypatch.delenv("VPN_SUBSCRIPTION_SERVER_NAME", raising=False)
+
+    module = load_sub_server_without_startup()
+
+    assert module.SERVER_DISPLAY_NAME == "🇩🇪 Frankfurt"
+
+    link = module.build_vless_link(VALID_UUID)
+    fragment = urllib.parse.unquote(link.split("#", 1)[1])
+
+    assert fragment == "🇩🇪 Frankfurt"

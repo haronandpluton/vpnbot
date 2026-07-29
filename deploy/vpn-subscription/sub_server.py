@@ -38,6 +38,31 @@ VPN_WS_PATH = os.getenv("VPN_UPSTREAM_WS_PATH", "/ws-test")
 VPN_WS_HOST = os.getenv("VPN_UPSTREAM_WS_HOST", VPN_HOST)
 VPN_SNI = os.getenv("VPN_UPSTREAM_SNI", VPN_HOST)
 
+PROFILE_TITLE = os.getenv(
+    "VPN_SUBSCRIPTION_PROFILE_TITLE",
+    "❤️ PRESENT VPN",
+).strip() or "PRESENT VPN"
+
+SERVER_DISPLAY_NAME = os.getenv(
+    "VPN_SUBSCRIPTION_SERVER_NAME",
+    "🇩🇪 Frankfurt",
+).strip() or "🇩🇪 Frankfurt"
+
+TELEGRAM_BOT_URL = os.getenv(
+    "VPN_SUBSCRIPTION_TELEGRAM_URL",
+    "",
+).strip()
+
+PROFILE_WEB_PAGE_URL = os.getenv(
+    "VPN_SUBSCRIPTION_PROFILE_WEB_PAGE_URL",
+    "",
+).strip()
+
+ANNOUNCE_TEMPLATE = os.getenv(
+    "VPN_SUBSCRIPTION_ANNOUNCE_TEMPLATE",
+    "Manage subscription: {telegram} • Days left: {days_left}",
+).strip()
+
 HAPP_CRYPTO_API_URL = "https://crypto.happ.su/api-v2.php"
 
 _subscriptions_meta_cache: dict = {}
@@ -129,6 +154,88 @@ def build_subscription_userinfo(client_uuid: str) -> str:
     )
 
 
+def encode_subscription_header_text(text: str) -> str:
+    encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
+    return f"base64:{encoded}"
+
+
+def get_subscription_days_left(
+    client_uuid: str,
+    *,
+    now: int | None = None,
+) -> int | None:
+    expire = get_subscription_meta(client_uuid)["expire"]
+
+    if expire <= 0:
+        return None
+
+    current_time = int(time.time()) if now is None else int(now)
+    remaining_seconds = expire - current_time
+
+    if remaining_seconds <= 0:
+        return 0
+
+    return (remaining_seconds + 86400 - 1) // 86400
+
+
+def get_telegram_label() -> str:
+    if not TELEGRAM_BOT_URL:
+        return "Telegram bot"
+
+    parsed = urllib.parse.urlparse(TELEGRAM_BOT_URL)
+    username = parsed.path.strip("/").split("/")[-1]
+
+    if username:
+        return f"@{username.lstrip('@')}"
+
+    return "Telegram bot"
+
+
+def build_announce_text(
+    client_uuid: str,
+    *,
+    now: int | None = None,
+) -> str:
+    days_left = get_subscription_days_left(client_uuid, now=now)
+    days_value = "∞" if days_left is None else str(days_left)
+
+    try:
+        text = ANNOUNCE_TEMPLATE.format(
+            telegram=get_telegram_label(),
+            days_left=days_value,
+        )
+    except (KeyError, ValueError):
+        logger.error(
+            "Invalid VPN_SUBSCRIPTION_ANNOUNCE_TEMPLATE; using fallback"
+        )
+        text = (
+            f"Manage subscription: {get_telegram_label()} "
+            f"• Days left: {days_value}"
+        )
+
+    return text[:200]
+
+
+def build_subscription_metadata_headers(client_uuid: str) -> dict[str, str]:
+    headers = {
+        "profile-update-interval": "1",
+        "subscription-userinfo": build_subscription_userinfo(client_uuid),
+        "profile-title": encode_subscription_header_text(PROFILE_TITLE[:25]),
+        "announce": encode_subscription_header_text(
+            build_announce_text(client_uuid)
+        ),
+    }
+
+    if TELEGRAM_BOT_URL:
+        headers["support-url"] = TELEGRAM_BOT_URL
+        headers["announce-url"] = TELEGRAM_BOT_URL
+
+    if PROFILE_WEB_PAGE_URL:
+        headers["profile-web-page-url"] = PROFILE_WEB_PAGE_URL
+
+    return headers
+
+
 def build_vless_link(client_uuid: str) -> str:
     query = urllib.parse.urlencode(
         [
@@ -144,10 +251,12 @@ def build_vless_link(client_uuid: str) -> str:
         quote_via=urllib.parse.quote,
     )
 
+    display_name = urllib.parse.quote(SERVER_DISPLAY_NAME, safe="")
+
     return (
         f"vless://{client_uuid}@{VPN_HOST}:{VPN_PORT}"
         f"?{query}"
-        f"#vpn-{client_uuid[:8]}"
+        f"#{display_name}"
     )
 
 def build_expired_vless_link(client_uuid: str) -> str:
@@ -538,8 +647,8 @@ class Handler(BaseHTTPRequestHandler):
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("profile-update-interval", "1")
-        self.send_header("subscription-userinfo", build_subscription_userinfo(token))
+        for key, value in build_subscription_metadata_headers(token).items():
+            self.send_header(key, value)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Connection", "close")
@@ -567,8 +676,8 @@ class Handler(BaseHTTPRequestHandler):
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("profile-update-interval", "1")
-        self.send_header("subscription-userinfo", build_subscription_userinfo(token))
+        for key, value in build_subscription_metadata_headers(token).items():
+            self.send_header(key, value)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Connection", "close")
