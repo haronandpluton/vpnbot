@@ -50,7 +50,7 @@ def test_gateway_env_example_contains_subscription_branding():
     assert "VPN_SUBSCRIPTION_PROFILE_TITLE=🎁 PRESENT VPN" in text
     assert "VPN_SUBSCRIPTION_SERVER_NAME=🇩🇪 Frankfurt" in text
     assert (
-        "VPN_SUBSCRIPTION_TELEGRAM_URL=https://t.me/VPN_FORBOT"
+        "VPN_SUBSCRIPTION_TELEGRAM_URL=https://t.me/PRESENT_VPN_BOT"
         in text
     )
     assert "VPN_SUBSCRIPTION_PROFILE_WEB_PAGE_URL=" in text

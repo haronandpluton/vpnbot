@@ -228,7 +228,7 @@ def test_v2raytun_receives_expired_announcement_and_exact_expiry(tmp_path):
     module.SUBSCRIPTIONS_META_FILE = meta_file
     module._subscriptions_meta_cache = {}
     module._subscriptions_meta_last_seen_mtime_ns = None
-    module.TELEGRAM_BOT_URL = "https://t.me/VPN_FORBOT"
+    module.TELEGRAM_BOT_URL = "https://t.me/PRESENT_VPN_BOT"
     module.EXPIRED_ANNOUNCE_TEMPLATE = (
         "Subscription expired on {expires_at} • Renew via {telegram}"
     )
@@ -239,8 +239,8 @@ def test_v2raytun_receives_expired_announcement_and_exact_expiry(tmp_path):
 
     assert harness.responses == [200]
     assert "Subscription expired on" in announce
-    assert "@VPN_FORBOT" in announce
-    assert harness.header_map["announce-url"] == "https://t.me/VPN_FORBOT"
+    assert "@PRESENT_VPN_BOT" in announce
+    assert harness.header_map["announce-url"] == "https://t.me/PRESENT_VPN_BOT"
     assert harness.header_map["subscription-userinfo"].endswith(
         f"expire={expire}"
     )

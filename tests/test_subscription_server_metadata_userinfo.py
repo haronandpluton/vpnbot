@@ -229,7 +229,7 @@ def test_metadata_refresh_after_renewal_updates_status_expiry_and_payload(tmp_pa
     module.VPN_HOST = "vpn.example.com"
     module.VPN_WS_HOST = "vpn.example.com"
     module.VPN_SNI = "vpn.example.com"
-    module.TELEGRAM_BOT_URL = "https://t.me/VPN_FORBOT"
+    module.TELEGRAM_BOT_URL = "https://t.me/PRESENT_VPN_BOT"
 
     meta_file = tmp_path / "subscriptions_meta.json"
     old_expire = 1_700_000_000

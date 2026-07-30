@@ -155,7 +155,7 @@ class VoletSciWebServer:
         if support_username:
             return f"https://t.me/{support_username}"
 
-        return "https://t.me/VPN_FORBOT"
+        return "https://t.me/PRESENT_VPN_BOT"
 
     async def handle_home(self, request: web.Request) -> web.Response:
         support_url = self._support_url()
@@ -190,7 +190,7 @@ class VoletSciWebServer:
         <li>Pay the generated order via Volet.</li>
         <li>Return to the bot and receive your VPN access link.</li>
       </ol>
-      <a class="button" href="https://t.me/VPN_FORBOT">Open Telegram bot</a>
+      <a class="button" href="https://t.me/PRESENT_VPN_BOT">Open Telegram bot</a>
     </div>
 
     <div class="card">

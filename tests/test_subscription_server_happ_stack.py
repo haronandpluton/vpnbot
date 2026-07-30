@@ -338,7 +338,7 @@ def test_expired_subscription_uses_expired_banner_and_keeps_exact_expiry(
         expire=expire,
         status="expired",
     )
-    module.TELEGRAM_BOT_URL = "https://t.me/VPN_FORBOT"
+    module.TELEGRAM_BOT_URL = "https://t.me/PRESENT_VPN_BOT"
     module.PROFILE_WEB_PAGE_URL = "https://presentvpn.example.com"
     module.EXPIRED_ANNOUNCE_TEMPLATE = (
         "Subscription expired on {expires_at} • Renew via {telegram}"
@@ -350,11 +350,11 @@ def test_expired_subscription_uses_expired_banner_and_keeps_exact_expiry(
 
     assert harness.responses == [200]
     assert "Subscription expired on" in announce
-    assert "@VPN_FORBOT" in announce
+    assert "@PRESENT_VPN_BOT" in announce
     assert harness.header_map["subscription-userinfo"].endswith(
         f"expire={expire}"
     )
-    assert harness.header_map["support-url"] == "https://t.me/VPN_FORBOT"
+    assert harness.header_map["support-url"] == "https://t.me/PRESENT_VPN_BOT"
     assert harness.header_map["profile-web-page-url"] == (
         "https://presentvpn.example.com"
     )
@@ -429,7 +429,7 @@ def test_happ_advanced_banner_headers_with_provider_id(tmp_path):
         "Days left: {days_left} | Expires: {expires_at}"
     )
     module.HAPP_INFO_BUTTON_TEXT = "Telegram bot"
-    module.TELEGRAM_BOT_URL = "https://t.me/VPN_FORBOT"
+    module.TELEGRAM_BOT_URL = "https://t.me/PRESENT_VPN_BOT"
 
     headers = module.build_subscription_metadata_headers(VALID_UUID)
 
@@ -437,20 +437,20 @@ def test_happ_advanced_banner_headers_with_provider_id(tmp_path):
     assert headers["sub-info-color"] == "blue"
 
     assert "Manage subscription" in headers["sub-info-text"]
-    assert "@VPN_FORBOT" in headers["sub-info-text"]
+    assert "@PRESENT_VPN_BOT" in headers["sub-info-text"]
     assert "Days left:" in headers["sub-info-text"]
     assert "Expires:" in headers["sub-info-text"]
 
     assert headers["sub-info-button-text"] == "Telegram bot"
     assert (
         headers["sub-info-button-link"]
-        == "https://t.me/VPN_FORBOT"
+        == "https://t.me/PRESENT_VPN_BOT"
     )
 
     assert headers["sub-expire"] == "1"
     assert (
         headers["sub-expire-button-link"]
-        == "https://t.me/VPN_FORBOT"
+        == "https://t.me/PRESENT_VPN_BOT"
     )
 
     # Existing thin announcement remains as fallback.
