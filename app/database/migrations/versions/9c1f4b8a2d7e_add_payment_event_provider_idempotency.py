@@ -45,16 +45,34 @@ def upgrade() -> None:
         """
     )
 
-    op.create_unique_constraint(
-        "uq_payment_events_provider_external_event_id",
-        "payment_events",
-        ["provider", "external_event_id"],
-    )
+    bind = op.get_bind()
+
+    if bind.dialect.name == "sqlite":
+        op.create_index(
+            "uq_payment_events_provider_external_event_id",
+            "payment_events",
+            ["provider", "external_event_id"],
+            unique=True,
+        )
+    else:
+        op.create_unique_constraint(
+            "uq_payment_events_provider_external_event_id",
+            "payment_events",
+            ["provider", "external_event_id"],
+        )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "uq_payment_events_provider_external_event_id",
-        "payment_events",
-        type_="unique",
-    )
+    bind = op.get_bind()
+
+    if bind.dialect.name == "sqlite":
+        op.drop_index(
+            "uq_payment_events_provider_external_event_id",
+            table_name="payment_events",
+        )
+    else:
+        op.drop_constraint(
+            "uq_payment_events_provider_external_event_id",
+            "payment_events",
+            type_="unique",
+        )
