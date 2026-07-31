@@ -47,7 +47,7 @@ def test_gateway_env_example_contains_subscription_branding():
         encoding="utf-8"
     )
 
-    assert "VPN_SUBSCRIPTION_PROFILE_TITLE=🎁 PRESENT VPN" in text
+    assert "VPN_SUBSCRIPTION_PROFILE_TITLE=PRESENT VPN 🎁" in text
     assert "VPN_SUBSCRIPTION_SERVER_NAME=🇩🇪 Frankfurt" in text
     assert (
         "VPN_SUBSCRIPTION_TELEGRAM_URL=https://t.me/PRESENT_VPN_BOT"

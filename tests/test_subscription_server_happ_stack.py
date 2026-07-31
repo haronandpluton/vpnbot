@@ -191,7 +191,7 @@ def test_root_subscription_endpoint_returns_base64_vless_and_required_headers(
         "expire=9999999999"
     )
     assert decode_base64_header(harness.header_map["profile-title"]) == (
-        "🎁 PRESENT VPN"
+        "PRESENT VPN 🎁"
     )
     assert "Days left:" in decode_base64_header(harness.header_map["announce"])
     assert harness.header_map["Cache-Control"] == "no-store"

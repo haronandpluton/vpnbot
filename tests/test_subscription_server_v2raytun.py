@@ -165,7 +165,7 @@ def test_v2raytun_uses_existing_subscription_payload_without_raw_vless(
     assert root.responses == [200]
     assert root.header_map["profile-update-interval"] == "1"
     assert decode_base64_header(root.header_map["profile-title"]) == (
-        "🎁 PRESENT VPN"
+        "PRESENT VPN 🎁"
     )
     assert "Days left:" in decode_base64_header(root.header_map["announce"])
     assert root.header_map["subscription-userinfo"].endswith(
