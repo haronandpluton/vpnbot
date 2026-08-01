@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import app.database.models as models_package
-from app.common.enums import CurrencyCode, NetworkCode, TariffCode
+from app.common.enums import (
+    CurrencyCode,
+    NetworkCode,
+    TariffCode,
+    VPNNodeActualState,
+    VPNNodeDesiredState,
+)
 from app.database.enums import (
     currency_code_enum,
     enum_values,
@@ -11,6 +17,8 @@ from app.database.enums import (
     payment_status_enum,
     subscription_status_enum,
     tariff_code_enum,
+    vpn_node_actual_state_enum,
+    vpn_node_desired_state_enum,
 )
 from app.database.models import (
     AdminAction,
@@ -19,6 +27,7 @@ from app.database.models import (
     PaymentEvent,
     PaymentOption,
     Subscription,
+    SubscriptionNodeAccess,
     SystemErrorRecord,
     User,
     VPNServer,
@@ -46,6 +55,7 @@ def test_database_models_package_exports_all_domain_models():
         "PaymentEvent",
         "VPNServer",
         "Subscription",
+        "SubscriptionNodeAccess",
         "AdminAction",
         "SystemErrorRecord",
     }
@@ -90,6 +100,12 @@ def test_sqlalchemy_enums_store_string_values_not_python_names():
     assert currency_code_enum.enums == enum_values(CurrencyCode)
     assert network_code_enum.enums == enum_values(NetworkCode)
     assert tariff_code_enum.enums == enum_values(TariffCode)
+    assert vpn_node_desired_state_enum.enums == enum_values(
+        VPNNodeDesiredState
+    )
+    assert vpn_node_actual_state_enum.enums == enum_values(
+        VPNNodeActualState
+    )
 
 
 def test_user_model_has_unique_telegram_identity_and_admin_flags():
@@ -194,6 +210,60 @@ def test_subscription_model_has_stable_uuid_and_vpn_server_binding():
         str(trial_index.dialect_options["sqlite"]["where"])
         == "is_trial = 1"
     )
+
+
+def test_subscription_node_access_model_tracks_desired_and_actual_per_node_state():
+    assert SubscriptionNodeAccess.__tablename__ == "subscription_node_access"
+    assert fk_targets(SubscriptionNodeAccess, "subscription_id") == {
+        "subscriptions.id"
+    }
+    assert column(SubscriptionNodeAccess, "subscription_id").index is True
+    assert column(SubscriptionNodeAccess, "node_code").index is True
+    assert column(SubscriptionNodeAccess, "desired_state").index is True
+    assert column(SubscriptionNodeAccess, "actual_state").index is True
+    assert (
+        column(SubscriptionNodeAccess, "desired_state").default.arg
+        == VPNNodeDesiredState.ENABLED
+    )
+    assert (
+        column(SubscriptionNodeAccess, "desired_state").server_default.arg
+        == VPNNodeDesiredState.ENABLED.value
+    )
+    assert (
+        column(SubscriptionNodeAccess, "actual_state").default.arg
+        == VPNNodeActualState.PENDING
+    )
+    assert (
+        column(SubscriptionNodeAccess, "actual_state").server_default.arg
+        == VPNNodeActualState.PENDING.value
+    )
+    assert column(SubscriptionNodeAccess, "retry_count").default.arg == 0
+    assert str(
+        column(SubscriptionNodeAccess, "retry_count").server_default.arg
+    ) == "0"
+
+    unique = next(
+        constraint
+        for constraint in SubscriptionNodeAccess.__table__.constraints
+        if constraint.name
+        == "uq_subscription_node_access_subscription_node"
+    )
+    assert [item.name for item in unique.columns] == [
+        "subscription_id",
+        "node_code",
+    ]
+
+    composite_index = next(
+        index
+        for index in SubscriptionNodeAccess.__table__.indexes
+        if index.name
+        == "ix_subscription_node_access_subscription_states"
+    )
+    assert [item.name for item in composite_index.columns] == [
+        "subscription_id",
+        "desired_state",
+        "actual_state",
+    ]
 
 
 def test_vpn_server_model_supports_multi_node_selection_and_capacity_tracking():

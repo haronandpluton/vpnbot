@@ -30,6 +30,18 @@ class NetworkCode(StrEnum):
     XRPL = "XRPL"
 
 
+class VPNNodeDesiredState(StrEnum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+
+
+class VPNNodeActualState(StrEnum):
+    PENDING = "pending"
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    ERROR = "error"
+
+
 class TariffCode(StrEnum):
     # Legacy-коды. Оставляем для существующих заказов.
     DEVICES_1 = "devices_1"

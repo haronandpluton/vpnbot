@@ -1,6 +1,12 @@
 from sqlalchemy import Enum as SqlAlchemyEnum
 
-from app.common.enums import CurrencyCode, NetworkCode, TariffCode
+from app.common.enums import (
+    CurrencyCode,
+    NetworkCode,
+    TariffCode,
+    VPNNodeActualState,
+    VPNNodeDesiredState,
+)
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.payment_method import PaymentMethod
 from app.payment_core.enums.payment_status import PaymentStatus
@@ -50,5 +56,17 @@ network_code_enum = SqlAlchemyEnum(
 tariff_code_enum = SqlAlchemyEnum(
     TariffCode,
     name="tariff_code_enum",
+    values_callable=enum_values,
+)
+
+vpn_node_desired_state_enum = SqlAlchemyEnum(
+    VPNNodeDesiredState,
+    name="vpn_node_desired_state_enum",
+    values_callable=enum_values,
+)
+
+vpn_node_actual_state_enum = SqlAlchemyEnum(
+    VPNNodeActualState,
+    name="vpn_node_actual_state_enum",
     values_callable=enum_values,
 )
