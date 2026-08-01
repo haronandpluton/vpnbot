@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -6,13 +8,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import Subscription
+from app.database.repositories.system_errors import SystemErrorRecordRepository
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.admin_action_log_service import AdminActionLogService
 from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
-from app.services.vpn_access_service import VpnAccessService
+from app.services.vpn_access_service import (
+    VpnAccessService,
+    VpnNodeOperationError,
+)
 
 
 logger = logging.getLogger(__name__)
+
+VPN_DISABLE_SYNC_ERROR_TYPE = "vpn_disable_sync_failed"
+_VPN_DISABLE_ERROR_LOCK = asyncio.Lock()
 
 
 @dataclass
@@ -54,10 +63,14 @@ class AdminSubscriptionActionsService:
         session: AsyncSession,
         *,
         vpn_access_service: VpnAccessService | None = None,
+        system_error_repository: SystemErrorRecordRepository | None = None,
     ) -> None:
         self.session = session
         self.action_log_service = AdminActionLogService(session)
         self.vpn_access_service = vpn_access_service
+        self.system_error_repository = (
+            system_error_repository or SystemErrorRecordRepository(session)
+        )
 
     async def extend_subscription(
         self,
@@ -278,6 +291,14 @@ class AdminSubscriptionActionsService:
                 subscription.id,
                 subscription.uuid,
             )
+            await self._record_vpn_disable_failure(
+                subscription=subscription,
+                admin_action_id=action_result.action_id,
+                error=error,
+            )
+        else:
+            if already_disabled:
+                await self._resolve_vpn_disable_failure(subscription.id)
 
         result = AdminDisableSubscriptionResult(
             status="disabled",
@@ -319,6 +340,99 @@ class AdminSubscriptionActionsService:
         )
 
         return result
+
+    async def _record_vpn_disable_failure(
+        self,
+        *,
+        subscription: Subscription,
+        admin_action_id: int | None,
+        error: Exception,
+    ) -> None:
+        async with _VPN_DISABLE_ERROR_LOCK:
+            try:
+                pending = await (
+                    self.system_error_repository.
+                    get_unresolved_by_entity_and_error_type(
+                        entity_type="subscription",
+                        entity_id=subscription.id,
+                        error_type=VPN_DISABLE_SYNC_ERROR_TYPE,
+                    )
+                )
+
+                node_failures = []
+                if isinstance(error, VpnNodeOperationError):
+                    node_failures = [
+                        {
+                            "node": failure.node_name,
+                            "error": failure.error,
+                        }
+                        for failure in error.failures
+                    ]
+
+                error_message = str(error)[:1000]
+                payload = json.dumps(
+                    {
+                        "operation": "disable",
+                        "subscription_id": subscription.id,
+                        "user_id": subscription.user_id,
+                        "order_id": subscription.order_id,
+                        "uuid": subscription.uuid,
+                        "admin_action_id": admin_action_id,
+                        "node_failures": node_failures,
+                    },
+                    ensure_ascii=False,
+                )
+
+                if pending is None:
+                    await self.system_error_repository.create(
+                        entity_type="subscription",
+                        entity_id=subscription.id,
+                        error_type=VPN_DISABLE_SYNC_ERROR_TYPE,
+                        error_message=error_message,
+                        payload=payload,
+                    )
+                else:
+                    await self.system_error_repository.update_pending_failure(
+                        pending,
+                        entity_type="subscription",
+                        entity_id=subscription.id,
+                        error_message=error_message,
+                        payload=payload,
+                    )
+
+                await self.session.commit()
+            except Exception:
+                logger.exception(
+                    "Failed to persist VPN disable synchronization error: "
+                    "subscription_id=%s",
+                    subscription.id,
+                )
+                await self.session.rollback()
+
+    async def _resolve_vpn_disable_failure(self, subscription_id: int) -> None:
+        async with _VPN_DISABLE_ERROR_LOCK:
+            try:
+                pending = await (
+                    self.system_error_repository.
+                    get_unresolved_by_entity_and_error_type(
+                        entity_type="subscription",
+                        entity_id=subscription_id,
+                        error_type=VPN_DISABLE_SYNC_ERROR_TYPE,
+                    )
+                )
+
+                if pending is None:
+                    return
+
+                await self.system_error_repository.mark_resolved(pending)
+                await self.session.commit()
+            except Exception:
+                logger.exception(
+                    "VPN disable synchronization succeeded, but the pending "
+                    "system error could not be resolved: subscription_id=%s",
+                    subscription_id,
+                )
+                await self.session.rollback()
 
     async def _get_subscription(self, subscription_id: int) -> Subscription | None:
         result = await self.session.execute(

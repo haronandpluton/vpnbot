@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -9,6 +10,7 @@ import app.services.vpn_access_service as vpn_access_module
 from app.services.vpn_access_service import (
     VpnAccessResult,
     VpnAccessService,
+    VpnNodeOperationError,
     build_client_email,
     build_connect_url,
     build_idempotent_uuid,
@@ -21,11 +23,13 @@ class FakeXuiClient:
     def __init__(
         self,
         *,
+        name: str = "test-node",
         fail_create: bool = False,
         fail_update: bool = False,
         fail_enable: bool = False,
         fail_disable: bool = False,
     ) -> None:
+        self.config = SimpleNamespace(name=name)
         self.fail_create = fail_create
         self.fail_update = fail_update
         self.fail_enable = fail_enable
@@ -435,14 +439,41 @@ async def test_enable_access_enables_same_uuid_on_all_configured_nodes():
 
 
 @pytest.mark.asyncio
-async def test_disable_access_propagates_secondary_node_failure():
-    first_node = FakeXuiClient()
-    second_node = FakeXuiClient(fail_disable=True)
+async def test_disable_access_attempts_every_node_and_reports_partial_failures():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands", fail_disable=True)
+    third_node = FakeXuiClient(name="sweden")
+    service = make_service(xui_clients=[first_node, second_node, third_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    with pytest.raises(VpnNodeOperationError) as exc_info:
+        await service.disable_access(client_uuid)
+
+    error = exc_info.value
+    assert error.operation == "disable"
+    assert error.uuid == client_uuid
+    assert len(error.failures) == 1
+    assert error.failures[0].node_name == "netherlands"
+    assert "3x-ui client disable failed" in error.failures[0].error
+    assert "netherlands" in str(error)
+    assert first_node.disable_calls == [client_uuid]
+    assert second_node.disable_calls == [client_uuid]
+    assert third_node.disable_calls == [client_uuid]
+
+
+@pytest.mark.asyncio
+async def test_disable_access_retry_rechecks_all_nodes_and_completes_after_recovery():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands", fail_disable=True)
     service = make_service(xui_clients=[first_node, second_node])
     client_uuid = "12345678-1234-5678-1234-567812345678"
 
-    with pytest.raises(XuiClientError, match="3x-ui client disable failed"):
+    with pytest.raises(VpnNodeOperationError):
         await service.disable_access(client_uuid)
 
-    assert first_node.disable_calls == [client_uuid]
-    assert second_node.disable_calls == [client_uuid]
+    second_node.fail_disable = False
+    result = await service.disable_access(client_uuid)
+
+    assert result.uuid == client_uuid
+    assert first_node.disable_calls == [client_uuid, client_uuid]
+    assert second_node.disable_calls == [client_uuid, client_uuid]

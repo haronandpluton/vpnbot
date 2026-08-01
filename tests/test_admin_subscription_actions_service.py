@@ -9,6 +9,11 @@ import app.services.admin_subscription_actions_service as actions_module
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.admin_subscription_actions_service import (
     AdminSubscriptionActionsService,
+    VPN_DISABLE_SYNC_ERROR_TYPE,
+)
+from app.services.vpn_access_service import (
+    VpnNodeFailure,
+    VpnNodeOperationError,
 )
 
 
@@ -62,6 +67,44 @@ class FakeSubscriptionMetaSyncService:
         return SimpleNamespace(status="ok")
 
 
+class FakeSystemErrorRepository:
+    def __init__(self) -> None:
+        self.pending = None
+        self.lookup_calls: list[dict] = []
+        self.create_calls: list[dict] = []
+        self.update_calls: list[dict] = []
+        self.resolve_calls: list[object] = []
+
+    async def get_unresolved_by_entity_and_error_type(self, **kwargs):
+        self.lookup_calls.append(kwargs)
+        return self.pending
+
+    async def create(self, **kwargs):
+        self.create_calls.append(kwargs)
+        self.pending = SimpleNamespace(
+            id=701,
+            retry_count=0,
+            is_resolved=False,
+            **kwargs,
+        )
+        return self.pending
+
+    async def update_pending_failure(self, error, **kwargs):
+        self.update_calls.append({"error": error, **kwargs})
+        error.retry_count += 1
+        error.entity_type = kwargs["entity_type"]
+        error.entity_id = kwargs["entity_id"]
+        error.error_message = kwargs["error_message"]
+        error.payload = kwargs["payload"]
+        return error
+
+    async def mark_resolved(self, error):
+        self.resolve_calls.append(error)
+        error.is_resolved = True
+        self.pending = None
+        return error
+
+
 class FakeVpnAccessService:
     def __init__(self, *, error: Exception | None = None) -> None:
         self.error = error
@@ -112,11 +155,15 @@ def make_service(
     subscription=None,
     action_log_service: FakeActionLogService | None = None,
     vpn_access_service: FakeVpnAccessService | None = None,
+    system_error_repository: FakeSystemErrorRepository | None = None,
 ):
     service = AdminSubscriptionActionsService.__new__(AdminSubscriptionActionsService)
     service.session = FakeSession()
     service.action_log_service = action_log_service or FakeActionLogService()
     service.vpn_access_service = vpn_access_service or FakeVpnAccessService()
+    service.system_error_repository = (
+        system_error_repository or FakeSystemErrorRepository()
+    )
     service._get_subscription = lambda subscription_id: _return_subscription(
         subscription,
         subscription_id,
@@ -576,12 +623,106 @@ async def test_disable_subscription_keeps_db_disabled_when_vpn_sync_fails():
     assert result.vpn_sync_error == "netherlands unavailable"
     assert result.message == "Subscription disabled; VPN synchronization failed."
     assert subscription.status == SubscriptionStatus.DISABLED
-    assert service.session.commit_count == 1
+    assert service.session.commit_count == 2
     assert service.session.rollback_count == 0
     assert vpn_access.disable_calls == [{"uuid": "disable-failure-uuid"}]
     assert FakeSubscriptionMetaSyncService.calls[0]["reason"] == (
         "manual_disable_subscription"
     )
+
+
+@pytest.mark.asyncio
+async def test_disable_failure_is_upserted_without_duplicate_system_errors():
+    subscription = make_subscription(
+        subscription_id=64,
+        status=SubscriptionStatus.ACTIVE,
+        uuid="partial-disable-uuid",
+    )
+    vpn_error = VpnNodeOperationError(
+        operation="disable",
+        uuid=subscription.uuid,
+        failures=[
+            VpnNodeFailure(
+                node_name="netherlands",
+                error="connection refused",
+            )
+        ],
+    )
+    vpn_access = FakeVpnAccessService(error=vpn_error)
+    error_repository = FakeSystemErrorRepository()
+    service = make_service(
+        subscription=subscription,
+        vpn_access_service=vpn_access,
+        system_error_repository=error_repository,
+    )
+
+    first = await service.disable_subscription(
+        subscription_id=64,
+        reason="manual block",
+        admin_telegram_id=123,
+    )
+    second = await service.disable_subscription(
+        subscription_id=64,
+        reason="retry disable",
+        admin_telegram_id=123,
+    )
+
+    assert first.vpn_sync_ok is False
+    assert second.vpn_sync_ok is False
+    assert subscription.status == SubscriptionStatus.DISABLED
+    assert len(error_repository.create_calls) == 1
+    assert len(error_repository.update_calls) == 1
+    assert error_repository.pending.retry_count == 1
+    assert error_repository.create_calls[0]["entity_type"] == "subscription"
+    assert error_repository.create_calls[0]["entity_id"] == 64
+    assert (
+        error_repository.create_calls[0]["error_type"]
+        == VPN_DISABLE_SYNC_ERROR_TYPE
+    )
+    payload = error_repository.update_calls[0]["payload"]
+    assert '"operation": "disable"' in payload
+    assert '"node": "netherlands"' in payload
+    assert '"error": "connection refused"' in payload
+    assert service.session.commit_count == 4
+
+
+@pytest.mark.asyncio
+async def test_successful_disable_retry_resolves_pending_system_error():
+    original_disabled_at = datetime(2026, 7, 1, 8, 0, tzinfo=timezone.utc)
+    subscription = make_subscription(
+        subscription_id=65,
+        status=SubscriptionStatus.DISABLED,
+        uuid="retry-success-uuid",
+    )
+    subscription.disabled_at = original_disabled_at
+    subscription.error_reason = "manual block"
+    pending = SimpleNamespace(
+        id=702,
+        retry_count=1,
+        is_resolved=False,
+    )
+    error_repository = FakeSystemErrorRepository()
+    error_repository.pending = pending
+    service = make_service(
+        subscription=subscription,
+        vpn_access_service=FakeVpnAccessService(),
+        system_error_repository=error_repository,
+    )
+
+    result = await service.disable_subscription(
+        subscription_id=65,
+        reason="retry disable",
+        admin_telegram_id=123,
+    )
+
+    assert result.vpn_sync_ok is True
+    assert result.disabled_at == original_disabled_at
+    assert error_repository.create_calls == []
+    assert error_repository.update_calls == []
+    assert error_repository.resolve_calls == [pending]
+    assert pending.is_resolved is True
+    assert error_repository.pending is None
+    assert service.session.commit_count == 2
 
 
 @pytest.mark.asyncio
