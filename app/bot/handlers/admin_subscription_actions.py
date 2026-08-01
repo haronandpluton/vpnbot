@@ -234,6 +234,7 @@ async def admin_disable_subscription_command(
         f"Reason: {_clean(result.reason)}\n"
         f"UUID: <code>{_clean(result.uuid)}</code>\n"
         f"Admin action ID: {_clean(result.admin_action_id)}\n\n"
+        f"{_vpn_sync_summary(result)}\n\n"
         "Команды:\n"
         f"<code>/admin_subscription {result.subscription_id}</code>\n"
         f"<code>/admin_order {_clean(result.order_id)}</code>\n"

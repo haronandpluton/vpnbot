@@ -328,6 +328,8 @@ async def test_disable_command_success_sends_full_admin_summary():
         reason="abuse",
         uuid="uuid-1",
         admin_action_id=99,
+        vpn_sync_ok=True,
+        vpn_sync_error=None,
     )
     message = make_admin_message("/admin_disable_subscription 14 abuse")
 
@@ -344,5 +346,31 @@ async def test_disable_command_success_sends_full_admin_summary():
     assert "Reason: abuse" in text
     assert "UUID: <code>uuid-1</code>" in text
     assert "Admin action ID: 99" in text
+    assert "VPN nodes sync: OK" in text
     assert "<code>/admin_actions_subscription 14</code>" in text
     assert message.answer_calls[0]["parse_mode"] == "HTML"
+
+@pytest.mark.asyncio
+async def test_disable_command_reports_vpn_sync_failure_without_hiding_db_success():
+    FakeAdminSubscriptionActionsService.disable_result = SimpleNamespace(
+        status="disabled",
+        subscription_id=14,
+        user_id=7,
+        order_id=23,
+        old_status="active",
+        new_status="disabled",
+        disabled_at=datetime(2026, 7, 5, 12, 0, 0, tzinfo=timezone.utc),
+        reason="abuse",
+        uuid="uuid-1",
+        admin_action_id=99,
+        vpn_sync_ok=False,
+        vpn_sync_error="netherlands unavailable",
+    )
+    message = make_admin_message("/admin_disable_subscription 14 abuse")
+
+    await admin_disable_subscription_command(message, session="session")
+
+    text = message.answer_calls[0]["text"]
+    assert "<b>Подписка отключена</b>" in text
+    assert "VPN nodes sync: ERROR" in text
+    assert "Error: netherlands unavailable" in text

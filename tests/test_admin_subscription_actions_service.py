@@ -66,9 +66,17 @@ class FakeVpnAccessService:
     def __init__(self, *, error: Exception | None = None) -> None:
         self.error = error
         self.extend_calls: list[dict] = []
+        self.disable_calls: list[dict] = []
 
     async def extend_access(self, **kwargs):
         self.extend_calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+
+        return SimpleNamespace(uuid=kwargs["uuid"])
+
+    async def disable_access(self, **kwargs):
+        self.disable_calls.append(kwargs)
         if self.error is not None:
             raise self.error
 
@@ -434,7 +442,12 @@ async def test_disable_subscription_sets_disabled_status_logs_action_and_syncs_m
         expires_at=datetime.now(timezone.utc) + timedelta(days=10),
     )
     action_log = FakeActionLogService(action_id=888)
-    service = make_service(subscription=subscription, action_log_service=action_log)
+    vpn_access = FakeVpnAccessService()
+    service = make_service(
+        subscription=subscription,
+        action_log_service=action_log,
+        vpn_access_service=vpn_access,
+    )
 
     before_call = datetime.now(timezone.utc)
     result = await service.disable_subscription(
@@ -453,6 +466,8 @@ async def test_disable_subscription_sets_disabled_status_logs_action_and_syncs_m
     assert result.uuid == "disable-uuid"
     assert result.reason == "user requested disable"
     assert result.admin_action_id == 888
+    assert result.vpn_sync_ok is True
+    assert result.vpn_sync_error is None
     assert result.message == "Subscription disabled."
     assert result.disabled_at >= before_call
     assert result.disabled_at <= after_call
@@ -475,6 +490,8 @@ async def test_disable_subscription_sets_disabled_status_logs_action_and_syncs_m
     assert "old_status=active" in action_log.calls[0]["payload"]
     assert "new_status=disabled" in action_log.calls[0]["payload"]
     assert "disabled_at=" in action_log.calls[0]["payload"]
+    assert "already_disabled=False" in action_log.calls[0]["payload"]
+    assert vpn_access.disable_calls == [{"uuid": "disable-uuid"}]
 
     assert FakeSubscriptionMetaSyncService.calls == [
         {
@@ -494,6 +511,77 @@ async def test_disable_subscription_sets_disabled_status_logs_action_and_syncs_m
             },
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_disable_subscription_is_idempotent_and_reconciles_vpn_nodes():
+    original_disabled_at = datetime(2026, 7, 1, 8, 0, tzinfo=timezone.utc)
+    subscription = make_subscription(
+        subscription_id=62,
+        status=SubscriptionStatus.DISABLED,
+        uuid="already-disabled-uuid",
+    )
+    subscription.disabled_at = original_disabled_at
+    subscription.error_reason = "original reason"
+    vpn_access = FakeVpnAccessService()
+    action_log = FakeActionLogService(action_id=889)
+    service = make_service(
+        subscription=subscription,
+        action_log_service=action_log,
+        vpn_access_service=vpn_access,
+    )
+
+    result = await service.disable_subscription(
+        subscription_id=62,
+        reason="retry disable",
+        admin_telegram_id=123,
+    )
+
+    assert result.status == "disabled"
+    assert result.old_status == "disabled"
+    assert result.new_status == "disabled"
+    assert result.disabled_at == original_disabled_at
+    assert result.reason == "original reason"
+    assert result.vpn_sync_ok is True
+    assert subscription.disabled_at == original_disabled_at
+    assert subscription.error_reason == "original reason"
+    assert vpn_access.disable_calls == [{"uuid": "already-disabled-uuid"}]
+    assert "already_disabled=True" in action_log.calls[0]["payload"]
+    assert service.session.commit_count == 1
+    assert service.session.rollback_count == 0
+
+
+@pytest.mark.asyncio
+async def test_disable_subscription_keeps_db_disabled_when_vpn_sync_fails():
+    subscription = make_subscription(
+        subscription_id=63,
+        status=SubscriptionStatus.ACTIVE,
+        uuid="disable-failure-uuid",
+    )
+    vpn_access = FakeVpnAccessService(error=RuntimeError("netherlands unavailable"))
+    service = make_service(
+        subscription=subscription,
+        vpn_access_service=vpn_access,
+    )
+
+    result = await service.disable_subscription(
+        subscription_id=63,
+        reason="manual block",
+        admin_telegram_id=123,
+    )
+
+    assert result.status == "disabled"
+    assert result.new_status == "disabled"
+    assert result.vpn_sync_ok is False
+    assert result.vpn_sync_error == "netherlands unavailable"
+    assert result.message == "Subscription disabled; VPN synchronization failed."
+    assert subscription.status == SubscriptionStatus.DISABLED
+    assert service.session.commit_count == 1
+    assert service.session.rollback_count == 0
+    assert vpn_access.disable_calls == [{"uuid": "disable-failure-uuid"}]
+    assert FakeSubscriptionMetaSyncService.calls[0]["reason"] == (
+        "manual_disable_subscription"
+    )
 
 
 @pytest.mark.asyncio

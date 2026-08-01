@@ -43,6 +43,8 @@ class AdminDisableSubscriptionResult:
     disabled_at: datetime | None = None
     reason: str | None = None
     admin_action_id: int | None = None
+    vpn_sync_ok: bool | None = None
+    vpn_sync_error: str | None = None
     message: str | None = None
 
 
@@ -216,16 +218,20 @@ class AdminSubscriptionActionsService:
 
         old_status = self._enum_to_str(subscription.status)
         now = datetime.now(timezone.utc)
+        already_disabled = old_status == SubscriptionStatus.DISABLED.value
 
         subscription.status = SubscriptionStatus.DISABLED
-        subscription.disabled_at = now
-        subscription.error_reason = clean_reason
+        if subscription.disabled_at is None:
+            subscription.disabled_at = now
+        if not already_disabled or not subscription.error_reason:
+            subscription.error_reason = clean_reason
         subscription.updated_at = now
 
         payload = (
             f"old_status={old_status}; "
             f"new_status={SubscriptionStatus.DISABLED.value}; "
-            f"disabled_at={now}"
+            f"disabled_at={subscription.disabled_at}; "
+            f"already_disabled={already_disabled}"
         )
 
         action_result = await self.action_log_service.create_action_by_admin_telegram_id(
@@ -257,6 +263,22 @@ class AdminSubscriptionActionsService:
         await self.session.commit()
         await self.session.refresh(subscription)
 
+        vpn_sync_ok = True
+        vpn_sync_error = None
+
+        try:
+            vpn_access_service = self.vpn_access_service or VpnAccessService()
+            await vpn_access_service.disable_access(uuid=subscription.uuid)
+        except Exception as error:  # noqa: BLE001 - external VPN boundary
+            vpn_sync_ok = False
+            vpn_sync_error = str(error)
+            logger.exception(
+                "Manual subscription disable was committed, but VPN node "
+                "synchronization failed: subscription_id=%s uuid=%s",
+                subscription.id,
+                subscription.uuid,
+            )
+
         result = AdminDisableSubscriptionResult(
             status="disabled",
             subscription_id=subscription.id,
@@ -268,7 +290,13 @@ class AdminSubscriptionActionsService:
             disabled_at=subscription.disabled_at,
             reason=subscription.error_reason,
             admin_action_id=action_result.action_id,
-            message="Subscription disabled.",
+            vpn_sync_ok=vpn_sync_ok,
+            vpn_sync_error=vpn_sync_error,
+            message=(
+                "Subscription disabled."
+                if vpn_sync_ok
+                else "Subscription disabled; VPN synchronization failed."
+            ),
         )
 
         await SubscriptionMetaSyncService(self.session).sync_safely(
