@@ -230,6 +230,48 @@ class SubscriptionNodeAccessStateService:
 
         return tuple(recorded)
 
+    async def record_successful_disable_results(
+        self,
+        *,
+        subscription_id: int,
+        results: Iterable[VpnNodeStateChangeResult],
+    ) -> tuple[SubscriptionNodeAccess, ...]:
+        """Persist only successful per-node disable results."""
+        if subscription_id <= 0:
+            raise ValueError("subscription_id must be positive")
+
+        recorded: list[SubscriptionNodeAccess] = []
+
+        for result in results:
+            if not result.succeeded:
+                continue
+
+            node_code = str(result.node_name).strip()
+            if not node_code:
+                raise ValueError("VPN node code must not be empty")
+
+            record = await self.repository.get_by_subscription_and_node_for_update(
+                subscription_id,
+                node_code,
+            )
+            if record is None:
+                record = await self.repository.create(
+                    subscription_id=subscription_id,
+                    node_code=node_code,
+                    desired_state=VPNNodeDesiredState.DISABLED,
+                    actual_state=VPNNodeActualState.PENDING,
+                )
+            elif record.desired_state != VPNNodeDesiredState.DISABLED:
+                record = await self.repository.set_desired_state(
+                    record,
+                    VPNNodeDesiredState.DISABLED,
+                )
+
+            record = await self.repository.mark_disabled(record)
+            recorded.append(record)
+
+        return tuple(recorded)
+
     async def record_failed_renewal_results(
         self,
         *,
