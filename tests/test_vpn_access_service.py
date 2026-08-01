@@ -12,6 +12,7 @@ from app.services.vpn_access_service import (
     VpnAccessService,
     VpnNodeOperationError,
     VpnNodeProvisionResult,
+    VpnNodeRenewalResult,
     build_client_email,
     build_connect_url,
     build_idempotent_uuid,
@@ -397,6 +398,61 @@ async def test_extend_access_stops_and_propagates_secondary_node_failure():
 
     assert len(first_node.update_calls) == 1
     assert len(second_node.update_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_extend_access_with_results_reports_every_configured_node():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands", fail_update=True)
+    third_node = FakeXuiClient(name="sweden")
+    service = make_service(
+        xui_clients=[first_node, second_node, third_node]
+    )
+    expires_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    results = await service.extend_access_with_results(
+        uuid=client_uuid,
+        device_limit=3,
+        expires_at=expires_at,
+    )
+
+    assert results == (
+        VpnNodeRenewalResult(node_name="frankfurt", updated=True),
+        VpnNodeRenewalResult(
+            node_name="netherlands",
+            updated=False,
+            error="3x-ui client update failed: test failure",
+        ),
+        VpnNodeRenewalResult(node_name="sweden", updated=True),
+    )
+    expected_call = {
+        "client_uuid": client_uuid,
+        "device_limit": 3,
+        "expires_at": expires_at,
+    }
+    assert first_node.update_calls == [expected_call]
+    assert second_node.update_calls == [expected_call]
+    assert third_node.update_calls == [expected_call]
+
+
+@pytest.mark.asyncio
+async def test_extend_access_with_results_returns_success_for_all_nodes():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands")
+    service = make_service(xui_clients=[first_node, second_node])
+    expires_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+
+    results = await service.extend_access_with_results(
+        uuid="12345678-1234-5678-1234-567812345678",
+        device_limit=2,
+        expires_at=expires_at,
+    )
+
+    assert results == (
+        VpnNodeRenewalResult(node_name="frankfurt", updated=True),
+        VpnNodeRenewalResult(node_name="netherlands", updated=True),
+    )
 
 
 @pytest.mark.asyncio
