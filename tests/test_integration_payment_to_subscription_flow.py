@@ -93,11 +93,24 @@ class FakeVpnAccessService:
     def __init__(self) -> None:
         self.__class__.instances.append(self)
 
-    async def create_access(self, *, user_id: int, device_limit: int):
+    async def create_access(
+        self,
+        *,
+        user_id: int,
+        device_limit: int,
+        expires_at=None,
+        idempotency_key: str | None = None,
+    ):
         self.__class__.uuid_counter += 1
         uuid = f"fake-uuid-{self.__class__.uuid_counter}"
         self.__class__.create_calls.append(
-            {"user_id": user_id, "device_limit": device_limit, "uuid": uuid}
+            {
+                "user_id": user_id,
+                "device_limit": device_limit,
+                "expires_at": expires_at,
+                "idempotency_key": idempotency_key,
+                "uuid": uuid,
+            }
         )
         return SimpleNamespace(
             uuid=uuid,
@@ -346,7 +359,7 @@ async def test_polling_confirmed_payment_activates_subscription_once(session_fac
         assert await count_rows(session, Payment) == 1
         assert await count_rows(session, Subscription) == 1
         assert FakeVpnAccessService.create_calls == [
-            {"user_id": user.id, "device_limit": 1, "uuid": "fake-uuid-1"}
+            {"user_id": user.id, "device_limit": 1, "expires_at": None, "idempotency_key": f"order:{order.id}", "uuid": "fake-uuid-1"}
         ]
         assert FakeVpnAccessService.extend_calls == []
         assert FakeSubscriptionMetaSyncService.calls[0]["reason"] == (
@@ -400,7 +413,7 @@ async def test_repeating_same_confirmed_event_reuses_existing_payment_and_subscr
         assert await count_rows(session, Payment) == 1
         assert await count_rows(session, Subscription) == 1
         assert FakeVpnAccessService.create_calls == [
-            {"user_id": order.user_id, "device_limit": 1, "uuid": "fake-uuid-1"}
+            {"user_id": order.user_id, "device_limit": 1, "expires_at": None, "idempotency_key": f"order:{order.id}", "uuid": "fake-uuid-1"}
         ]
         assert FakeVpnAccessService.extend_calls == []
         assert FakeVpnAccessService.get_config_calls == [
@@ -491,6 +504,8 @@ async def test_repeating_same_telegram_stars_payment_is_idempotent(
             {
                 "user_id": user.id,
                 "device_limit": 1,
+                "expires_at": None,
+                "idempotency_key": f"order:{order.id}",
                 "uuid": "fake-uuid-1",
             }
         ]
@@ -648,8 +663,20 @@ async def test_second_paid_order_creates_independent_subscription_with_new_uuid(
         assert await count_rows(session, Payment) == 2
         assert await count_rows(session, PaymentEvent) == 2
         assert FakeVpnAccessService.create_calls == [
-            {"user_id": user.id, "device_limit": 1, "uuid": "fake-uuid-1"},
-            {"user_id": user.id, "device_limit": 1, "uuid": "fake-uuid-2"},
+            {
+                "user_id": user.id,
+                "device_limit": 1,
+                "expires_at": None,
+                "idempotency_key": f"order:{first_order.id}",
+                "uuid": "fake-uuid-1",
+            },
+            {
+                "user_id": user.id,
+                "device_limit": 1,
+                "expires_at": None,
+                "idempotency_key": f"order:{second_order.id}",
+                "uuid": "fake-uuid-2",
+            },
         ]
         assert FakeVpnAccessService.extend_calls == []
 

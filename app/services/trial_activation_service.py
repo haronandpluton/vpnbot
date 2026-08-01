@@ -108,6 +108,7 @@ class TrialActivationService:
                 user_id=user.id,
                 device_limit=TRIAL_DEVICE_LIMIT,
                 expires_at=expires_at,
+                idempotency_key=f"trial:user:{user.id}",
             )
             access_uuid = access.uuid
 

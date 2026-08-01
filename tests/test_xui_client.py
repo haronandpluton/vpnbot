@@ -12,6 +12,7 @@ from app.services.xui_client import (
     XuiClientError,
     XuiConfig,
     make_xui_client_from_settings,
+    make_xui_clients_from_settings,
 )
 
 
@@ -194,7 +195,10 @@ async def test_login_raises_when_login_response_is_not_successful():
         FakeResponse(json_data={"success": False, "msg": "bad credentials"})
     ]
 
-    with pytest.raises(XuiClientError, match="3x-ui login failed: bad credentials"):
+    with pytest.raises(
+        XuiClientError,
+        match="3x-ui login failed on default: bad credentials",
+    ):
         await client._login(http_client)
 
     assert http_client.get_calls == ["https://xui.example/"]
@@ -205,6 +209,14 @@ async def test_create_vless_client_builds_payload_and_posts_to_3xui(monkeypatch)
     monkeypatch.setattr(xui_module.secrets, "token_hex", lambda size: "subid-123")
 
     fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    fake_http_client.get_responses = [
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"settings": '{"clients": []}'},
+            }
+        )
+    ]
     fake_http_client.post_responses = [FakeResponse(json_data={"success": True})]
 
     def fake_client_factory(*, timeout, follow_redirects):
@@ -240,6 +252,9 @@ async def test_create_vless_client_builds_payload_and_posts_to_3xui(monkeypatch)
     assert fake_http_client.follow_redirects is True
     assert fake_http_client.enter_count == 1
     assert fake_http_client.exit_count == 1
+    assert fake_http_client.get_calls == [
+        "https://xui.example/panel/api/inbounds/get/42"
+    ]
     assert fake_http_client.post_calls == [
         {
             "url": "https://xui.example/panel/api/clients/add",
@@ -280,6 +295,13 @@ async def test_create_vless_client_rejects_3xui_unsuccessful_response(monkeypatc
 
     client = XuiClient(make_config())
     fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    empty_inbound = FakeResponse(
+        json_data={
+            "success": True,
+            "obj": {"settings": '{"clients": []}'},
+        }
+    )
+    fake_http_client.get_responses = [empty_inbound, empty_inbound]
     fake_http_client.post_responses = [
         FakeResponse(json_data={"success": False, "msg": "duplicate email"})
     ]
@@ -293,13 +315,134 @@ async def test_create_vless_client_rejects_3xui_unsuccessful_response(monkeypatc
 
     with pytest.raises(
         XuiClientError,
-        match="3x-ui client creation failed: duplicate email",
+        match="3x-ui client creation failed on default: duplicate email",
     ):
         await client.create_vless_client(
             client_uuid="12345678-1234-5678-1234-567812345678",
             email="tg-7-12345678",
             device_limit=1,
         )
+
+
+@pytest.mark.asyncio
+async def test_create_vless_client_is_noop_when_exact_client_already_exists(
+    monkeypatch,
+):
+    async def fake_login(self, client):
+        return "csrf-panel"
+
+    monkeypatch.setattr(XuiClient, "_login", fake_login)
+
+    client = XuiClient(make_config(name="frankfurt"))
+    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    fake_http_client.get_responses = [
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {
+                    "settings": {
+                        "clients": [
+                            {
+                                "id": "12345678-1234-5678-1234-567812345678",
+                                "email": "tg-7-12345678",
+                                "limitIp": 1,
+                                "expiryTime": 0,
+                                "enable": True,
+                            }
+                        ]
+                    }
+                },
+            }
+        )
+    ]
+
+    monkeypatch.setattr(
+        xui_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: fake_http_client,
+    )
+
+    await client.create_vless_client(
+        client_uuid="12345678-1234-5678-1234-567812345678",
+        email="tg-7-12345678",
+        device_limit=1,
+    )
+
+    assert fake_http_client.post_calls == []
+
+
+@pytest.mark.asyncio
+async def test_create_vless_client_rejects_existing_email_with_other_uuid(
+    monkeypatch,
+):
+    async def fake_login(self, client):
+        return "csrf-panel"
+
+    monkeypatch.setattr(XuiClient, "_login", fake_login)
+
+    client = XuiClient(make_config(name="netherlands"))
+    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    fake_http_client.get_responses = [
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {
+                    "settings": {
+                        "clients": [
+                            {
+                                "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                                "email": "tg-7-12345678",
+                            }
+                        ]
+                    }
+                },
+            }
+        )
+    ]
+
+    monkeypatch.setattr(
+        xui_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: fake_http_client,
+    )
+
+    with pytest.raises(XuiClientError, match="3x-ui email conflict on netherlands"):
+        await client.create_vless_client(
+            client_uuid="12345678-1234-5678-1234-567812345678",
+            email="tg-7-12345678",
+            device_limit=1,
+        )
+
+    assert fake_http_client.post_calls == []
+
+
+def test_make_xui_clients_from_settings_parses_enabled_nodes():
+    settings = SimpleNamespace(
+        vpn_xui_nodes_json=(
+            '[{"name":"frankfurt","base_url":"http://127.0.0.1:2096/panel",'
+            '"username":"fr-user","password":"fr-pass","inbound_id":1},'
+            '{"name":"disabled","base_url":"http://disabled",'
+            '"username":"x","password":"x","inbound_id":2,"enabled":false},'
+            '{"name":"netherlands","base_url":"http://127.0.0.1:12096/panel",'
+            '"username":"nl-user","password":"nl-pass","inbound_id":1}]'
+        )
+    )
+
+    clients = make_xui_clients_from_settings(settings)
+
+    assert [client.config.name for client in clients] == [
+        "frankfurt",
+        "netherlands",
+    ]
+    assert clients[0].base_url == "http://127.0.0.1:2096/panel"
+    assert clients[1].base_url == "http://127.0.0.1:12096/panel"
+
+
+def test_make_xui_clients_from_settings_rejects_invalid_json():
+    settings = SimpleNamespace(vpn_xui_nodes_json="not-json")
+
+    with pytest.raises(XuiClientError, match="must contain valid JSON"):
+        make_xui_clients_from_settings(settings)
 
 
 def test_make_xui_client_from_settings_maps_settings_to_config():
@@ -319,6 +462,7 @@ def test_make_xui_client_from_settings_maps_settings_to_config():
         username="admin",
         password="secret",
         inbound_id=99,
+        name="legacy-default",
     )
 
 def test_expiry_time_ms_is_zero_when_expiry_is_not_configured():

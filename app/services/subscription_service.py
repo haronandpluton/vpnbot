@@ -237,6 +237,7 @@ class SubscriptionService:
         access = await self.vpn_access_service.create_access(
             user_id=order.user_id,
             device_limit=order.device_limit,
+            idempotency_key=f"order:{order.id}",
         )
 
         subscription = await self.subscription_repository.create(

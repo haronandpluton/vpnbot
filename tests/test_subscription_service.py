@@ -145,8 +145,22 @@ class FakeVpnAccessService:
         self.extend_calls: list[dict] = []
         self.get_config_calls: list[dict] = []
 
-    async def create_access(self, *, user_id: int, device_limit: int):
-        self.create_calls.append({"user_id": user_id, "device_limit": device_limit})
+    async def create_access(
+        self,
+        *,
+        user_id: int,
+        device_limit: int,
+        expires_at=None,
+        idempotency_key: str | None = None,
+    ):
+        self.create_calls.append(
+            {
+                "user_id": user_id,
+                "device_limit": device_limit,
+                "expires_at": expires_at,
+                "idempotency_key": idempotency_key,
+            }
+        )
 
         if self.fail_create:
             raise RuntimeError("create_access failed")
@@ -303,7 +317,14 @@ async def test_paid_order_without_active_subscription_creates_new_subscription_a
 
     assert order.status == OrderStatus.ACTIVATED
     assert order.activated_at is not None
-    assert vpn_access.create_calls == [{"user_id": 7, "device_limit": 1}]
+    assert vpn_access.create_calls == [
+        {
+            "user_id": 7,
+            "device_limit": 1,
+            "expires_at": None,
+            "idempotency_key": "order:23",
+        }
+    ]
     assert vpn_access.extend_calls == []
     assert vpn_access.get_config_calls == []
     assert len(repository.create_calls) == 1
@@ -463,7 +484,14 @@ async def test_paid_order_with_existing_active_subscription_creates_new_uuid():
     assert repository.get_active_calls == []
     assert len(repository.create_calls) == 1
     assert repository.extend_calls == []
-    assert vpn_access.create_calls == [{"user_id": 7, "device_limit": 1}]
+    assert vpn_access.create_calls == [
+        {
+            "user_id": 7,
+            "device_limit": 1,
+            "expires_at": None,
+            "idempotency_key": "order:24",
+        }
+    ]
     assert vpn_access.extend_calls == []
     assert service.session.commit_count == 1
 
@@ -566,7 +594,14 @@ async def test_vpn_create_error_rolls_back_and_does_not_mark_order_activated():
     assert repository.create_calls == []
     assert repository.activate_calls == []
     assert repository.mark_access_sent_calls == []
-    assert vpn_access.create_calls == [{"user_id": 7, "device_limit": 1}]
+    assert vpn_access.create_calls == [
+        {
+            "user_id": 7,
+            "device_limit": 1,
+            "expires_at": None,
+            "idempotency_key": "order:23",
+        }
+    ]
     assert service.session.commit_count == 0
     assert service.session.rollback_count == 1
     assert FakeSubscriptionMetaSyncService.calls == []

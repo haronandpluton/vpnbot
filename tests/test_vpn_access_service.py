@@ -11,6 +11,7 @@ from app.services.vpn_access_service import (
     VpnAccessService,
     build_client_email,
     build_connect_url,
+    build_idempotent_uuid,
     build_subscription_url,
 )
 from app.services.xui_client import XuiClientError
@@ -47,11 +48,16 @@ class FakeXuiClient:
 def make_service(
     *,
     xui_client: FakeXuiClient | None = None,
+    xui_clients: list[FakeXuiClient] | None = None,
     public_base_url: str = "https://connect.presentvpn.click",
+    uuid_secret: str = "test-vpn-uuid-secret",
 ) -> VpnAccessService:
     service = VpnAccessService.__new__(VpnAccessService)
-    service.xui_client = xui_client or FakeXuiClient()
+    clients = xui_clients or [xui_client or FakeXuiClient()]
+    service.xui_clients = clients
+    service.xui_client = clients[0]
     service.public_base_url = public_base_url
+    service.uuid_secret = uuid_secret
     return service
 
 
@@ -98,6 +104,30 @@ def test_build_client_email_is_stable_and_uses_uuid_prefix():
         )
         == "tg-777-12345678"
     )
+
+
+def test_build_idempotent_uuid_is_stable_and_secret_scoped():
+    first = build_idempotent_uuid(
+        secret="secret-a",
+        idempotency_key="order:123",
+    )
+    second = build_idempotent_uuid(
+        secret="secret-a",
+        idempotency_key="order:123",
+    )
+    other_order = build_idempotent_uuid(
+        secret="secret-a",
+        idempotency_key="order:124",
+    )
+    other_secret = build_idempotent_uuid(
+        secret="secret-b",
+        idempotency_key="order:123",
+    )
+
+    assert first == second
+    assert first != other_order
+    assert first != other_secret
+    assert str(UUID(first)) == first
 
 
 @pytest.mark.asyncio
@@ -211,6 +241,52 @@ async def test_create_access_generates_different_uuid_for_each_new_access(
     assert len(xui_client.create_calls) == 2
     assert xui_client.create_calls[0]["email"] == "tg-1-11111111"
     assert xui_client.create_calls[1]["email"] == "tg-1-22222222"
+
+
+@pytest.mark.asyncio
+async def test_create_access_uses_same_retry_safe_uuid_on_all_configured_nodes():
+    first_node = FakeXuiClient()
+    second_node = FakeXuiClient()
+    service = make_service(xui_clients=[first_node, second_node])
+
+    first_result = await service.create_access(
+        user_id=777,
+        device_limit=2,
+        idempotency_key="order:23",
+    )
+    second_result = await service.create_access(
+        user_id=777,
+        device_limit=2,
+        idempotency_key="order:23",
+    )
+
+    assert first_result.uuid == second_result.uuid
+    assert len(first_node.create_calls) == 2
+    assert len(second_node.create_calls) == 2
+    assert first_node.create_calls[0]["client_uuid"] == first_result.uuid
+    assert second_node.create_calls[0]["client_uuid"] == first_result.uuid
+    assert first_node.create_calls[0]["email"] == second_node.create_calls[0]["email"]
+
+
+@pytest.mark.asyncio
+async def test_create_access_stops_and_propagates_secondary_node_failure():
+    first_node = FakeXuiClient()
+    second_node = FakeXuiClient(fail_create=True)
+    service = make_service(xui_clients=[first_node, second_node])
+
+    with pytest.raises(XuiClientError, match="3x-ui client creation failed"):
+        await service.create_access(
+            user_id=777,
+            device_limit=2,
+            idempotency_key="order:23",
+        )
+
+    assert len(first_node.create_calls) == 1
+    assert len(second_node.create_calls) == 1
+    assert (
+        first_node.create_calls[0]["client_uuid"]
+        == second_node.create_calls[0]["client_uuid"]
+    )
 
 
 @pytest.mark.asyncio

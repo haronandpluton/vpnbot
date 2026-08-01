@@ -109,9 +109,21 @@ class FakeVpnAccessService:
         self.extend_calls = []
         self.get_config_calls = []
 
-    async def create_access(self, *, user_id, device_limit):
+    async def create_access(
+        self,
+        *,
+        user_id,
+        device_limit,
+        expires_at=None,
+        idempotency_key=None,
+    ):
         self.create_calls.append(
-            {"user_id": user_id, "device_limit": device_limit}
+            {
+                "user_id": user_id,
+                "device_limit": device_limit,
+                "expires_at": expires_at,
+                "idempotency_key": idempotency_key,
+            }
         )
         return VpnAccessResult(
             uuid="new-uuid",
@@ -238,7 +250,14 @@ async def test_new_purchase_records_activated_subscription_id():
     assert repository.get_by_order_calls == [order.id]
     assert len(repository.create_calls) == 1
     assert repository.renew_calls == []
-    assert vpn_access.create_calls == [{"user_id": 7, "device_limit": 1}]
+    assert vpn_access.create_calls == [
+        {
+            "user_id": 7,
+            "device_limit": 1,
+            "expires_at": None,
+            "idempotency_key": f"order:{order.id}",
+        }
+    ]
     assert service.session.commit_count == 1
 
 

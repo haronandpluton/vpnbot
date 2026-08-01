@@ -132,6 +132,17 @@ class Settings(BaseSettings):
     xui_password: str = Field(default="", alias="XUI_PASSWORD")
     xui_inbound_id: int = Field(default=9, alias="XUI_INBOUND_ID")
 
+    # Optional multi-node 3X-UI configuration. When empty, the legacy
+    # XUI_BASE_URL/XUI_USERNAME/XUI_PASSWORD/XUI_INBOUND_ID settings are used.
+    vpn_xui_nodes_json: str = Field(default="", alias="VPN_XUI_NODES_JSON")
+    # Stable secret used to derive retry-safe UUIDs for paid/trial activations.
+    # Keep it unchanged between deploys. BOT_TOKEN is used as a compatibility
+    # fallback when this value is empty.
+    vpn_access_uuid_secret: str = Field(
+        default="",
+        alias="VPN_ACCESS_UUID_SECRET",
+    )
+
     vpn_default_server_name: str = Field(
         default="default-node",
         alias="VPN_DEFAULT_SERVER_NAME",

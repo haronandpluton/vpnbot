@@ -89,12 +89,14 @@ class FakeVpnAccessService:
         user_id: int,
         device_limit: int,
         expires_at=None,
+        idempotency_key: str | None = None,
     ) -> VpnAccessResult:
         self.create_calls.append(
             {
                 "user_id": user_id,
                 "device_limit": device_limit,
                 "expires_at": expires_at,
+                "idempotency_key": idempotency_key,
             }
         )
 
@@ -256,6 +258,7 @@ async def test_activate_trial_creates_three_day_subscription_and_consumes_eligib
             "user_id": 7,
             "device_limit": 1,
             "expires_at": expected_expires_at,
+            "idempotency_key": "trial:user:7",
         }
     ]
 
