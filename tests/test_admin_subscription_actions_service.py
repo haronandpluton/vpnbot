@@ -14,6 +14,7 @@ from app.services.admin_subscription_actions_service import (
 from app.services.vpn_access_service import (
     VpnNodeFailure,
     VpnNodeOperationError,
+    VpnNodeRenewalResult,
 )
 
 
@@ -106,10 +107,22 @@ class FakeSystemErrorRepository:
 
 
 class FakeVpnAccessService:
-    def __init__(self, *, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        error: Exception | None = None,
+        renewal_results=None,
+    ) -> None:
         self.error = error
         self.extend_calls: list[dict] = []
+        self.extend_with_results_calls: list[dict] = []
         self.disable_calls: list[dict] = []
+        self.renewal_results = renewal_results or (
+            VpnNodeRenewalResult(
+                node_name="admin-test-node",
+                updated=True,
+            ),
+        )
 
     async def extend_access(self, **kwargs):
         self.extend_calls.append(kwargs)
@@ -118,12 +131,53 @@ class FakeVpnAccessService:
 
         return SimpleNamespace(uuid=kwargs["uuid"])
 
+    async def extend_access_with_results(self, **kwargs):
+        self.extend_with_results_calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+
+        return tuple(self.renewal_results)
+
     async def disable_access(self, **kwargs):
         self.disable_calls.append(kwargs)
         if self.error is not None:
             raise self.error
 
         return SimpleNamespace(uuid=kwargs["uuid"])
+
+
+class FakeNodeAccessStateService:
+    def __init__(self) -> None:
+        self.record_successful_renewal_results_calls: list[dict] = []
+        self.record_failed_renewal_results_calls: list[dict] = []
+
+    async def record_successful_renewal_results(
+        self,
+        *,
+        subscription_id,
+        results,
+    ):
+        self.record_successful_renewal_results_calls.append(
+            {
+                "subscription_id": subscription_id,
+                "results": tuple(results),
+            }
+        )
+        return ()
+
+    async def record_failed_renewal_results(
+        self,
+        *,
+        subscription_id,
+        results,
+    ):
+        self.record_failed_renewal_results_calls.append(
+            {
+                "subscription_id": subscription_id,
+                "results": tuple(results),
+            }
+        )
+        return ()
 
 
 def make_subscription(
@@ -156,6 +210,7 @@ def make_service(
     action_log_service: FakeActionLogService | None = None,
     vpn_access_service: FakeVpnAccessService | None = None,
     system_error_repository: FakeSystemErrorRepository | None = None,
+    node_access_state_service: FakeNodeAccessStateService | None = None,
 ):
     service = AdminSubscriptionActionsService.__new__(AdminSubscriptionActionsService)
     service.session = FakeSession()
@@ -163,6 +218,9 @@ def make_service(
     service.vpn_access_service = vpn_access_service or FakeVpnAccessService()
     service.system_error_repository = (
         system_error_repository or FakeSystemErrorRepository()
+    )
+    service.node_access_state_service = (
+        node_access_state_service or FakeNodeAccessStateService()
     )
     service._get_subscription = lambda subscription_id: _return_subscription(
         subscription,
@@ -270,14 +328,31 @@ async def test_extend_subscription_with_future_expiry_extends_from_old_expiry_an
     assert result.message == "Subscription extended."
     assert subscription.expires_at == old_expires_at + timedelta(days=5)
     assert subscription.updated_at is not None
-    assert service.session.commit_count == 1
+    assert service.session.commit_count == 2
     assert service.session.rollback_count == 0
     assert service.session.refresh_calls == [subscription]
-    assert vpn_access.extend_calls == [
+    assert vpn_access.extend_calls == []
+    assert vpn_access.extend_with_results_calls == [
         {
             "uuid": "future-uuid",
             "device_limit": 3,
             "expires_at": old_expires_at + timedelta(days=5),
+        }
+    ]
+    successful_calls = (
+        service.node_access_state_service.
+        record_successful_renewal_results_calls
+    )
+    assert successful_calls == [
+        {
+            "subscription_id": 50,
+            "results": vpn_access.renewal_results,
+        }
+    ]
+    assert service.node_access_state_service.record_failed_renewal_results_calls == [
+        {
+            "subscription_id": 50,
+            "results": vpn_access.renewal_results,
         }
     ]
 
@@ -345,7 +420,7 @@ async def test_extend_subscription_with_past_expiry_extends_from_now_not_old_exp
     assert result.new_expires_at <= after_call + timedelta(days=10, seconds=1)
     assert subscription.expires_at == result.new_expires_at
     assert subscription.expires_at > old_expires_at + timedelta(days=10)
-    assert service.session.commit_count == 1
+    assert service.session.commit_count == 2
     assert FakeSubscriptionMetaSyncService.calls[0]["reason"] == (
         "manual_extend_subscription"
     )
@@ -392,6 +467,7 @@ async def test_extend_subscription_rolls_back_when_action_log_fails():
     assert service.session.rollback_count == 1
     assert service.session.refresh_calls == []
     assert vpn_access.extend_calls == []
+    assert vpn_access.extend_with_results_calls == []
     assert FakeSubscriptionMetaSyncService.calls == []
 
 
@@ -427,16 +503,77 @@ async def test_extend_subscription_keeps_committed_db_state_when_vpn_sync_fails(
     assert subscription.expires_at == expected_expiry
     assert service.session.commit_count == 1
     assert service.session.rollback_count == 0
-    assert vpn_access.extend_calls == [
+    assert vpn_access.extend_calls == []
+    assert vpn_access.extend_with_results_calls == [
         {
             "uuid": "vpn-failure-uuid",
             "device_limit": 2,
             "expires_at": expected_expiry,
         }
     ]
+    successful_calls = (
+        service.node_access_state_service.
+        record_successful_renewal_results_calls
+    )
+    assert successful_calls == []
+    assert service.node_access_state_service.record_failed_renewal_results_calls == []
     assert FakeSubscriptionMetaSyncService.calls[0]["reason"] == (
         "manual_extend_subscription"
     )
+
+
+@pytest.mark.asyncio
+async def test_extend_subscription_records_partial_results_per_vpn_node():
+    old_expires_at = datetime.now(timezone.utc) + timedelta(days=2)
+    subscription = make_subscription(
+        subscription_id=54,
+        user_id=8,
+        order_id=24,
+        uuid="partial-renewal-uuid",
+        device_limit=2,
+        expires_at=old_expires_at,
+    )
+    renewal_results = (
+        VpnNodeRenewalResult(node_name="frankfurt", updated=True),
+        VpnNodeRenewalResult(
+            node_name="netherlands",
+            updated=False,
+            error="temporary panel outage",
+        ),
+    )
+    vpn_access = FakeVpnAccessService(renewal_results=renewal_results)
+    node_state = FakeNodeAccessStateService()
+    service = make_service(
+        subscription=subscription,
+        vpn_access_service=vpn_access,
+        node_access_state_service=node_state,
+    )
+
+    result = await service.extend_subscription(
+        subscription_id=54,
+        days=7,
+        admin_telegram_id=123,
+    )
+
+    assert result.status == "extended"
+    assert result.vpn_sync_ok is False
+    assert result.vpn_sync_error == (
+        "netherlands: temporary panel outage"
+    )
+    assert result.message == "Subscription extended; VPN synchronization failed."
+    assert service.session.commit_count == 2
+    assert node_state.record_successful_renewal_results_calls == [
+        {
+            "subscription_id": 54,
+            "results": renewal_results,
+        }
+    ]
+    assert node_state.record_failed_renewal_results_calls == [
+        {
+            "subscription_id": 54,
+            "results": renewal_results,
+        }
+    ]
 
 
 @pytest.mark.asyncio

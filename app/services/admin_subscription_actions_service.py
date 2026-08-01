@@ -12,6 +12,9 @@ from app.database.repositories.system_errors import SystemErrorRecordRepository
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.admin_action_log_service import AdminActionLogService
 from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
+from app.services.subscription_node_access_state_service import (
+    SubscriptionNodeAccessStateService,
+)
 from app.services.vpn_access_service import (
     VpnAccessService,
     VpnNodeOperationError,
@@ -64,12 +67,17 @@ class AdminSubscriptionActionsService:
         *,
         vpn_access_service: VpnAccessService | None = None,
         system_error_repository: SystemErrorRecordRepository | None = None,
+        node_access_state_service: SubscriptionNodeAccessStateService | None = None,
     ) -> None:
         self.session = session
         self.action_log_service = AdminActionLogService(session)
         self.vpn_access_service = vpn_access_service
         self.system_error_repository = (
             system_error_repository or SystemErrorRecordRepository(session)
+        )
+        self.node_access_state_service = (
+            node_access_state_service
+            or SubscriptionNodeAccessStateService(session)
         )
 
     async def extend_subscription(
@@ -148,11 +156,30 @@ class AdminSubscriptionActionsService:
 
         try:
             vpn_access_service = self.vpn_access_service or VpnAccessService()
-            await vpn_access_service.extend_access(
+            renewal_results = await vpn_access_service.extend_access_with_results(
                 uuid=subscription.uuid,
                 device_limit=subscription.device_limit,
                 expires_at=subscription.expires_at,
             )
+
+            await self.node_access_state_service.record_successful_renewal_results(
+                subscription_id=subscription.id,
+                results=renewal_results,
+            )
+            await self.node_access_state_service.record_failed_renewal_results(
+                subscription_id=subscription.id,
+                results=renewal_results,
+            )
+            await self.session.commit()
+
+            failures = [result for result in renewal_results if not result.updated]
+            if failures:
+                vpn_sync_ok = False
+                vpn_sync_error = "; ".join(
+                    f"{result.node_name}: "
+                    f"{result.error or 'VPN node renewal failed'}"
+                    for result in failures
+                )[:1000]
         except Exception as error:  # noqa: BLE001 - external VPN boundary
             vpn_sync_ok = False
             vpn_sync_error = str(error)
