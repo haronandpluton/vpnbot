@@ -16,6 +16,9 @@ from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.subscription_meta_sync_service import (
     SubscriptionMetaSyncService,
 )
+from app.services.subscription_node_access_state_service import (
+    SubscriptionNodeAccessStateService,
+)
 from app.services.vpn_access_service import VpnAccessService
 
 logger = logging.getLogger(__name__)
@@ -43,6 +46,9 @@ class TrialActivationService:
         subscription_repository: SubscriptionRepository | None = None,
         system_error_repository: SystemErrorRecordRepository | None = None,
         metadata_sync_service: SubscriptionMetaSyncService | None = None,
+        node_access_state_service: (
+            SubscriptionNodeAccessStateService | None
+        ) = None,
     ) -> None:
         self.session = session
         self.vpn_access_service = (
@@ -61,6 +67,10 @@ class TrialActivationService:
         self.metadata_sync_service = (
             metadata_sync_service
             or SubscriptionMetaSyncService(session)
+        )
+        self.node_access_state_service = (
+            node_access_state_service
+            or SubscriptionNodeAccessStateService(session)
         )
 
     async def activate_trial(
@@ -123,6 +133,23 @@ class TrialActivationService:
                 starts_at=claimed_at,
                 expires_at=expires_at,
                 is_trial=True,
+            )
+
+            stage = "initialize_node_access_state"
+            await self.node_access_state_service.initialize_pending(
+                subscription_id=subscription.id,
+                node_codes=(
+                    self.vpn_access_service.configured_node_names()
+                ),
+            )
+
+            stage = "record_node_provisioning_results"
+            await (
+                self.node_access_state_service
+                .record_provisioning_results(
+                    subscription_id=subscription.id,
+                    results=getattr(access, "node_results", ()),
+                )
             )
 
             subscription = (

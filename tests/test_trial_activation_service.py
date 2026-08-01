@@ -10,7 +10,10 @@ from app.services.trial_activation_service import (
     TRIAL_ACTIVATION_ERROR_TYPE,
     TrialActivationService,
 )
-from app.services.vpn_access_service import VpnAccessResult
+from app.services.vpn_access_service import (
+    VpnAccessResult,
+    VpnNodeProvisionResult,
+)
 from app.services.xui_client import XuiClientError
 
 
@@ -83,6 +86,20 @@ class FakeVpnAccessService:
     def __init__(self, *, fail_create: bool = False) -> None:
         self.fail_create = fail_create
         self.create_calls: list[dict] = []
+        self.node_names = ("frankfurt", "netherlands")
+        self.node_results = (
+            VpnNodeProvisionResult(
+                node_name="frankfurt",
+                enabled=True,
+            ),
+            VpnNodeProvisionResult(
+                node_name="netherlands",
+                enabled=True,
+            ),
+        )
+
+    def configured_node_names(self) -> tuple[str, ...]:
+        return self.node_names
 
     async def create_access(
         self,
@@ -112,7 +129,22 @@ class FakeVpnAccessService:
                 "https://connect.example/connect/"
                 "12345678-1234-5678-1234-567812345678"
             ),
+            node_results=self.node_results,
         )
+
+
+class FakeNodeAccessStateService:
+    def __init__(self) -> None:
+        self.initialize_calls: list[dict] = []
+        self.record_calls: list[dict] = []
+
+    async def initialize_pending(self, **kwargs):
+        self.initialize_calls.append(kwargs)
+        return ()
+
+    async def record_provisioning_results(self, **kwargs):
+        self.record_calls.append(kwargs)
+        return ()
 
 
 class FakeSystemErrorRepository:
@@ -198,6 +230,7 @@ def make_service(
         pending=pending_error,
     )
     metadata_sync_service = FakeMetadataSyncService()
+    node_access_state_service = FakeNodeAccessStateService()
 
     service = TrialActivationService(
         session,
@@ -206,6 +239,7 @@ def make_service(
         subscription_repository=subscription_repository,
         system_error_repository=system_error_repository,
         metadata_sync_service=metadata_sync_service,
+        node_access_state_service=node_access_state_service,
     )
 
     return SimpleNamespace(
@@ -216,6 +250,7 @@ def make_service(
         vpn_access_service=vpn_access_service,
         system_error_repository=system_error_repository,
         metadata_sync_service=metadata_sync_service,
+        node_access_state_service=node_access_state_service,
     )
 
 
@@ -272,6 +307,19 @@ async def test_activate_trial_creates_three_day_subscription_and_consumes_eligib
             "starts_at": now,
             "expires_at": expected_expires_at,
             "is_trial": True,
+        }
+    ]
+
+    assert context.node_access_state_service.initialize_calls == [
+        {
+            "subscription_id": 77,
+            "node_codes": ("frankfurt", "netherlands"),
+        }
+    ]
+    assert context.node_access_state_service.record_calls == [
+        {
+            "subscription_id": 77,
+            "results": context.vpn_access_service.node_results,
         }
     ]
 
