@@ -294,6 +294,69 @@ def test_subscription_metadata_headers_include_branding_links_and_dynamic_days(
     headers["announce"].encode("latin-1")
 
 
+def test_subscription_payload_supports_multiple_configured_nodes(tmp_path):
+    module = load_sub_server_without_startup()
+    write_allowed_metadata(module, tmp_path)
+    module.VPN_NODES_JSON = json.dumps(
+        [
+            {
+                "name": "🇩🇪 Frankfurt",
+                "host": "eu1.presentvpn.click",
+                "port": 443,
+                "ws_path": "/ws-test",
+                "ws_host": "eu1.presentvpn.click",
+                "sni": "eu1.presentvpn.click",
+            },
+            {
+                "name": "🇳🇱 Netherlands",
+                "host": "nl1.presentvpn.click",
+                "port": 443,
+                "ws_path": "/ws-test",
+                "ws_host": "nl1.presentvpn.click",
+                "sni": "nl1.presentvpn.click",
+            },
+        ],
+        ensure_ascii=False,
+    )
+
+    payload = module.build_subscription_payload(VALID_UUID)
+    decoded = base64.b64decode(payload).decode("utf-8")
+    lines = [line for line in decoded.splitlines() if line]
+
+    assert len(lines) == 2
+    assert lines[0].startswith(
+        f"vless://{VALID_UUID}@eu1.presentvpn.click:443"
+    )
+    assert lines[1].startswith(
+        f"vless://{VALID_UUID}@nl1.presentvpn.click:443"
+    )
+    assert urllib.parse.unquote(lines[0].split("#", 1)[1]) == (
+        "🇩🇪 Frankfurt"
+    )
+    assert urllib.parse.unquote(lines[1].split("#", 1)[1]) == (
+        "🇳🇱 Netherlands"
+    )
+
+
+def test_invalid_multi_node_json_keeps_legacy_single_node(tmp_path):
+    module = load_sub_server_without_startup()
+    write_allowed_metadata(module, tmp_path)
+    module.VPN_NODES_JSON = "not-json"
+    module.VPN_HOST = "legacy.example.com"
+    module.VPN_WS_HOST = "legacy.example.com"
+    module.VPN_SNI = "legacy.example.com"
+    module.SERVER_DISPLAY_NAME = "Legacy"
+
+    payload = module.build_subscription_payload(VALID_UUID)
+    decoded = base64.b64decode(payload).decode("utf-8")
+    lines = [line for line in decoded.splitlines() if line]
+
+    assert len(lines) == 1
+    assert lines[0].startswith(
+        f"vless://{VALID_UUID}@legacy.example.com:443"
+    )
+
+
 def test_subscription_payload_contains_exactly_one_real_server_entry(tmp_path):
     module = load_sub_server_without_startup()
     write_allowed_metadata(module, tmp_path)

@@ -49,6 +49,13 @@ SERVER_DISPLAY_NAME = os.getenv(
     "🇩🇪 Frankfurt",
 ).strip() or "🇩🇪 Frankfurt"
 
+# Optional multi-node configuration. When empty or invalid, the service keeps
+# the existing single-node behavior from VPN_UPSTREAM_* variables.
+VPN_NODES_JSON = os.getenv(
+    "VPN_SUBSCRIPTION_NODES_JSON",
+    "",
+).strip()
+
 TELEGRAM_BOT_URL = os.getenv(
     "VPN_SUBSCRIPTION_TELEGRAM_URL",
     "",
@@ -390,28 +397,137 @@ def build_subscription_metadata_headers(client_uuid: str) -> dict[str, str]:
     return headers
 
 
-def build_vless_link(client_uuid: str) -> str:
+def _legacy_vpn_node() -> dict[str, str | int]:
+    return {
+        "name": SERVER_DISPLAY_NAME,
+        "host": VPN_HOST,
+        "port": VPN_PORT,
+        "ws_path": VPN_WS_PATH,
+        "ws_host": VPN_WS_HOST,
+        "sni": VPN_SNI,
+    }
+
+
+def load_vpn_nodes() -> list[dict[str, str | int]]:
+    if not VPN_NODES_JSON:
+        return [_legacy_vpn_node()]
+
+    try:
+        raw_nodes = json.loads(VPN_NODES_JSON)
+    except json.JSONDecodeError as error:
+        logger.error(
+            "Invalid VPN_SUBSCRIPTION_NODES_JSON; using legacy node: %s",
+            error,
+        )
+        return [_legacy_vpn_node()]
+
+    if not isinstance(raw_nodes, list):
+        logger.error(
+            "VPN_SUBSCRIPTION_NODES_JSON must contain a JSON array; "
+            "using legacy node"
+        )
+        return [_legacy_vpn_node()]
+
+    nodes: list[dict[str, str | int]] = []
+
+    for index, raw_node in enumerate(raw_nodes):
+        if not isinstance(raw_node, dict):
+            logger.error("Ignoring VPN node %s: expected JSON object", index)
+            continue
+
+        if raw_node.get("enabled", True) is False:
+            continue
+
+        name = str(raw_node.get("name", "")).strip()
+        host = str(raw_node.get("host", "")).strip()
+        ws_path = str(raw_node.get("ws_path", "/ws-test")).strip()
+        ws_host = str(raw_node.get("ws_host", host)).strip()
+        sni = str(raw_node.get("sni", host)).strip()
+
+        try:
+            port = int(raw_node.get("port", 443))
+        except (TypeError, ValueError):
+            port = 0
+
+        if not name or not host or not ws_host or not sni:
+            logger.error(
+                "Ignoring VPN node %s: name/host/ws_host/sni are required",
+                index,
+            )
+            continue
+
+        if not ws_path.startswith("/"):
+            logger.error(
+                "Ignoring VPN node %s: ws_path must start with /",
+                index,
+            )
+            continue
+
+        if port < 1 or port > 65535:
+            logger.error("Ignoring VPN node %s: invalid port", index)
+            continue
+
+        nodes.append(
+            {
+                "name": name,
+                "host": host,
+                "port": port,
+                "ws_path": ws_path,
+                "ws_host": ws_host,
+                "sni": sni,
+            }
+        )
+
+    if not nodes:
+        logger.error(
+            "VPN_SUBSCRIPTION_NODES_JSON has no enabled valid nodes; "
+            "using legacy node"
+        )
+        return [_legacy_vpn_node()]
+
+    return nodes
+
+
+def build_vless_link(
+    client_uuid: str,
+    node: dict[str, str | int] | None = None,
+) -> str:
+    selected = _legacy_vpn_node() if node is None else node
+    host = str(selected["host"])
+    port = int(selected["port"])
+    ws_path = str(selected["ws_path"])
+    ws_host = str(selected["ws_host"])
+    sni = str(selected["sni"])
+    server_display_name = str(selected["name"])
+
     query = urllib.parse.urlencode(
         [
             ("alpn", "http/1.1"),
             ("encryption", "none"),
             ("fp", "chrome"),
-            ("host", VPN_WS_HOST),
-            ("path", VPN_WS_PATH),
+            ("host", ws_host),
+            ("path", ws_path),
             ("security", "tls"),
-            ("sni", VPN_SNI),
+            ("sni", sni),
             ("type", "ws"),
         ],
         quote_via=urllib.parse.quote,
     )
 
-    display_name = urllib.parse.quote(SERVER_DISPLAY_NAME, safe="")
+    display_name = urllib.parse.quote(server_display_name, safe="")
 
     return (
-        f"vless://{client_uuid}@{VPN_HOST}:{VPN_PORT}"
+        f"vless://{client_uuid}@{host}:{port}"
         f"?{query}"
         f"#{display_name}"
     )
+
+
+def build_vless_links(client_uuid: str) -> list[str]:
+    return [
+        build_vless_link(client_uuid, node)
+        for node in load_vpn_nodes()
+    ]
 
 def build_expired_vless_link(client_uuid: str) -> str:
     return (
@@ -432,11 +548,11 @@ def is_subscription_expired(client_uuid: str, *, now: int | None = None) -> bool
 
 def build_subscription_payload(client_uuid: str) -> bytes:
     if is_subscription_expired(client_uuid):
-        link = build_expired_vless_link(client_uuid)
+        links = [build_expired_vless_link(client_uuid)]
     else:
-        link = build_vless_link(client_uuid)
+        links = build_vless_links(client_uuid)
 
-    return base64.b64encode((link + "\n").encode("utf-8"))
+    return base64.b64encode(("\n".join(links) + "\n").encode("utf-8"))
 
 
 def build_subscription_url(client_uuid: str) -> str:
