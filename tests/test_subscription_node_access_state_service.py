@@ -8,6 +8,7 @@ from app.common.enums import VPNNodeActualState, VPNNodeDesiredState
 from app.services.subscription_node_access_state_service import (
     SubscriptionNodeAccessStateService,
 )
+from app.services.vpn_access_service import VpnNodeProvisionResult
 
 
 class FakeRepository:
@@ -16,6 +17,8 @@ class FakeRepository:
         self.get_calls: list[tuple[int, str]] = []
         self.create_calls: list[dict] = []
         self.set_desired_calls: list[tuple[object, VPNNodeDesiredState]] = []
+        self.mark_enabled_calls: list[object] = []
+        self.mark_error_calls: list[tuple[object, str]] = []
 
     async def get_by_subscription_and_node_for_update(
         self,
@@ -34,6 +37,20 @@ class FakeRepository:
     async def set_desired_state(self, record, desired_state):
         self.set_desired_calls.append((record, desired_state))
         record.desired_state = desired_state
+        return record
+
+    async def mark_enabled(self, record):
+        self.mark_enabled_calls.append(record)
+        record.actual_state = VPNNodeActualState.ENABLED
+        record.last_error = None
+        record.retry_count = 0
+        return record
+
+    async def mark_error(self, record, *, error_message):
+        self.mark_error_calls.append((record, error_message))
+        record.actual_state = VPNNodeActualState.ERROR
+        record.last_error = error_message
+        record.retry_count = getattr(record, "retry_count", 0) + 1
         return record
 
 
@@ -131,3 +148,93 @@ async def test_initialize_pending_rejects_invalid_input(
             subscription_id=subscription_id,
             node_codes=node_codes,
         )
+
+
+@pytest.mark.asyncio
+async def test_record_provisioning_results_marks_each_node_independently():
+    frankfurt = SimpleNamespace(
+        subscription_id=41,
+        node_code="frankfurt",
+        desired_state=VPNNodeDesiredState.ENABLED,
+        actual_state=VPNNodeActualState.PENDING,
+        last_error=None,
+        retry_count=0,
+    )
+    netherlands = SimpleNamespace(
+        subscription_id=41,
+        node_code="netherlands",
+        desired_state=VPNNodeDesiredState.ENABLED,
+        actual_state=VPNNodeActualState.PENDING,
+        last_error=None,
+        retry_count=0,
+    )
+    repository = FakeRepository(
+        {
+            (41, "frankfurt"): frankfurt,
+            (41, "netherlands"): netherlands,
+        }
+    )
+    service = make_service(repository)
+
+    records = await service.record_provisioning_results(
+        subscription_id=41,
+        results=(
+            VpnNodeProvisionResult(node_name="frankfurt", enabled=True),
+            VpnNodeProvisionResult(
+                node_name="netherlands",
+                enabled=False,
+                error="temporary 3x-ui failure",
+            ),
+        ),
+    )
+
+    assert records == (frankfurt, netherlands)
+    assert repository.mark_enabled_calls == [frankfurt]
+    assert repository.mark_error_calls == [
+        (netherlands, "temporary 3x-ui failure")
+    ]
+    assert frankfurt.actual_state == VPNNodeActualState.ENABLED
+    assert frankfurt.retry_count == 0
+    assert netherlands.actual_state == VPNNodeActualState.ERROR
+    assert netherlands.last_error == "temporary 3x-ui failure"
+    assert netherlands.retry_count == 1
+
+
+@pytest.mark.asyncio
+async def test_record_provisioning_results_creates_missing_row_and_truncates_error():
+    repository = FakeRepository()
+    service = make_service(repository)
+    long_error = "x" * 1200
+
+    records = await service.record_provisioning_results(
+        subscription_id=41,
+        results=(
+            VpnNodeProvisionResult(
+                node_name="future-node",
+                enabled=False,
+                error=long_error,
+            ),
+        ),
+    )
+
+    assert len(records) == 1
+    assert repository.create_calls == [
+        {
+            "subscription_id": 41,
+            "node_code": "future-node",
+            "desired_state": VPNNodeDesiredState.ENABLED,
+            "actual_state": VPNNodeActualState.PENDING,
+        }
+    ]
+    assert len(repository.mark_error_calls[0][1]) == 1000
+
+
+@pytest.mark.asyncio
+async def test_record_provisioning_results_allows_empty_retry_result():
+    repository = FakeRepository()
+    service = make_service(repository)
+
+    assert await service.record_provisioning_results(
+        subscription_id=41,
+        results=(),
+    ) == ()

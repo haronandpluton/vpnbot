@@ -265,6 +265,10 @@ class SubscriptionService:
             subscription_id=subscription.id,
             node_codes=self.vpn_access_service.configured_node_names(),
         )
+        await self.node_access_state_service.record_provisioning_results(
+            subscription_id=subscription.id,
+            results=getattr(access, "node_results", ()),
+        )
 
         subscription = await self.subscription_repository.activate(subscription)
         subscription = await self.subscription_repository.mark_access_sent(

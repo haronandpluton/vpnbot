@@ -11,6 +11,7 @@ from app.services.vpn_access_service import (
     VpnAccessResult,
     VpnAccessService,
     VpnNodeOperationError,
+    VpnNodeProvisionResult,
     build_client_email,
     build_connect_url,
     build_idempotent_uuid,
@@ -190,6 +191,9 @@ async def test_create_access_generates_uuid_creates_xui_client_once_and_returns_
     assert isinstance(result, VpnAccessResult)
     assert result.uuid == "12345678-1234-5678-1234-567812345678"
     assert result.vpn_server_id is None
+    assert result.node_results == (
+        VpnNodeProvisionResult(node_name="test-node", enabled=True),
+    )
     assert (
         result.config_uri
         == "https://connect.presentvpn.click/connect/12345678-1234-5678-1234-567812345678?device=android"
@@ -240,27 +244,23 @@ async def test_create_access_forwards_expiration_to_xui_client(
 
 
 @pytest.mark.asyncio
-async def test_create_access_propagates_xui_error_and_returns_no_fake_success(
+async def test_create_access_raises_aggregate_error_when_every_node_fails(
     monkeypatch,
 ):
     fixed_uuid = UUID("12345678-1234-5678-1234-567812345678")
     monkeypatch.setattr(vpn_access_module, "uuid4", lambda: fixed_uuid)
 
-    xui_client = FakeXuiClient(fail_create=True)
+    xui_client = FakeXuiClient(name="frankfurt", fail_create=True)
     service = make_service(xui_client=xui_client)
 
-    with pytest.raises(XuiClientError, match="3x-ui client creation failed"):
+    with pytest.raises(VpnNodeOperationError) as exc_info:
         await service.create_access(user_id=777, device_limit=2)
 
-    assert xui_client.create_calls == [
-        {
-            "client_uuid": "12345678-1234-5678-1234-567812345678",
-            "email": "tg-777-12345678",
-            "device_limit": 2,
-            "comment": "telegram user 777",
-            "expires_at": None,
-        }
-    ]
+    assert exc_info.value.operation == "create"
+    assert exc_info.value.uuid == str(fixed_uuid)
+    assert exc_info.value.failures[0].node_name == "frankfurt"
+    assert "3x-ui client creation failed" in exc_info.value.failures[0].error
+    assert len(xui_client.create_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -290,8 +290,8 @@ async def test_create_access_generates_different_uuid_for_each_new_access(
 
 @pytest.mark.asyncio
 async def test_create_access_uses_same_retry_safe_uuid_on_all_configured_nodes():
-    first_node = FakeXuiClient()
-    second_node = FakeXuiClient()
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands")
     service = make_service(xui_clients=[first_node, second_node])
 
     first_result = await service.create_access(
@@ -314,24 +314,37 @@ async def test_create_access_uses_same_retry_safe_uuid_on_all_configured_nodes()
 
 
 @pytest.mark.asyncio
-async def test_create_access_stops_and_propagates_secondary_node_failure():
-    first_node = FakeXuiClient()
-    second_node = FakeXuiClient(fail_create=True)
-    service = make_service(xui_clients=[first_node, second_node])
+async def test_create_access_records_partial_failure_and_continues_other_nodes():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands", fail_create=True)
+    third_node = FakeXuiClient(name="sweden")
+    service = make_service(
+        xui_clients=[first_node, second_node, third_node]
+    )
 
-    with pytest.raises(XuiClientError, match="3x-ui client creation failed"):
-        await service.create_access(
-            user_id=777,
-            device_limit=2,
-            idempotency_key="order:23",
-        )
+    result = await service.create_access(
+        user_id=777,
+        device_limit=2,
+        idempotency_key="order:23",
+    )
 
+    assert result.node_results == (
+        VpnNodeProvisionResult(node_name="frankfurt", enabled=True),
+        VpnNodeProvisionResult(
+            node_name="netherlands",
+            enabled=False,
+            error="3x-ui client creation failed: test failure",
+        ),
+        VpnNodeProvisionResult(node_name="sweden", enabled=True),
+    )
     assert len(first_node.create_calls) == 1
     assert len(second_node.create_calls) == 1
-    assert (
-        first_node.create_calls[0]["client_uuid"]
-        == second_node.create_calls[0]["client_uuid"]
-    )
+    assert len(third_node.create_calls) == 1
+    assert {
+        first_node.create_calls[0]["client_uuid"],
+        second_node.create_calls[0]["client_uuid"],
+        third_node.create_calls[0]["client_uuid"],
+    } == {result.uuid}
 
 
 @pytest.mark.asyncio

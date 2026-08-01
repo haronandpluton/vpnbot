@@ -10,9 +10,21 @@ from sqlalchemy.orm import sessionmaker
 
 import app.payment_polling.processor as polling_processor_module
 import app.services.subscription_service as subscription_service_module
-from app.common.enums import CurrencyCode, NetworkCode, TariffCode
+from app.common.enums import (
+    CurrencyCode,
+    NetworkCode,
+    TariffCode,
+    VPNNodeActualState,
+    VPNNodeDesiredState,
+)
 from app.database.base import Base
-from app.database.models import Order, Payment, PaymentEvent, Subscription
+from app.database.models import (
+    Order,
+    Payment,
+    PaymentEvent,
+    Subscription,
+    SubscriptionNodeAccess,
+)
 from app.database.repositories.orders import OrderRepository
 from app.database.repositories.payment_options import PaymentOptionRepository
 from app.database.repositories.users import UserRepository
@@ -27,6 +39,7 @@ from app.services.payment_activation_service import PaymentActivationService
 from app.services.telegram_stars_payment_service import (
     TelegramStarsPaymentService,
 )
+from app.services.vpn_access_service import VpnNodeProvisionResult
 
 
 class NaiveDateTime(datetime):
@@ -116,6 +129,12 @@ class FakeVpnAccessService:
             uuid=uuid,
             vpn_server_id=None,
             config_uri=f"https://connect.test/{uuid}?device=android",
+            node_results=(
+                VpnNodeProvisionResult(
+                    node_name="integration-node",
+                    enabled=True,
+                ),
+            ),
         )
 
     async def extend_access(
@@ -371,6 +390,20 @@ async def test_polling_confirmed_payment_activates_subscription_once(session_fac
         assert await count_rows(session, PaymentEvent) == 1
         assert await count_rows(session, Payment) == 1
         assert await count_rows(session, Subscription) == 1
+        assert await count_rows(session, SubscriptionNodeAccess) == 1
+
+        node_state_result = await session.execute(
+            select(SubscriptionNodeAccess).where(
+                SubscriptionNodeAccess.subscription_id == subscription.id
+            )
+        )
+        node_state = node_state_result.scalar_one()
+        assert node_state.node_code == "integration-node"
+        assert node_state.desired_state == VPNNodeDesiredState.ENABLED
+        assert node_state.actual_state == VPNNodeActualState.ENABLED
+        assert node_state.last_error is None
+        assert node_state.retry_count == 0
+        assert node_state.provisioned_at is not None
         assert FakeVpnAccessService.create_calls == [
             {
                 "user_id": user.id,

@@ -164,12 +164,22 @@ class FakeVpnAccessService:
 class FakeNodeAccessStateService:
     def __init__(self) -> None:
         self.initialize_pending_calls = []
+        self.record_provisioning_results_calls = []
 
     async def initialize_pending(self, *, subscription_id, node_codes):
         self.initialize_pending_calls.append(
             {
                 "subscription_id": subscription_id,
                 "node_codes": tuple(node_codes),
+            }
+        )
+        return ()
+
+    async def record_provisioning_results(self, *, subscription_id, results):
+        self.record_provisioning_results_calls.append(
+            {
+                "subscription_id": subscription_id,
+                "results": tuple(results),
             }
         )
         return ()

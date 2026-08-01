@@ -9,7 +9,10 @@ import app.services.subscription_service as subscription_module
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.subscription_service import SubscriptionService
-from app.services.vpn_access_service import VpnAccessResult
+from app.services.vpn_access_service import (
+    VpnAccessResult,
+    VpnNodeProvisionResult,
+)
 
 
 class FakeSession:
@@ -176,6 +179,10 @@ class FakeVpnAccessService:
             uuid="new-vpn-uuid",
             vpn_server_id=11,
             config_uri="https://connect/new-vpn-uuid",
+            node_results=tuple(
+                VpnNodeProvisionResult(node_name=name, enabled=True)
+                for name in self.node_names
+            ),
         )
 
     async def extend_access(
@@ -213,9 +220,14 @@ class FakeVpnAccessService:
 class FakeNodeAccessStateService:
     def __init__(self) -> None:
         self.calls: list[dict] = []
+        self.record_calls: list[dict] = []
 
     async def initialize_pending(self, **kwargs):
         self.calls.append(kwargs)
+        return ()
+
+    async def record_provisioning_results(self, **kwargs):
+        self.record_calls.append(kwargs)
         return ()
 
 
@@ -369,6 +381,21 @@ async def test_paid_order_without_active_subscription_creates_new_subscription_a
         {
             "subscription_id": subscription.id,
             "node_codes": ("frankfurt", "netherlands"),
+        }
+    ]
+    assert service.node_access_state_service.record_calls == [
+        {
+            "subscription_id": subscription.id,
+            "results": (
+                VpnNodeProvisionResult(
+                    node_name="frankfurt",
+                    enabled=True,
+                ),
+                VpnNodeProvisionResult(
+                    node_name="netherlands",
+                    enabled=True,
+                ),
+            ),
         }
     ]
     assert service.session.commit_count == 1

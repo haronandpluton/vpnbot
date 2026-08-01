@@ -19,12 +19,20 @@ class VpnAccessResult:
     uuid: str
     vpn_server_id: int | None
     config_uri: str
+    node_results: tuple["VpnNodeProvisionResult", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class VpnNodeFailure:
     node_name: str
     error: str
+
+
+@dataclass(frozen=True, slots=True)
+class VpnNodeProvisionResult:
+    node_name: str
+    enabled: bool
+    error: str | None = None
 
 
 class VpnNodeOperationError(RuntimeError):
@@ -172,14 +180,48 @@ class VpnAccessService:
             )
 
         email = build_client_email(user_id, access_uuid)
+        xui_clients = self._configured_xui_clients()
+        node_names = self.configured_node_names()
+        node_results: list[VpnNodeProvisionResult] = []
+        failures: list[VpnNodeFailure] = []
 
-        for xui_client in self._configured_xui_clients():
-            await xui_client.create_vless_client(
-                client_uuid=access_uuid,
-                email=email,
-                device_limit=device_limit,
-                expires_at=expires_at,
-                comment=f"telegram user {user_id}",
+        for node_name, xui_client in zip(node_names, xui_clients, strict=True):
+            try:
+                await xui_client.create_vless_client(
+                    client_uuid=access_uuid,
+                    email=email,
+                    device_limit=device_limit,
+                    expires_at=expires_at,
+                    comment=f"telegram user {user_id}",
+                )
+            except Exception as error:  # noqa: BLE001 - isolate node failures
+                error_message = str(error)
+                failures.append(
+                    VpnNodeFailure(
+                        node_name=node_name,
+                        error=error_message,
+                    )
+                )
+                node_results.append(
+                    VpnNodeProvisionResult(
+                        node_name=node_name,
+                        enabled=False,
+                        error=error_message,
+                    )
+                )
+            else:
+                node_results.append(
+                    VpnNodeProvisionResult(
+                        node_name=node_name,
+                        enabled=True,
+                    )
+                )
+
+        if failures and len(failures) == len(xui_clients):
+            raise VpnNodeOperationError(
+                operation="create",
+                uuid=access_uuid,
+                failures=failures,
             )
 
         config_uri = build_connect_url(
@@ -191,6 +233,7 @@ class VpnAccessService:
             uuid=access_uuid,
             vpn_server_id=None,
             config_uri=config_uri,
+            node_results=tuple(node_results),
         )
 
     async def extend_access(
