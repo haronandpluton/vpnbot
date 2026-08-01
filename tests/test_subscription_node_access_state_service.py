@@ -11,6 +11,7 @@ from app.services.subscription_node_access_state_service import (
 from app.services.vpn_access_service import (
     VpnNodeProvisionResult,
     VpnNodeRenewalResult,
+    VpnNodeStateChangeResult,
 )
 
 
@@ -427,6 +428,89 @@ async def test_record_failed_renewal_results_rejects_invalid_subscription_id():
 
     with pytest.raises(ValueError, match="subscription_id must be positive"):
         await service.record_failed_renewal_results(
+            subscription_id=0,
+            results=(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_record_successful_enable_results_restores_enabled_state():
+    provisioned_at = object()
+    record = SimpleNamespace(
+        subscription_id=41,
+        node_code="frankfurt",
+        desired_state=VPNNodeDesiredState.DISABLED,
+        actual_state=VPNNodeActualState.ERROR,
+        last_error="temporary enable failure",
+        retry_count=3,
+        provisioned_at=provisioned_at,
+        disabled_at=object(),
+    )
+    repository = FakeRepository({(41, "frankfurt"): record})
+    service = make_service(repository)
+
+    records = await service.record_successful_enable_results(
+        subscription_id=41,
+        results=(
+            VpnNodeStateChangeResult(
+                node_name="frankfurt",
+                succeeded=True,
+            ),
+            VpnNodeStateChangeResult(
+                node_name="netherlands",
+                succeeded=False,
+                error="panel unavailable",
+            ),
+        ),
+    )
+
+    assert records == (record,)
+    assert repository.get_calls == [(41, "frankfurt")]
+    assert repository.set_desired_calls == [
+        (record, VPNNodeDesiredState.ENABLED)
+    ]
+    assert repository.mark_renewal_succeeded_calls == [record]
+    assert record.desired_state == VPNNodeDesiredState.ENABLED
+    assert record.actual_state == VPNNodeActualState.ENABLED
+    assert record.last_error is None
+    assert record.retry_count == 0
+    assert record.disabled_at is None
+    assert record.provisioned_at is provisioned_at
+
+
+@pytest.mark.asyncio
+async def test_record_successful_enable_results_creates_missing_node_row():
+    repository = FakeRepository()
+    service = make_service(repository)
+
+    records = await service.record_successful_enable_results(
+        subscription_id=41,
+        results=(
+            VpnNodeStateChangeResult(
+                node_name="future-node",
+                succeeded=True,
+            ),
+        ),
+    )
+
+    assert len(records) == 1
+    assert repository.create_calls == [
+        {
+            "subscription_id": 41,
+            "node_code": "future-node",
+            "desired_state": VPNNodeDesiredState.ENABLED,
+            "actual_state": VPNNodeActualState.PENDING,
+        }
+    ]
+    assert repository.mark_renewal_succeeded_calls == [records[0]]
+
+
+@pytest.mark.asyncio
+async def test_record_successful_enable_results_rejects_invalid_subscription_id():
+    service = make_service(FakeRepository())
+
+    with pytest.raises(ValueError, match="subscription_id must be positive"):
+        await service.record_successful_enable_results(
             subscription_id=0,
             results=(),
         )
