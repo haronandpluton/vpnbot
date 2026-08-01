@@ -23,11 +23,17 @@ class FakeXuiClient:
         *,
         fail_create: bool = False,
         fail_update: bool = False,
+        fail_enable: bool = False,
+        fail_disable: bool = False,
     ) -> None:
         self.fail_create = fail_create
         self.fail_update = fail_update
+        self.fail_enable = fail_enable
+        self.fail_disable = fail_disable
         self.create_calls: list[dict] = []
         self.update_calls: list[dict] = []
+        self.enable_calls: list[str] = []
+        self.disable_calls: list[str] = []
 
     async def create_vless_client(
             self,
@@ -68,6 +74,16 @@ class FakeXuiClient:
 
         if self.fail_update:
             raise XuiClientError("3x-ui client update failed: test failure")
+
+    async def enable_vless_client(self, *, client_uuid: str) -> None:
+        self.enable_calls.append(client_uuid)
+        if self.fail_enable:
+            raise XuiClientError("3x-ui client enable failed: test failure")
+
+    async def disable_vless_client(self, *, client_uuid: str) -> None:
+        self.disable_calls.append(client_uuid)
+        if self.fail_disable:
+            raise XuiClientError("3x-ui client disable failed: test failure")
 
 
 def make_service(
@@ -378,3 +394,55 @@ async def test_get_config_returns_existing_connect_url_without_creating_or_exten
 
     assert config_uri == "https://connect.presentvpn.click/connect/existing-uuid?device=android"
     assert xui_client.create_calls == []
+
+@pytest.mark.asyncio
+async def test_disable_access_disables_same_uuid_on_all_configured_nodes():
+    first_node = FakeXuiClient()
+    second_node = FakeXuiClient()
+    service = make_service(xui_clients=[first_node, second_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    result = await service.disable_access(client_uuid)
+
+    assert result == VpnAccessResult(
+        uuid=client_uuid,
+        vpn_server_id=None,
+        config_uri=(
+            "https://connect.presentvpn.click/connect/"
+            f"{client_uuid}?device=android"
+        ),
+    )
+    assert first_node.disable_calls == [client_uuid]
+    assert second_node.disable_calls == [client_uuid]
+    assert first_node.enable_calls == []
+    assert second_node.enable_calls == []
+
+
+@pytest.mark.asyncio
+async def test_enable_access_enables_same_uuid_on_all_configured_nodes():
+    first_node = FakeXuiClient()
+    second_node = FakeXuiClient()
+    service = make_service(xui_clients=[first_node, second_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    result = await service.enable_access(client_uuid)
+
+    assert result.uuid == client_uuid
+    assert first_node.enable_calls == [client_uuid]
+    assert second_node.enable_calls == [client_uuid]
+    assert first_node.disable_calls == []
+    assert second_node.disable_calls == []
+
+
+@pytest.mark.asyncio
+async def test_disable_access_propagates_secondary_node_failure():
+    first_node = FakeXuiClient()
+    second_node = FakeXuiClient(fail_disable=True)
+    service = make_service(xui_clients=[first_node, second_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    with pytest.raises(XuiClientError, match="3x-ui client disable failed"):
+        await service.disable_access(client_uuid)
+
+    assert first_node.disable_calls == [client_uuid]
+    assert second_node.disable_calls == [client_uuid]

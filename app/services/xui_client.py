@@ -169,6 +169,93 @@ class XuiClient:
                 expiry_time_ms=expiry_time_ms,
             )
 
+    async def enable_vless_client(self, *, client_uuid: str) -> None:
+        """Idempotently enable an existing VLESS client."""
+        await self._set_vless_client_enabled(
+            client_uuid=client_uuid,
+            enabled=True,
+        )
+
+    async def disable_vless_client(self, *, client_uuid: str) -> None:
+        """Idempotently disable an existing VLESS client."""
+        await self._set_vless_client_enabled(
+            client_uuid=client_uuid,
+            enabled=False,
+        )
+
+    async def _set_vless_client_enabled(
+        self,
+        *,
+        client_uuid: str,
+        enabled: bool,
+    ) -> None:
+        self._validate_uuid(client_uuid)
+        desired_enabled = bool(enabled)
+
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            csrf = await self._login(client)
+            existing = await self._get_client_by_uuid(client, client_uuid)
+
+            if existing is None:
+                raise XuiClientError(
+                    "3x-ui client not found on "
+                    f"{self.config.name}: uuid={client_uuid}"
+                )
+
+            if bool(existing.get("enable", True)) == desired_enabled:
+                return
+
+            updated = dict(existing)
+            updated["id"] = client_uuid
+            updated["enable"] = desired_enabled
+            payload = {
+                "id": self.config.inbound_id,
+                "settings": json.dumps(
+                    {"clients": [updated]},
+                    separators=(",", ":"),
+                ),
+            }
+
+            try:
+                response = await client.post(
+                    f"{self.base_url}/panel/api/inbounds/updateClient/{client_uuid}",
+                    json=payload,
+                    headers=self._api_headers(csrf),
+                )
+                data = self._json(response)
+            except (httpx.HTTPError, XuiClientError) as error:
+                if await self._client_has_enabled_state(
+                    client,
+                    client_uuid=client_uuid,
+                    enabled=desired_enabled,
+                ):
+                    return
+                raise error
+
+            if not data.get("success"):
+                if await self._client_has_enabled_state(
+                    client,
+                    client_uuid=client_uuid,
+                    enabled=desired_enabled,
+                ):
+                    return
+
+                message = data.get("msg") or "unknown 3x-ui client state update error"
+                raise XuiClientError(
+                    "3x-ui client state update failed on "
+                    f"{self.config.name}: {message}"
+                )
+
+            if not await self._client_has_enabled_state(
+                client,
+                client_uuid=client_uuid,
+                enabled=desired_enabled,
+            ):
+                raise XuiClientError(
+                    "3x-ui client state update was not applied on "
+                    f"{self.config.name}: uuid={client_uuid} enabled={desired_enabled}"
+                )
+
     async def _update_existing_client(
         self,
         client: httpx.AsyncClient,
@@ -314,6 +401,19 @@ class XuiClient:
             existing,
             device_limit=device_limit,
             expiry_time_ms=expiry_time_ms,
+        )
+
+    async def _client_has_enabled_state(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        client_uuid: str,
+        enabled: bool,
+    ) -> bool:
+        existing = await self._get_client_by_uuid(client, client_uuid)
+        return (
+            existing is not None
+            and bool(existing.get("enable", True)) == bool(enabled)
         )
 
     @staticmethod

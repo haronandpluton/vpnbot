@@ -165,6 +165,28 @@ class VpnAccessService:
             config_uri=config_uri,
         )
 
+    async def enable_access(self, uuid: str) -> VpnAccessResult:
+        for xui_client in self._configured_xui_clients():
+            await xui_client.enable_vless_client(client_uuid=uuid)
+
+        return self._access_result(uuid)
+
+    async def disable_access(self, uuid: str) -> VpnAccessResult:
+        for xui_client in self._configured_xui_clients():
+            await xui_client.disable_vless_client(client_uuid=uuid)
+
+        return self._access_result(uuid)
+
+    def _access_result(self, uuid: str) -> VpnAccessResult:
+        return VpnAccessResult(
+            uuid=uuid,
+            vpn_server_id=None,
+            config_uri=build_connect_url(
+                uuid,
+                public_base_url=self.public_base_url,
+            ),
+        )
+
     async def get_config(
         self,
         uuid: str,
