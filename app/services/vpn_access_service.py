@@ -42,6 +42,13 @@ class VpnNodeRenewalResult:
     error: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class VpnNodeStateChangeResult:
+    node_name: str
+    succeeded: bool
+    error: str | None = None
+
+
 class VpnNodeOperationError(RuntimeError):
     def __init__(
         self,
@@ -308,6 +315,36 @@ class VpnAccessService:
             await xui_client.enable_vless_client(client_uuid=uuid)
 
         return self._access_result(uuid)
+
+    async def enable_access_with_results(
+        self,
+        uuid: str,
+    ) -> tuple[VpnNodeStateChangeResult, ...]:
+        """Enable every configured node and report each result independently."""
+        xui_clients = self._configured_xui_clients()
+        node_names = self.configured_node_names()
+        results: list[VpnNodeStateChangeResult] = []
+
+        for node_name, xui_client in zip(node_names, xui_clients, strict=True):
+            try:
+                await xui_client.enable_vless_client(client_uuid=uuid)
+            except Exception as error:  # noqa: BLE001 - isolate node failures
+                results.append(
+                    VpnNodeStateChangeResult(
+                        node_name=node_name,
+                        succeeded=False,
+                        error=str(error),
+                    )
+                )
+            else:
+                results.append(
+                    VpnNodeStateChangeResult(
+                        node_name=node_name,
+                        succeeded=True,
+                    )
+                )
+
+        return tuple(results)
 
     async def disable_access(self, uuid: str) -> VpnAccessResult:
         failures: list[VpnNodeFailure] = []

@@ -13,6 +13,7 @@ from app.services.vpn_access_service import (
     VpnNodeOperationError,
     VpnNodeProvisionResult,
     VpnNodeRenewalResult,
+    VpnNodeStateChangeResult,
     build_client_email,
     build_connect_url,
     build_idempotent_uuid,
@@ -505,6 +506,45 @@ async def test_enable_access_enables_same_uuid_on_all_configured_nodes():
     assert second_node.enable_calls == [client_uuid]
     assert first_node.disable_calls == []
     assert second_node.disable_calls == []
+
+
+@pytest.mark.asyncio
+async def test_enable_access_with_results_reports_every_configured_node():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands", fail_enable=True)
+    third_node = FakeXuiClient(name="sweden")
+    service = make_service(xui_clients=[first_node, second_node, third_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    results = await service.enable_access_with_results(client_uuid)
+
+    assert results == (
+        VpnNodeStateChangeResult(node_name="frankfurt", succeeded=True),
+        VpnNodeStateChangeResult(
+            node_name="netherlands",
+            succeeded=False,
+            error="3x-ui client enable failed: test failure",
+        ),
+        VpnNodeStateChangeResult(node_name="sweden", succeeded=True),
+    )
+    assert first_node.enable_calls == [client_uuid]
+    assert second_node.enable_calls == [client_uuid]
+    assert third_node.enable_calls == [client_uuid]
+
+
+@pytest.mark.asyncio
+async def test_enable_access_with_results_returns_success_for_all_nodes():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands")
+    service = make_service(xui_clients=[first_node, second_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    results = await service.enable_access_with_results(client_uuid)
+
+    assert results == (
+        VpnNodeStateChangeResult(node_name="frankfurt", succeeded=True),
+        VpnNodeStateChangeResult(node_name="netherlands", succeeded=True),
+    )
 
 
 @pytest.mark.asyncio
