@@ -9,6 +9,9 @@ from app.database.repositories.subscriptions import SubscriptionRepository
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
+from app.services.subscription_node_access_state_service import (
+    SubscriptionNodeAccessStateService,
+)
 from app.services.vpn_access_service import VpnAccessService
 
 
@@ -17,11 +20,18 @@ class SubscriptionService:
         self,
         session: AsyncSession,
         vpn_access_service: VpnAccessService | None = None,
+        node_access_state_service: (
+            SubscriptionNodeAccessStateService | None
+        ) = None,
     ) -> None:
         self.session = session
         self.order_repository = OrderRepository(session)
         self.subscription_repository = SubscriptionRepository(session)
         self.vpn_access_service = vpn_access_service or VpnAccessService()
+        self.node_access_state_service = (
+            node_access_state_service
+            or SubscriptionNodeAccessStateService(session)
+        )
 
     async def activate_or_extend_by_order(self, order_id: int):
         """
@@ -249,6 +259,11 @@ class SubscriptionService:
             device_limit=order.device_limit,
             starts_at=now,
             expires_at=expires_at,
+        )
+
+        await self.node_access_state_service.initialize_pending(
+            subscription_id=subscription.id,
+            node_codes=self.vpn_access_service.configured_node_names(),
         )
 
         subscription = await self.subscription_repository.activate(subscription)

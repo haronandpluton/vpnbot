@@ -477,3 +477,31 @@ async def test_disable_access_retry_rechecks_all_nodes_and_completes_after_recov
     assert result.uuid == client_uuid
     assert first_node.disable_calls == [client_uuid, client_uuid]
     assert second_node.disable_calls == [client_uuid, client_uuid]
+
+
+def test_configured_node_names_returns_current_and_future_configured_nodes():
+    service = make_service(
+        xui_clients=[
+            FakeXuiClient(name="frankfurt"),
+            FakeXuiClient(name="netherlands"),
+            FakeXuiClient(name="sweden"),
+        ]
+    )
+
+    assert service.configured_node_names() == (
+        "frankfurt",
+        "netherlands",
+        "sweden",
+    )
+
+
+def test_configured_node_names_rejects_duplicate_names():
+    service = make_service(
+        xui_clients=[
+            FakeXuiClient(name="frankfurt"),
+            FakeXuiClient(name="frankfurt"),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="Duplicate configured VPN node name"):
+        service.configured_node_names()

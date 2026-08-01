@@ -138,9 +138,16 @@ class FakeSubscriptionRepository:
 
 
 class FakeVpnAccessService:
-    def __init__(self, *, fail_create: bool = False, fail_extend: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_create: bool = False,
+        fail_extend: bool = False,
+        node_names: tuple[str, ...] = ("frankfurt", "netherlands"),
+    ) -> None:
         self.fail_create = fail_create
         self.fail_extend = fail_extend
+        self.node_names = node_names
         self.create_calls: list[dict] = []
         self.extend_calls: list[dict] = []
         self.get_config_calls: list[dict] = []
@@ -198,6 +205,18 @@ class FakeVpnAccessService:
     async def get_config(self, *, uuid: str, device_limit: int):
         self.get_config_calls.append({"uuid": uuid, "device_limit": device_limit})
         return f"https://connect/{uuid}"
+
+    def configured_node_names(self) -> tuple[str, ...]:
+        return self.node_names
+
+
+class FakeNodeAccessStateService:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def initialize_pending(self, **kwargs):
+        self.calls.append(kwargs)
+        return ()
 
 
 class FakeSubscriptionMetaSyncService:
@@ -262,11 +281,15 @@ def make_service(
     order,
     subscription_repository: FakeSubscriptionRepository | None = None,
     vpn_access_service: FakeVpnAccessService | None = None,
+    node_access_state_service: FakeNodeAccessStateService | None = None,
 ):
     service = SubscriptionService.__new__(SubscriptionService)
     service.session = FakeSession()
     service.subscription_repository = subscription_repository or FakeSubscriptionRepository()
     service.vpn_access_service = vpn_access_service or FakeVpnAccessService()
+    service.node_access_state_service = (
+        node_access_state_service or FakeNodeAccessStateService()
+    )
     service._get_order_for_activation = lambda order_id: _return_order(order, order_id)
     return service
 
@@ -342,6 +365,12 @@ async def test_paid_order_without_active_subscription_creates_new_subscription_a
     assert len(repository.create_calls) == 1
     assert repository.activate_calls == [subscription.id]
     assert repository.mark_access_sent_calls == [subscription.id]
+    assert service.node_access_state_service.calls == [
+        {
+            "subscription_id": subscription.id,
+            "node_codes": ("frankfurt", "netherlands"),
+        }
+    ]
     assert service.session.commit_count == 1
     assert service.session.rollback_count == 0
     assert service.session.refresh_calls == [subscription]

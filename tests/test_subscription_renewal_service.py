@@ -157,6 +157,23 @@ class FakeVpnAccessService:
         )
         return f"https://connect/{uuid}"
 
+    def configured_node_names(self) -> tuple[str, ...]:
+        return ("renewal-test-node",)
+
+
+class FakeNodeAccessStateService:
+    def __init__(self) -> None:
+        self.initialize_pending_calls = []
+
+    async def initialize_pending(self, *, subscription_id, node_codes):
+        self.initialize_pending_calls.append(
+            {
+                "subscription_id": subscription_id,
+                "node_codes": tuple(node_codes),
+            }
+        )
+        return ()
+
 
 class FakeMetaSyncService:
     calls = []
@@ -228,6 +245,7 @@ def make_service(order, repository, vpn_access=None):
     service.session = FakeSession()
     service.subscription_repository = repository
     service.vpn_access_service = vpn_access or FakeVpnAccessService()
+    service.node_access_state_service = FakeNodeAccessStateService()
 
     async def get_order(order_id):
         return order if order is not None and order.id == order_id else None
@@ -266,6 +284,12 @@ async def test_new_purchase_records_activated_subscription_id():
             "device_limit": 1,
             "expires_at": subscription.expires_at,
             "idempotency_key": f"order:{order.id}",
+        }
+    ]
+    assert service.node_access_state_service.initialize_pending_calls == [
+        {
+            "subscription_id": subscription.id,
+            "node_codes": ("renewal-test-node",),
         }
     ]
     assert service.session.commit_count == 1

@@ -130,6 +130,32 @@ class VpnAccessService:
         # for old custom wiring that only assigns xui_client.
         return [self.xui_client]
 
+    def configured_node_names(self) -> tuple[str, ...]:
+        """Return stable node codes used by per-subscription state tracking."""
+        result: list[str] = []
+        seen: set[str] = set()
+
+        for index, xui_client in enumerate(self._configured_xui_clients(), start=1):
+            config = getattr(xui_client, "config", None)
+            node_name = str(
+                getattr(config, "name", "") or f"node-{index}"
+            ).strip()
+
+            if not node_name:
+                raise ValueError("Configured VPN node name must not be empty")
+            if node_name in seen:
+                raise ValueError(
+                    f"Duplicate configured VPN node name: {node_name}"
+                )
+
+            seen.add(node_name)
+            result.append(node_name)
+
+        if not result:
+            raise ValueError("At least one VPN node must be configured")
+
+        return tuple(result)
+
     async def create_access(
         self,
         user_id: int,

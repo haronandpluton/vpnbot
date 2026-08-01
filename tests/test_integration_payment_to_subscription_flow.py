@@ -144,6 +144,9 @@ class FakeVpnAccessService:
         )
         return f"https://connect.test/{uuid}?device=android"
 
+    def configured_node_names(self) -> tuple[str, ...]:
+        return ("integration-node",)
+
 
 class FakeSubscriptionMetaSyncService:
     calls: list[dict] = []
