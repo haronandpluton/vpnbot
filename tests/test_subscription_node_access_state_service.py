@@ -514,3 +514,117 @@ async def test_record_successful_enable_results_rejects_invalid_subscription_id(
             subscription_id=0,
             results=(),
         )
+
+@pytest.mark.asyncio
+async def test_record_failed_enable_results_marks_only_failed_nodes():
+    successful = SimpleNamespace(
+        subscription_id=41,
+        node_code="frankfurt",
+        desired_state=VPNNodeDesiredState.ENABLED,
+        actual_state=VPNNodeActualState.ENABLED,
+        last_error=None,
+        retry_count=0,
+    )
+    failed = SimpleNamespace(
+        subscription_id=41,
+        node_code="netherlands",
+        desired_state=VPNNodeDesiredState.DISABLED,
+        actual_state=VPNNodeActualState.DISABLED,
+        last_error=None,
+        retry_count=2,
+    )
+    repository = FakeRepository(
+        {
+            (41, "frankfurt"): successful,
+            (41, "netherlands"): failed,
+        }
+    )
+    service = make_service(repository)
+
+    records = await service.record_failed_enable_results(
+        subscription_id=41,
+        results=(
+            VpnNodeStateChangeResult(
+                node_name="frankfurt",
+                succeeded=True,
+            ),
+            VpnNodeStateChangeResult(
+                node_name="netherlands",
+                succeeded=False,
+                error="panel unavailable",
+            ),
+        ),
+    )
+
+    assert records == (failed,)
+    assert repository.get_calls == [(41, "netherlands")]
+    assert repository.set_desired_calls == [
+        (failed, VPNNodeDesiredState.ENABLED)
+    ]
+    assert repository.mark_error_calls == [
+        (failed, "panel unavailable")
+    ]
+    assert failed.desired_state == VPNNodeDesiredState.ENABLED
+    assert failed.actual_state == VPNNodeActualState.ERROR
+    assert failed.last_error == "panel unavailable"
+    assert failed.retry_count == 3
+    assert successful.actual_state == VPNNodeActualState.ENABLED
+
+
+@pytest.mark.asyncio
+async def test_record_failed_enable_results_creates_missing_row_and_truncates_error():
+    repository = FakeRepository()
+    service = make_service(repository)
+
+    records = await service.record_failed_enable_results(
+        subscription_id=41,
+        results=(
+            VpnNodeStateChangeResult(
+                node_name="future-node",
+                succeeded=False,
+                error="x" * 1200,
+            ),
+        ),
+    )
+
+    assert len(records) == 1
+    assert repository.create_calls == [
+        {
+            "subscription_id": 41,
+            "node_code": "future-node",
+            "desired_state": VPNNodeDesiredState.ENABLED,
+            "actual_state": VPNNodeActualState.PENDING,
+        }
+    ]
+    assert len(repository.mark_error_calls[0][1]) == 1000
+    assert records[0].actual_state == VPNNodeActualState.ERROR
+    assert records[0].retry_count == 1
+
+
+@pytest.mark.asyncio
+async def test_record_failed_enable_results_uses_default_error_message():
+    repository = FakeRepository()
+    service = make_service(repository)
+
+    await service.record_failed_enable_results(
+        subscription_id=41,
+        results=(
+            VpnNodeStateChangeResult(
+                node_name="netherlands",
+                succeeded=False,
+            ),
+        ),
+    )
+
+    assert repository.mark_error_calls[0][1] == "VPN node enable failed"
+
+
+@pytest.mark.asyncio
+async def test_record_failed_enable_results_rejects_invalid_subscription_id():
+    service = make_service(FakeRepository())
+
+    with pytest.raises(ValueError, match="subscription_id must be positive"):
+        await service.record_failed_enable_results(
+            subscription_id=0,
+            results=(),
+        )
