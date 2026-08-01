@@ -141,6 +141,47 @@ class SubscriptionNodeAccessStateService:
 
         return tuple(recorded)
 
+    async def record_failed_renewal_results(
+        self,
+        *,
+        subscription_id: int,
+        results: Iterable[VpnNodeRenewalResult],
+    ) -> tuple[SubscriptionNodeAccess, ...]:
+        """Persist only failed per-node renewal synchronization results."""
+        if subscription_id <= 0:
+            raise ValueError("subscription_id must be positive")
+
+        recorded: list[SubscriptionNodeAccess] = []
+
+        for result in results:
+            if result.updated:
+                continue
+
+            node_code = str(result.node_name).strip()
+            if not node_code:
+                raise ValueError("VPN node code must not be empty")
+
+            record = await self.repository.get_by_subscription_and_node_for_update(
+                subscription_id,
+                node_code,
+            )
+            if record is None:
+                record = await self.repository.create(
+                    subscription_id=subscription_id,
+                    node_code=node_code,
+                    desired_state=VPNNodeDesiredState.ENABLED,
+                    actual_state=VPNNodeActualState.PENDING,
+                )
+
+            error_message = (result.error or "VPN node renewal failed")[:1000]
+            record = await self.repository.mark_error(
+                record,
+                error_message=error_message,
+            )
+            recorded.append(record)
+
+        return tuple(recorded)
+
     @staticmethod
     def _normalize_node_codes(node_codes: Iterable[str]) -> tuple[str, ...]:
         result: list[str] = []

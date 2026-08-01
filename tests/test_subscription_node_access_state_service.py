@@ -323,3 +323,110 @@ async def test_record_successful_renewal_results_rejects_invalid_subscription_id
             subscription_id=0,
             results=(),
         )
+
+@pytest.mark.asyncio
+async def test_record_failed_renewal_results_marks_only_failed_nodes():
+    frankfurt = SimpleNamespace(
+        subscription_id=41,
+        node_code="frankfurt",
+        desired_state=VPNNodeDesiredState.ENABLED,
+        actual_state=VPNNodeActualState.ENABLED,
+        last_error=None,
+        retry_count=0,
+    )
+    netherlands = SimpleNamespace(
+        subscription_id=41,
+        node_code="netherlands",
+        desired_state=VPNNodeDesiredState.ENABLED,
+        actual_state=VPNNodeActualState.ENABLED,
+        last_error=None,
+        retry_count=2,
+    )
+    repository = FakeRepository(
+        {
+            (41, "frankfurt"): frankfurt,
+            (41, "netherlands"): netherlands,
+        }
+    )
+    service = make_service(repository)
+
+    records = await service.record_failed_renewal_results(
+        subscription_id=41,
+        results=(
+            VpnNodeRenewalResult(node_name="frankfurt", updated=True),
+            VpnNodeRenewalResult(
+                node_name="netherlands",
+                updated=False,
+                error="panel unavailable",
+            ),
+        ),
+    )
+
+    assert records == (netherlands,)
+    assert repository.get_calls == [(41, "netherlands")]
+    assert repository.mark_error_calls == [
+        (netherlands, "panel unavailable")
+    ]
+    assert netherlands.actual_state == VPNNodeActualState.ERROR
+    assert netherlands.last_error == "panel unavailable"
+    assert netherlands.retry_count == 3
+    assert frankfurt.actual_state == VPNNodeActualState.ENABLED
+
+
+@pytest.mark.asyncio
+async def test_record_failed_renewal_results_creates_missing_row_and_truncates_error():
+    repository = FakeRepository()
+    service = make_service(repository)
+
+    records = await service.record_failed_renewal_results(
+        subscription_id=41,
+        results=(
+            VpnNodeRenewalResult(
+                node_name="future-node",
+                updated=False,
+                error="x" * 1200,
+            ),
+        ),
+    )
+
+    assert len(records) == 1
+    assert repository.create_calls == [
+        {
+            "subscription_id": 41,
+            "node_code": "future-node",
+            "desired_state": VPNNodeDesiredState.ENABLED,
+            "actual_state": VPNNodeActualState.PENDING,
+        }
+    ]
+    assert len(repository.mark_error_calls[0][1]) == 1000
+    assert records[0].actual_state == VPNNodeActualState.ERROR
+    assert records[0].retry_count == 1
+
+
+@pytest.mark.asyncio
+async def test_record_failed_renewal_results_uses_default_error_message():
+    repository = FakeRepository()
+    service = make_service(repository)
+
+    await service.record_failed_renewal_results(
+        subscription_id=41,
+        results=(
+            VpnNodeRenewalResult(
+                node_name="netherlands",
+                updated=False,
+            ),
+        ),
+    )
+
+    assert repository.mark_error_calls[0][1] == "VPN node renewal failed"
+
+
+@pytest.mark.asyncio
+async def test_record_failed_renewal_results_rejects_invalid_subscription_id():
+    service = make_service(FakeRepository())
+
+    with pytest.raises(ValueError, match="subscription_id must be positive"):
+        await service.record_failed_renewal_results(
+            subscription_id=0,
+            results=(),
+        )
