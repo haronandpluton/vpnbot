@@ -8,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import get_settings
 from app.services.subscription_expiration_service import SubscriptionExpirationService
+from app.services.subscription_node_access_reconciliation_service import (
+    SubscriptionNodeAccessReconciliationService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +66,9 @@ class SubscriptionExpirationScheduler:
             result = await SubscriptionExpirationService(session).expire_due_subscriptions(
                 sync_metadata=True,
             )
+            reconciliation_result = await (
+                SubscriptionNodeAccessReconciliationService(session).reconcile()
+            )
 
         if result.expired_count > 0:
             vpn_sync_status = getattr(result, "vpn_sync_status", None)
@@ -92,4 +98,21 @@ class SubscriptionExpirationScheduler:
         else:
             logger.info(
                 "Subscription expiration check completed: no expired active subscriptions."
+            )
+
+        if reconciliation_result.checked_count > 0:
+            log = (
+                logger.warning
+                if reconciliation_result.failed_count > 0
+                else logger.info
+            )
+            log(
+                (
+                    "VPN node access reconciliation completed: checked=%s, "
+                    "succeeded=%s, failed=%s, errors=%s"
+                ),
+                reconciliation_result.checked_count,
+                reconciliation_result.succeeded_count,
+                reconciliation_result.failed_count,
+                "; ".join(reconciliation_result.errors) or None,
             )

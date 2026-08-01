@@ -52,6 +52,25 @@ class FakeOrderExpirationService:
         return self.__class__.result
 
 
+class FakeSubscriptionNodeAccessReconciliationService:
+    instances: list["FakeSubscriptionNodeAccessReconciliationService"] = []
+    result = SimpleNamespace(
+        checked_count=0,
+        succeeded_count=0,
+        failed_count=0,
+        errors=(),
+    )
+
+    def __init__(self, session) -> None:
+        self.session = session
+        self.reconcile_count = 0
+        self.__class__.instances.append(self)
+
+    async def reconcile(self):
+        self.reconcile_count += 1
+        return self.__class__.result
+
+
 class FakeSubscriptionExpirationService:
     instances: list["FakeSubscriptionExpirationService"] = []
     result = SimpleNamespace(
@@ -82,6 +101,13 @@ def reset_fakes(monkeypatch):
         sync_status=None,
         sync_error=None,
     )
+    FakeSubscriptionNodeAccessReconciliationService.instances = []
+    FakeSubscriptionNodeAccessReconciliationService.result = SimpleNamespace(
+        checked_count=0,
+        succeeded_count=0,
+        failed_count=0,
+        errors=(),
+    )
     monkeypatch.setattr(
         order_scheduler_module,
         "OrderExpirationService",
@@ -91,6 +117,11 @@ def reset_fakes(monkeypatch):
         subscription_scheduler_module,
         "SubscriptionExpirationService",
         FakeSubscriptionExpirationService,
+    )
+    monkeypatch.setattr(
+        subscription_scheduler_module,
+        "SubscriptionNodeAccessReconciliationService",
+        FakeSubscriptionNodeAccessReconciliationService,
     )
 
 
