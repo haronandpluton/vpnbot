@@ -9,7 +9,10 @@ from app.database.models import SubscriptionNodeAccess
 from app.database.repositories.subscription_node_access import (
     SubscriptionNodeAccessRepository,
 )
-from app.services.vpn_access_service import VpnNodeProvisionResult
+from app.services.vpn_access_service import (
+    VpnNodeProvisionResult,
+    VpnNodeRenewalResult,
+)
 
 
 class SubscriptionNodeAccessStateService:
@@ -97,6 +100,43 @@ class SubscriptionNodeAccessStateService:
                     error_message=error_message,
                 )
 
+            recorded.append(record)
+
+        return tuple(recorded)
+
+    async def record_successful_renewal_results(
+        self,
+        *,
+        subscription_id: int,
+        results: Iterable[VpnNodeRenewalResult],
+    ) -> tuple[SubscriptionNodeAccess, ...]:
+        """Persist only successful per-node renewal synchronization results."""
+        if subscription_id <= 0:
+            raise ValueError("subscription_id must be positive")
+
+        recorded: list[SubscriptionNodeAccess] = []
+
+        for result in results:
+            if not result.updated:
+                continue
+
+            node_code = str(result.node_name).strip()
+            if not node_code:
+                raise ValueError("VPN node code must not be empty")
+
+            record = await self.repository.get_by_subscription_and_node_for_update(
+                subscription_id,
+                node_code,
+            )
+            if record is None:
+                record = await self.repository.create(
+                    subscription_id=subscription_id,
+                    node_code=node_code,
+                    desired_state=VPNNodeDesiredState.ENABLED,
+                    actual_state=VPNNodeActualState.PENDING,
+                )
+
+            record = await self.repository.mark_renewal_succeeded(record)
             recorded.append(record)
 
         return tuple(recorded)

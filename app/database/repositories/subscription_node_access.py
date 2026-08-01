@@ -91,6 +91,18 @@ class SubscriptionNodeAccessRepository(BaseRepository):
         await self.session.flush()
         return record
 
+    async def mark_renewal_succeeded(
+        self,
+        record: SubscriptionNodeAccess,
+    ) -> SubscriptionNodeAccess:
+        """Record a successful expiry sync without resetting provisioned_at."""
+        record.actual_state = VPNNodeActualState.ENABLED
+        record.last_error = None
+        record.retry_count = 0
+        record.disabled_at = None
+        await self.session.flush()
+        return record
+
     async def mark_disabled(
         self,
         record: SubscriptionNodeAccess,
