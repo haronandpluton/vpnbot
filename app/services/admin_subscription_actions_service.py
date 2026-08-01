@@ -17,6 +17,7 @@ from app.services.subscription_node_access_state_service import (
 )
 from app.services.vpn_access_service import (
     VpnAccessService,
+    VpnNodeFailure,
     VpnNodeOperationError,
 )
 
@@ -308,7 +309,42 @@ class AdminSubscriptionActionsService:
 
         try:
             vpn_access_service = self.vpn_access_service or VpnAccessService()
-            await vpn_access_service.disable_access(uuid=subscription.uuid)
+            disable_results = await vpn_access_service.disable_access_with_results(
+                uuid=subscription.uuid,
+            )
+
+            await self.node_access_state_service.record_successful_disable_results(
+                subscription_id=subscription.id,
+                results=disable_results,
+            )
+            await self.node_access_state_service.record_failed_disable_results(
+                subscription_id=subscription.id,
+                results=disable_results,
+            )
+            await self.session.commit()
+
+            failures = [result for result in disable_results if not result.succeeded]
+            if failures:
+                vpn_sync_ok = False
+                operation_error = VpnNodeOperationError(
+                    operation="disable",
+                    uuid=subscription.uuid,
+                    failures=[
+                        VpnNodeFailure(
+                            node_name=result.node_name,
+                            error=result.error or "VPN node disable failed",
+                        )
+                        for result in failures
+                    ],
+                )
+                vpn_sync_error = str(operation_error)
+                await self._record_vpn_disable_failure(
+                    subscription=subscription,
+                    admin_action_id=action_result.action_id,
+                    error=operation_error,
+                )
+            elif already_disabled:
+                await self._resolve_vpn_disable_failure(subscription.id)
         except Exception as error:  # noqa: BLE001 - external VPN boundary
             vpn_sync_ok = False
             vpn_sync_error = str(error)
@@ -323,9 +359,6 @@ class AdminSubscriptionActionsService:
                 admin_action_id=action_result.action_id,
                 error=error,
             )
-        else:
-            if already_disabled:
-                await self._resolve_vpn_disable_failure(subscription.id)
 
         result = AdminDisableSubscriptionResult(
             status="disabled",

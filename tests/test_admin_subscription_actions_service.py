@@ -15,6 +15,7 @@ from app.services.vpn_access_service import (
     VpnNodeFailure,
     VpnNodeOperationError,
     VpnNodeRenewalResult,
+    VpnNodeStateChangeResult,
 )
 
 
@@ -112,6 +113,7 @@ class FakeVpnAccessService:
         *,
         error: Exception | None = None,
         renewal_results=None,
+        disable_results=None,
     ) -> None:
         self.error = error
         self.extend_calls: list[dict] = []
@@ -122,6 +124,16 @@ class FakeVpnAccessService:
                 node_name="admin-test-node",
                 updated=True,
             ),
+        )
+        self.disable_results = (
+            disable_results
+            if disable_results is not None
+            else (
+                VpnNodeStateChangeResult(
+                    node_name="admin-test-node",
+                    succeeded=True,
+                ),
+            )
         )
 
     async def extend_access(self, **kwargs):
@@ -138,6 +150,13 @@ class FakeVpnAccessService:
 
         return tuple(self.renewal_results)
 
+    async def disable_access_with_results(self, **kwargs):
+        self.disable_calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+
+        return tuple(self.disable_results)
+
     async def disable_access(self, **kwargs):
         self.disable_calls.append(kwargs)
         if self.error is not None:
@@ -150,6 +169,8 @@ class FakeNodeAccessStateService:
     def __init__(self) -> None:
         self.record_successful_renewal_results_calls: list[dict] = []
         self.record_failed_renewal_results_calls: list[dict] = []
+        self.record_successful_disable_results_calls: list[dict] = []
+        self.record_failed_disable_results_calls: list[dict] = []
 
     async def record_successful_renewal_results(
         self,
@@ -172,6 +193,34 @@ class FakeNodeAccessStateService:
         results,
     ):
         self.record_failed_renewal_results_calls.append(
+            {
+                "subscription_id": subscription_id,
+                "results": tuple(results),
+            }
+        )
+        return ()
+
+    async def record_successful_disable_results(
+        self,
+        *,
+        subscription_id,
+        results,
+    ):
+        self.record_successful_disable_results_calls.append(
+            {
+                "subscription_id": subscription_id,
+                "results": tuple(results),
+            }
+        )
+        return ()
+
+    async def record_failed_disable_results(
+        self,
+        *,
+        subscription_id,
+        results,
+    ):
+        self.record_failed_disable_results_calls.append(
             {
                 "subscription_id": subscription_id,
                 "results": tuple(results),
@@ -660,7 +709,7 @@ async def test_disable_subscription_sets_disabled_status_logs_action_and_syncs_m
     assert subscription.disabled_at == result.disabled_at
     assert subscription.error_reason == "user requested disable"
     assert subscription.updated_at is not None
-    assert service.session.commit_count == 1
+    assert service.session.commit_count == 2
     assert service.session.rollback_count == 0
     assert service.session.refresh_calls == [subscription]
 
@@ -731,7 +780,7 @@ async def test_disable_subscription_is_idempotent_and_reconciles_vpn_nodes():
     assert subscription.error_reason == "original reason"
     assert vpn_access.disable_calls == [{"uuid": "already-disabled-uuid"}]
     assert "already_disabled=True" in action_log.calls[0]["payload"]
-    assert service.session.commit_count == 1
+    assert service.session.commit_count == 2
     assert service.session.rollback_count == 0
 
 
@@ -859,7 +908,7 @@ async def test_successful_disable_retry_resolves_pending_system_error():
     assert error_repository.resolve_calls == [pending]
     assert pending.is_resolved is True
     assert error_repository.pending is None
-    assert service.session.commit_count == 2
+    assert service.session.commit_count == 3
 
 
 @pytest.mark.asyncio
