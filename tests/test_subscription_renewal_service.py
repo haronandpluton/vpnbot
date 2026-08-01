@@ -9,7 +9,11 @@ import app.services.subscription_service as subscription_module
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.subscription_service import SubscriptionService
-from app.services.vpn_access_service import VpnAccessResult
+from app.services.vpn_access_service import (
+    VpnAccessResult,
+    VpnNodeOperationError,
+    VpnNodeRenewalResult,
+)
 
 
 class FakeSession:
@@ -104,10 +108,17 @@ class FakeSubscriptionRepository:
 
 
 class FakeVpnAccessService:
-    def __init__(self) -> None:
+    def __init__(self, renewal_results=None) -> None:
         self.create_calls = []
         self.extend_calls = []
+        self.extend_with_results_calls = []
         self.get_config_calls = []
+        self.renewal_results = renewal_results or (
+            VpnNodeRenewalResult(
+                node_name="renewal-test-node",
+                updated=True,
+            ),
+        )
 
     async def create_access(
         self,
@@ -151,6 +162,22 @@ class FakeVpnAccessService:
             config_uri=f"https://connect/{uuid}",
         )
 
+    async def extend_access_with_results(
+        self,
+        *,
+        uuid,
+        device_limit,
+        expires_at,
+    ):
+        self.extend_with_results_calls.append(
+            {
+                "uuid": uuid,
+                "device_limit": device_limit,
+                "expires_at": expires_at,
+            }
+        )
+        return tuple(self.renewal_results)
+
     async def get_config(self, *, uuid, device_limit):
         self.get_config_calls.append(
             {"uuid": uuid, "device_limit": device_limit}
@@ -165,6 +192,8 @@ class FakeNodeAccessStateService:
     def __init__(self) -> None:
         self.initialize_pending_calls = []
         self.record_provisioning_results_calls = []
+        self.record_successful_renewal_results_calls = []
+        self.record_failed_renewal_results_calls = []
 
     async def initialize_pending(self, *, subscription_id, node_codes):
         self.initialize_pending_calls.append(
@@ -177,6 +206,34 @@ class FakeNodeAccessStateService:
 
     async def record_provisioning_results(self, *, subscription_id, results):
         self.record_provisioning_results_calls.append(
+            {
+                "subscription_id": subscription_id,
+                "results": tuple(results),
+            }
+        )
+        return ()
+
+    async def record_successful_renewal_results(
+        self,
+        *,
+        subscription_id,
+        results,
+    ):
+        self.record_successful_renewal_results_calls.append(
+            {
+                "subscription_id": subscription_id,
+                "results": tuple(results),
+            }
+        )
+        return ()
+
+    async def record_failed_renewal_results(
+        self,
+        *,
+        subscription_id,
+        results,
+    ):
+        self.record_failed_renewal_results_calls.append(
             {
                 "subscription_id": subscription_id,
                 "results": tuple(results),
@@ -333,12 +390,28 @@ async def test_active_subscription_renewal_preserves_uuid_and_origin_order():
     assert repository.get_by_id_for_update_calls == [50]
     assert repository.get_by_order_calls == []
     assert len(repository.renew_calls) == 1
-    assert vpn_access.extend_calls == [
+    assert vpn_access.extend_calls == []
+    assert vpn_access.extend_with_results_calls == [
         {
             "uuid": "existing-uuid",
             "device_limit": 1,
             "expires_at": subscription.expires_at,
         }
+    ]
+    assert service.node_access_state_service.record_successful_renewal_results_calls == [
+        {
+            "subscription_id": subscription.id,
+            "results": vpn_access.renewal_results,
+        }
+    ]
+    assert service.node_access_state_service.record_failed_renewal_results_calls == [
+        {
+            "subscription_id": subscription.id,
+            "results": vpn_access.renewal_results,
+        }
+    ]
+    assert vpn_access.get_config_calls == [
+        {"uuid": "existing-uuid", "device_limit": 1}
     ]
     assert config_uri == "https://connect/existing-uuid"
     assert len(FakeMetaSyncService.calls) == 1
@@ -403,6 +476,7 @@ async def test_reprocessing_renewal_order_does_not_extend_twice():
     assert repository.get_by_id_for_update_calls == []
     assert repository.renew_calls == []
     assert vpn_access.extend_calls == []
+    assert vpn_access.extend_with_results_calls == []
     assert vpn_access.get_config_calls == [
         {"uuid": "existing-uuid", "device_limit": 1}
     ]
@@ -434,6 +508,77 @@ async def test_legacy_created_order_backfills_activation_result():
     assert repository.get_by_order_calls == [23]
     assert repository.create_calls == []
     assert repository.renew_calls == []
+
+
+@pytest.mark.asyncio
+async def test_partial_node_renewal_records_results_and_activates_order():
+    subscription = make_subscription(subscription_id=50)
+    order = make_order(target_subscription_id=50)
+    renewal_results = (
+        VpnNodeRenewalResult(node_name="frankfurt", updated=True),
+        VpnNodeRenewalResult(
+            node_name="netherlands",
+            updated=False,
+            error="temporary panel outage",
+        ),
+    )
+    repository = FakeSubscriptionRepository({50: subscription})
+    vpn_access = FakeVpnAccessService(renewal_results=renewal_results)
+    service = make_service(order, repository, vpn_access)
+
+    result, config_uri = await service.activate_or_extend_by_order(order.id)
+
+    assert result is subscription
+    assert order.status == OrderStatus.ACTIVATED
+    assert len(repository.renew_calls) == 1
+    assert service.node_access_state_service.record_successful_renewal_results_calls == [
+        {"subscription_id": 50, "results": renewal_results}
+    ]
+    assert service.node_access_state_service.record_failed_renewal_results_calls == [
+        {"subscription_id": 50, "results": renewal_results}
+    ]
+    assert config_uri == "https://connect/existing-uuid"
+    assert service.session.commit_count == 1
+
+
+@pytest.mark.asyncio
+async def test_all_node_renewal_failures_are_persisted_before_retry_error():
+    subscription = make_subscription(subscription_id=50)
+    original_expires_at = subscription.expires_at
+    order = make_order(target_subscription_id=50)
+    renewal_results = (
+        VpnNodeRenewalResult(
+            node_name="frankfurt",
+            updated=False,
+            error="timeout",
+        ),
+        VpnNodeRenewalResult(
+            node_name="netherlands",
+            updated=False,
+            error="connection refused",
+        ),
+    )
+    repository = FakeSubscriptionRepository({50: subscription})
+    vpn_access = FakeVpnAccessService(renewal_results=renewal_results)
+    service = make_service(order, repository, vpn_access)
+
+    with pytest.raises(VpnNodeOperationError, match="VPN extend failed"):
+        await service.activate_or_extend_by_order(order.id)
+
+    assert repository.renew_calls == []
+    assert subscription.expires_at == original_expires_at
+    assert order.status == OrderStatus.PAID
+    assert order.activated_subscription_id is None
+    assert service.node_access_state_service.record_successful_renewal_results_calls == [
+        {"subscription_id": 50, "results": renewal_results}
+    ]
+    assert service.node_access_state_service.record_failed_renewal_results_calls == [
+        {"subscription_id": 50, "results": renewal_results}
+    ]
+    assert vpn_access.get_config_calls == []
+    assert service.session.flush_count == 1
+    assert service.session.commit_count == 1
+    assert service.session.rollback_count == 1
 
 
 @pytest.mark.asyncio
