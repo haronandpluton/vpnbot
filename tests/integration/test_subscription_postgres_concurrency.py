@@ -39,11 +39,13 @@ class BlockingVpnAccessService:
         *,
         uuid: str,
         device_limit: int,
+        expires_at,
     ):
         self.extend_calls.append(
             {
                 "uuid": uuid,
                 "device_limit": device_limit,
+                "expires_at": expires_at,
             }
         )
 

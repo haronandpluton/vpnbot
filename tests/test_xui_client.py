@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -491,3 +492,213 @@ def test_expiry_time_ms_rejects_naive_datetime():
         match="expires_at must be timezone-aware",
     ):
         XuiClient._to_expiry_time_ms(expires_at)
+
+@pytest.mark.asyncio
+async def test_update_vless_client_updates_expiry_limit_and_reenables(monkeypatch):
+    async def fake_login(self, client):
+        return "csrf-panel"
+
+    monkeypatch.setattr(XuiClient, "_login", fake_login)
+
+    old_client = {
+        "id": "12345678-1234-5678-1234-567812345678",
+        "email": "tg-7-12345678",
+        "subId": "existing-sub-id",
+        "flow": "",
+        "totalGB": 0,
+        "expiryTime": 0,
+        "limitIp": 1,
+        "enable": False,
+        "comment": "telegram user 7",
+    }
+    updated_client = {
+        **old_client,
+        "expiryTime": 1893456000000,
+        "limitIp": 3,
+        "enable": True,
+    }
+
+    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    fake_http_client.get_responses = [
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"settings": {"clients": [old_client]}},
+            }
+        ),
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"settings": {"clients": [updated_client]}},
+            }
+        ),
+    ]
+    fake_http_client.post_responses = [
+        FakeResponse(json_data={"success": True})
+    ]
+
+    monkeypatch.setattr(
+        xui_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: fake_http_client,
+    )
+
+    client = XuiClient(make_config(name="netherlands"))
+    expires_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+
+    await client.update_vless_client(
+        client_uuid="12345678-1234-5678-1234-567812345678",
+        device_limit=3,
+        expires_at=expires_at,
+    )
+
+    assert fake_http_client.post_calls == [
+        {
+            "url": (
+                "https://xui.example/panel/api/inbounds/updateClient/"
+                "12345678-1234-5678-1234-567812345678"
+            ),
+            "json": {
+                "id": 42,
+                "settings": json.dumps(
+                    {"clients": [updated_client]},
+                    separators=(",", ":"),
+                ),
+            },
+            "headers": {
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRF-Token": "csrf-panel",
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_vless_client_is_noop_when_state_is_current(monkeypatch):
+    async def fake_login(self, client):
+        return "csrf-panel"
+
+    monkeypatch.setattr(XuiClient, "_login", fake_login)
+
+    current_client = {
+        "id": "12345678-1234-5678-1234-567812345678",
+        "email": "tg-7-12345678",
+        "expiryTime": 1893456000000,
+        "limitIp": 3,
+        "enable": True,
+    }
+    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    fake_http_client.get_responses = [
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"settings": {"clients": [current_client]}},
+            }
+        )
+    ]
+    monkeypatch.setattr(
+        xui_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: fake_http_client,
+    )
+
+    await XuiClient(make_config()).update_vless_client(
+        client_uuid="12345678-1234-5678-1234-567812345678",
+        device_limit=3,
+        expires_at=datetime(2030, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert fake_http_client.post_calls == []
+
+
+@pytest.mark.asyncio
+async def test_update_vless_client_rejects_missing_uuid(monkeypatch):
+    async def fake_login(self, client):
+        return "csrf-panel"
+
+    monkeypatch.setattr(XuiClient, "_login", fake_login)
+
+    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    fake_http_client.get_responses = [
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"settings": {"clients": []}},
+            }
+        )
+    ]
+    monkeypatch.setattr(
+        xui_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: fake_http_client,
+    )
+
+    with pytest.raises(
+        XuiClientError,
+        match="3x-ui client not found on default",
+    ):
+        await XuiClient(make_config()).update_vless_client(
+            client_uuid="12345678-1234-5678-1234-567812345678",
+            device_limit=3,
+            expires_at=datetime(2030, 1, 1, tzinfo=timezone.utc),
+        )
+
+    assert fake_http_client.post_calls == []
+
+
+@pytest.mark.asyncio
+async def test_create_vless_client_reconciles_same_identity_with_old_expiry(
+    monkeypatch,
+):
+    async def fake_login(self, client):
+        return "csrf-panel"
+
+    monkeypatch.setattr(XuiClient, "_login", fake_login)
+
+    old_client = {
+        "id": "12345678-1234-5678-1234-567812345678",
+        "email": "tg-7-12345678",
+        "subId": "existing-sub-id",
+        "expiryTime": 0,
+        "limitIp": 1,
+        "enable": True,
+    }
+    updated_client = {
+        **old_client,
+        "expiryTime": 1893456000000,
+        "limitIp": 2,
+        "enable": True,
+    }
+    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    fake_http_client.get_responses = [
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"settings": {"clients": [old_client]}},
+            }
+        ),
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"settings": {"clients": [updated_client]}},
+            }
+        ),
+    ]
+    fake_http_client.post_responses = [
+        FakeResponse(json_data={"success": True})
+    ]
+    monkeypatch.setattr(
+        xui_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: fake_http_client,
+    )
+
+    await XuiClient(make_config()).create_vless_client(
+        client_uuid="12345678-1234-5678-1234-567812345678",
+        email="tg-7-12345678",
+        device_limit=2,
+        expires_at=datetime(2030, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert len(fake_http_client.post_calls) == 1
+    assert "/panel/api/inbounds/updateClient/" in fake_http_client.post_calls[0]["url"]

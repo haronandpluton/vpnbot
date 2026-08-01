@@ -237,6 +237,7 @@ class SubscriptionService:
         access = await self.vpn_access_service.create_access(
             user_id=order.user_id,
             device_limit=order.device_limit,
+            expires_at=expires_at,
             idempotency_key=f"order:{order.id}",
         )
 
@@ -271,6 +272,7 @@ class SubscriptionService:
         access = await self.vpn_access_service.extend_access(
             uuid=subscription.uuid,
             device_limit=subscription.device_limit,
+            expires_at=new_expires_at,
         )
 
         subscription = await self.subscription_repository.renew(

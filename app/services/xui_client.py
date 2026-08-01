@@ -39,23 +39,38 @@ class XuiClient:
         """
         Idempotently ensure that the requested VLESS client exists.
 
-        A repeated activation with the same email/UUID and limits is a no-op.
-        Conflicting email/UUID records are rejected instead of being silently
-        overwritten. This makes partial multi-node retries safe.
+        Exact retries are no-ops. When the same UUID/email already exists with
+        an older expiry or device limit, the existing record is reconciled
+        instead of creating a duplicate. Conflicting UUID/email identities are
+        still rejected.
         """
         self._validate_uuid(client_uuid)
         expiry_time_ms = self._to_expiry_time_ms(expires_at)
 
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
             csrf = await self._login(client)
-
-            if await self._client_exists_exactly(
+            existing = await self._get_client_by_identity(
                 client,
                 client_uuid=client_uuid,
                 email=email,
-                device_limit=device_limit,
-                expiry_time_ms=expiry_time_ms,
-            ):
+            )
+
+            if existing is not None:
+                if self._client_matches_desired_state(
+                    existing,
+                    device_limit=device_limit,
+                    expiry_time_ms=expiry_time_ms,
+                ):
+                    return
+
+                await self._update_existing_client(
+                    client,
+                    csrf=csrf,
+                    existing=existing,
+                    client_uuid=client_uuid,
+                    device_limit=device_limit,
+                    expiry_time_ms=expiry_time_ms,
+                )
                 return
 
             payload = {
@@ -83,14 +98,11 @@ class XuiClient:
                 response = await client.post(
                     f"{self.base_url}/panel/api/clients/add",
                     json=payload,
-                    headers={
-                        "X-Requested-With": "XMLHttpRequest",
-                        "X-CSRF-Token": csrf,
-                    },
+                    headers=self._api_headers(csrf),
                 )
                 data = self._json(response)
             except (httpx.HTTPError, XuiClientError) as error:
-                if await self._client_exists_exactly(
+                if await self._client_has_desired_state(
                     client,
                     client_uuid=client_uuid,
                     email=email,
@@ -106,7 +118,7 @@ class XuiClient:
             # A concurrent/retried request may have created the client after the
             # initial lookup. Re-read before treating a duplicate response as an
             # error.
-            if await self._client_exists_exactly(
+            if await self._client_has_desired_state(
                 client,
                 client_uuid=client_uuid,
                 email=email,
@@ -120,49 +132,137 @@ class XuiClient:
                 f"3x-ui client creation failed on {self.config.name}: {message}"
             )
 
-    async def _client_exists_exactly(
+    async def update_vless_client(
+        self,
+        *,
+        client_uuid: str,
+        device_limit: int,
+        expires_at: datetime,
+    ) -> None:
+        """Synchronize expiry/device limit for an existing VLESS client."""
+        self._validate_uuid(client_uuid)
+        expiry_time_ms = self._to_expiry_time_ms(expires_at)
+
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            csrf = await self._login(client)
+            existing = await self._get_client_by_uuid(client, client_uuid)
+
+            if existing is None:
+                raise XuiClientError(
+                    "3x-ui client not found on "
+                    f"{self.config.name}: uuid={client_uuid}"
+                )
+
+            if self._client_matches_desired_state(
+                existing,
+                device_limit=device_limit,
+                expiry_time_ms=expiry_time_ms,
+            ):
+                return
+
+            await self._update_existing_client(
+                client,
+                csrf=csrf,
+                existing=existing,
+                client_uuid=client_uuid,
+                device_limit=device_limit,
+                expiry_time_ms=expiry_time_ms,
+            )
+
+    async def _update_existing_client(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        csrf: str,
+        existing: dict[str, Any],
+        client_uuid: str,
+        device_limit: int,
+        expiry_time_ms: int,
+    ) -> None:
+        updated = dict(existing)
+        updated["id"] = client_uuid
+        updated["limitIp"] = int(device_limit or 0)
+        updated["expiryTime"] = expiry_time_ms
+        updated["enable"] = True
+
+        payload = {
+            "id": self.config.inbound_id,
+            "settings": json.dumps(
+                {"clients": [updated]},
+                separators=(",", ":"),
+            ),
+        }
+
+        try:
+            response = await client.post(
+                f"{self.base_url}/panel/api/inbounds/updateClient/{client_uuid}",
+                json=payload,
+                headers=self._api_headers(csrf),
+            )
+            data = self._json(response)
+        except (httpx.HTTPError, XuiClientError) as error:
+            if await self._client_has_desired_state(
+                client,
+                client_uuid=client_uuid,
+                email=str(existing.get("email") or ""),
+                device_limit=device_limit,
+                expiry_time_ms=expiry_time_ms,
+            ):
+                return
+            raise error
+
+        if not data.get("success"):
+            if await self._client_has_desired_state(
+                client,
+                client_uuid=client_uuid,
+                email=str(existing.get("email") or ""),
+                device_limit=device_limit,
+                expiry_time_ms=expiry_time_ms,
+            ):
+                return
+
+            message = data.get("msg") or "unknown 3x-ui client update error"
+            raise XuiClientError(
+                f"3x-ui client update failed on {self.config.name}: {message}"
+            )
+
+        # Do not trust a success flag without checking the persisted client.
+        if not await self._client_has_desired_state(
+            client,
+            client_uuid=client_uuid,
+            email=str(existing.get("email") or ""),
+            device_limit=device_limit,
+            expiry_time_ms=expiry_time_ms,
+        ):
+            raise XuiClientError(
+                "3x-ui client update was not applied on "
+                f"{self.config.name}: uuid={client_uuid}"
+            )
+
+    async def _get_client_by_identity(
         self,
         client: httpx.AsyncClient,
         *,
         client_uuid: str,
         email: str,
-        device_limit: int,
-        expiry_time_ms: int,
-    ) -> bool:
+    ) -> dict[str, Any] | None:
         clients = await self._get_inbound_clients(client)
-
         by_email = [item for item in clients if item.get("email") == email]
         by_uuid = [item for item in clients if item.get("id") == client_uuid]
-
         exact = [
             item
             for item in clients
             if item.get("email") == email and item.get("id") == client_uuid
         ]
 
+        if len(exact) > 1:
+            raise XuiClientError(
+                "3x-ui contains duplicate client records on "
+                f"{self.config.name}: email={email} uuid={client_uuid}"
+            )
+
         if exact:
-            if len(exact) > 1:
-                raise XuiClientError(
-                    "3x-ui contains duplicate client records on "
-                    f"{self.config.name}: email={email} uuid={client_uuid}"
-                )
-
-            existing = exact[0]
-            existing_limit = int(existing.get("limitIp") or 0)
-            existing_expiry = int(existing.get("expiryTime") or 0)
-            existing_enabled = bool(existing.get("enable", True))
-
-            if (
-                existing_limit != int(device_limit or 0)
-                or existing_expiry != expiry_time_ms
-                or not existing_enabled
-            ):
-                raise XuiClientError(
-                    "3x-ui client already exists with different parameters on "
-                    f"{self.config.name}: email={email} uuid={client_uuid}"
-                )
-
-            return True
+            return exact[0]
 
         if by_email:
             existing_uuid = by_email[0].get("id")
@@ -178,7 +278,63 @@ class XuiClient:
                 f"{self.config.name}: uuid={client_uuid} existing_email={existing_email}"
             )
 
-        return False
+        return None
+
+    async def _get_client_by_uuid(
+        self,
+        client: httpx.AsyncClient,
+        client_uuid: str,
+    ) -> dict[str, Any] | None:
+        clients = await self._get_inbound_clients(client)
+        matches = [item for item in clients if item.get("id") == client_uuid]
+
+        if len(matches) > 1:
+            raise XuiClientError(
+                "3x-ui contains duplicate client UUID records on "
+                f"{self.config.name}: uuid={client_uuid}"
+            )
+
+        return matches[0] if matches else None
+
+    async def _client_has_desired_state(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        client_uuid: str,
+        email: str,
+        device_limit: int,
+        expiry_time_ms: int,
+    ) -> bool:
+        existing = await self._get_client_by_identity(
+            client,
+            client_uuid=client_uuid,
+            email=email,
+        )
+        return existing is not None and self._client_matches_desired_state(
+            existing,
+            device_limit=device_limit,
+            expiry_time_ms=expiry_time_ms,
+        )
+
+    @staticmethod
+    def _client_matches_desired_state(
+        existing: dict[str, Any],
+        *,
+        device_limit: int,
+        expiry_time_ms: int,
+    ) -> bool:
+        return (
+            int(existing.get("limitIp") or 0) == int(device_limit or 0)
+            and int(existing.get("expiryTime") or 0) == expiry_time_ms
+            and bool(existing.get("enable", True))
+        )
+
+    @staticmethod
+    def _api_headers(csrf: str) -> dict[str, str]:
+        return {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-CSRF-Token": csrf,
+        }
 
     async def _get_inbound_clients(
         self,

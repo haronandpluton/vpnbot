@@ -18,9 +18,16 @@ from app.services.xui_client import XuiClientError
 
 
 class FakeXuiClient:
-    def __init__(self, *, fail_create: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_create: bool = False,
+        fail_update: bool = False,
+    ) -> None:
         self.fail_create = fail_create
+        self.fail_update = fail_update
         self.create_calls: list[dict] = []
+        self.update_calls: list[dict] = []
 
     async def create_vless_client(
             self,
@@ -43,6 +50,24 @@ class FakeXuiClient:
 
         if self.fail_create:
             raise XuiClientError("3x-ui client creation failed: test failure")
+
+    async def update_vless_client(
+        self,
+        *,
+        client_uuid: str,
+        device_limit: int,
+        expires_at: datetime,
+    ) -> None:
+        self.update_calls.append(
+            {
+                "client_uuid": client_uuid,
+                "device_limit": device_limit,
+                "expires_at": expires_at,
+            }
+        )
+
+        if self.fail_update:
+            raise XuiClientError("3x-ui client update failed: test failure")
 
 
 def make_service(
@@ -290,21 +315,55 @@ async def test_create_access_stops_and_propagates_secondary_node_failure():
 
 
 @pytest.mark.asyncio
-async def test_extend_access_preserves_existing_uuid_and_does_not_create_xui_client():
-    xui_client = FakeXuiClient()
-    service = make_service(xui_client=xui_client)
+async def test_extend_access_updates_expiry_on_all_configured_nodes():
+    first_node = FakeXuiClient()
+    second_node = FakeXuiClient()
+    service = make_service(xui_clients=[first_node, second_node])
+    expires_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
 
     result = await service.extend_access(
-        uuid="existing-uuid",
+        uuid="12345678-1234-5678-1234-567812345678",
         device_limit=3,
+        expires_at=expires_at,
     )
 
     assert result == VpnAccessResult(
-        uuid="existing-uuid",
+        uuid="12345678-1234-5678-1234-567812345678",
         vpn_server_id=None,
-        config_uri="https://connect.presentvpn.click/connect/existing-uuid?device=android",
+        config_uri=(
+            "https://connect.presentvpn.click/connect/"
+            "12345678-1234-5678-1234-567812345678?device=android"
+        ),
     )
-    assert xui_client.create_calls == []
+    expected = [
+        {
+            "client_uuid": "12345678-1234-5678-1234-567812345678",
+            "device_limit": 3,
+            "expires_at": expires_at,
+        }
+    ]
+    assert first_node.update_calls == expected
+    assert second_node.update_calls == expected
+    assert first_node.create_calls == []
+    assert second_node.create_calls == []
+
+
+@pytest.mark.asyncio
+async def test_extend_access_stops_and_propagates_secondary_node_failure():
+    first_node = FakeXuiClient()
+    second_node = FakeXuiClient(fail_update=True)
+    service = make_service(xui_clients=[first_node, second_node])
+    expires_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+
+    with pytest.raises(XuiClientError, match="3x-ui client update failed"):
+        await service.extend_access(
+            uuid="12345678-1234-5678-1234-567812345678",
+            device_limit=3,
+            expires_at=expires_at,
+        )
+
+    assert len(first_node.update_calls) == 1
+    assert len(second_node.update_calls) == 1
 
 
 @pytest.mark.asyncio

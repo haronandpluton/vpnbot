@@ -171,8 +171,20 @@ class FakeVpnAccessService:
             config_uri="https://connect/new-vpn-uuid",
         )
 
-    async def extend_access(self, *, uuid: str, device_limit: int):
-        self.extend_calls.append({"uuid": uuid, "device_limit": device_limit})
+    async def extend_access(
+        self,
+        *,
+        uuid: str,
+        device_limit: int,
+        expires_at,
+    ):
+        self.extend_calls.append(
+            {
+                "uuid": uuid,
+                "device_limit": device_limit,
+                "expires_at": expires_at,
+            }
+        )
 
         if self.fail_extend:
             raise RuntimeError("extend_access failed")
@@ -321,7 +333,7 @@ async def test_paid_order_without_active_subscription_creates_new_subscription_a
         {
             "user_id": 7,
             "device_limit": 1,
-            "expires_at": None,
+            "expires_at": subscription.expires_at,
             "idempotency_key": "order:23",
         }
     ]
@@ -488,7 +500,7 @@ async def test_paid_order_with_existing_active_subscription_creates_new_uuid():
         {
             "user_id": 7,
             "device_limit": 1,
-            "expires_at": None,
+            "expires_at": subscription.expires_at,
             "idempotency_key": "order:24",
         }
     ]
@@ -594,14 +606,13 @@ async def test_vpn_create_error_rolls_back_and_does_not_mark_order_activated():
     assert repository.create_calls == []
     assert repository.activate_calls == []
     assert repository.mark_access_sent_calls == []
-    assert vpn_access.create_calls == [
-        {
-            "user_id": 7,
-            "device_limit": 1,
-            "expires_at": None,
-            "idempotency_key": "order:23",
-        }
-    ]
+    assert len(vpn_access.create_calls) == 1
+    create_call = vpn_access.create_calls[0]
+    assert create_call["user_id"] == 7
+    assert create_call["device_limit"] == 1
+    assert create_call["idempotency_key"] == "order:23"
+    assert create_call["expires_at"] is not None
+    assert create_call["expires_at"].tzinfo is not None
     assert service.session.commit_count == 0
     assert service.session.rollback_count == 1
     assert FakeSubscriptionMetaSyncService.calls == []

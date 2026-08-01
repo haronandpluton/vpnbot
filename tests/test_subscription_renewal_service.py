@@ -131,9 +131,19 @@ class FakeVpnAccessService:
             config_uri="https://connect/new-uuid",
         )
 
-    async def extend_access(self, *, uuid, device_limit):
+    async def extend_access(
+        self,
+        *,
+        uuid,
+        device_limit,
+        expires_at,
+    ):
         self.extend_calls.append(
-            {"uuid": uuid, "device_limit": device_limit}
+            {
+                "uuid": uuid,
+                "device_limit": device_limit,
+                "expires_at": expires_at,
+            }
         )
         return VpnAccessResult(
             uuid=uuid,
@@ -254,7 +264,7 @@ async def test_new_purchase_records_activated_subscription_id():
         {
             "user_id": 7,
             "device_limit": 1,
-            "expires_at": None,
+            "expires_at": subscription.expires_at,
             "idempotency_key": f"order:{order.id}",
         }
     ]
@@ -290,7 +300,11 @@ async def test_active_subscription_renewal_preserves_uuid_and_origin_order():
     assert repository.get_by_order_calls == []
     assert len(repository.renew_calls) == 1
     assert vpn_access.extend_calls == [
-        {"uuid": "existing-uuid", "device_limit": 1}
+        {
+            "uuid": "existing-uuid",
+            "device_limit": 1,
+            "expires_at": subscription.expires_at,
+        }
     ]
     assert config_uri == "https://connect/existing-uuid"
     assert len(FakeMetaSyncService.calls) == 1

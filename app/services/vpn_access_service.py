@@ -145,7 +145,15 @@ class VpnAccessService:
         self,
         uuid: str,
         device_limit: int,
+        expires_at: datetime,
     ) -> VpnAccessResult:
+        for xui_client in self._configured_xui_clients():
+            await xui_client.update_vless_client(
+                client_uuid=uuid,
+                device_limit=device_limit,
+                expires_at=expires_at,
+            )
+
         config_uri = build_connect_url(
             uuid,
             public_base_url=self.public_base_url,
