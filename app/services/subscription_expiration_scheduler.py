@@ -65,11 +65,20 @@ class SubscriptionExpirationScheduler:
             )
 
         if result.expired_count > 0:
+            vpn_sync_status = getattr(result, "vpn_sync_status", None)
+            vpn_sync_error = getattr(result, "vpn_sync_error", None)
+
             logger.warning(
-                "Expired subscriptions processed: count=%s, sync_status=%s, sync_error=%s",
+                (
+                    "Expired subscriptions processed: count=%s, "
+                    "sync_status=%s, sync_error=%s, "
+                    "vpn_sync_status=%s, vpn_sync_error=%s"
+                ),
                 result.expired_count,
                 result.sync_status,
                 result.sync_error,
+                vpn_sync_status,
+                vpn_sync_error,
             )
 
             for item in result.expired_items:

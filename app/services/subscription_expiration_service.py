@@ -7,6 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models.subscription import Subscription
 from app.payment_core.enums.subscription_status import SubscriptionStatus
+from app.services.subscription_node_access_state_service import (
+    SubscriptionNodeAccessStateService,
+)
+from app.services.vpn_access_service import VpnAccessService
 
 
 @dataclass
@@ -28,6 +32,8 @@ class ExpireSubscriptionsResult:
     expired_items: list[ExpiredSubscriptionItem] = field(default_factory=list)
     sync_status: str | None = None
     sync_error: str | None = None
+    vpn_sync_status: str | None = None
+    vpn_sync_error: str | None = None
     message: str | None = None
 
 
@@ -44,8 +50,19 @@ class SubscriptionExpirationService:
     Ошибка sync не откатывает истечение подписок.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        vpn_access_service: VpnAccessService | None = None,
+        node_access_state_service: SubscriptionNodeAccessStateService | None = None,
+    ) -> None:
         self.session = session
+        self.vpn_access_service = vpn_access_service
+        self.node_access_state_service = (
+            node_access_state_service
+            or SubscriptionNodeAccessStateService(session)
+        )
 
     async def expire_due_subscriptions(
         self,
@@ -97,6 +114,10 @@ class SubscriptionExpirationService:
 
         await self.session.commit()
 
+        vpn_sync_status, vpn_sync_error = await self._disable_expired_access(
+            subscriptions
+        )
+
         sync_status: str | None = None
         sync_error: str | None = None
 
@@ -115,8 +136,55 @@ class SubscriptionExpirationService:
             expired_items=expired_items,
             sync_status=sync_status,
             sync_error=sync_error,
+            vpn_sync_status=vpn_sync_status,
+            vpn_sync_error=vpn_sync_error,
             message="Expired subscriptions processed.",
         )
+
+    async def _disable_expired_access(
+        self,
+        subscriptions: list[Subscription],
+    ) -> tuple[str, str | None]:
+        vpn_access_service = self.vpn_access_service or VpnAccessService()
+        errors: list[str] = []
+
+        for subscription in subscriptions:
+            try:
+                results = await vpn_access_service.disable_access_with_results(
+                    uuid=subscription.uuid,
+                )
+                await self.node_access_state_service.record_successful_disable_results(
+                    subscription_id=subscription.id,
+                    results=results,
+                )
+                await self.node_access_state_service.record_failed_disable_results(
+                    subscription_id=subscription.id,
+                    results=results,
+                )
+                await self.session.commit()
+            except Exception as exc:  # noqa: BLE001 - expiration is already committed
+                rollback = getattr(self.session, "rollback", None)
+                if rollback is not None:
+                    await rollback()
+
+                errors.append(
+                    f"subscription_id={subscription.id}: {exc}"
+                )
+                continue
+
+            for result in results:
+                if result.succeeded:
+                    continue
+                errors.append(
+                    f"subscription_id={subscription.id} "
+                    f"node={result.node_name}: "
+                    f"{result.error or 'VPN node disable failed'}"
+                )
+
+        if errors:
+            return "sync_failed", "; ".join(errors)
+
+        return "sync_ok", None
 
     async def _sync_metadata_safely(self) -> Any:
         """
