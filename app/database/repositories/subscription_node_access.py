@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from app.common.enums import VPNNodeActualState, VPNNodeDesiredState
-from app.database.models import SubscriptionNodeAccess
+from sqlalchemy.orm import selectinload
+
+from app.database.models import Subscription, SubscriptionNodeAccess
+from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.database.repositories.base import BaseRepository
 
 
@@ -46,6 +49,47 @@ class SubscriptionNodeAccessRepository(BaseRepository):
             select(SubscriptionNodeAccess)
             .where(SubscriptionNodeAccess.subscription_id == subscription_id)
             .order_by(SubscriptionNodeAccess.node_code.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_reconciliation_candidates(
+        self,
+        *,
+        limit: int = 100,
+    ) -> list[SubscriptionNodeAccess]:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+
+        stmt = (
+            select(SubscriptionNodeAccess)
+            .join(
+                Subscription,
+                Subscription.id == SubscriptionNodeAccess.subscription_id,
+            )
+            .options(selectinload(SubscriptionNodeAccess.subscription))
+            .where(
+                or_(
+                    and_(
+                        SubscriptionNodeAccess.desired_state
+                        == VPNNodeDesiredState.ENABLED,
+                        SubscriptionNodeAccess.actual_state
+                        != VPNNodeActualState.ENABLED,
+                        Subscription.status == SubscriptionStatus.ACTIVE,
+                    ),
+                    and_(
+                        SubscriptionNodeAccess.desired_state
+                        == VPNNodeDesiredState.DISABLED,
+                        SubscriptionNodeAccess.actual_state
+                        != VPNNodeActualState.DISABLED,
+                    ),
+                )
+            )
+            .order_by(
+                SubscriptionNodeAccess.retry_count.asc(),
+                SubscriptionNodeAccess.id.asc(),
+            )
+            .limit(limit)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

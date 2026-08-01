@@ -653,3 +653,67 @@ def test_configured_node_names_rejects_duplicate_names():
 
     with pytest.raises(ValueError, match="Duplicate configured VPN node name"):
         service.configured_node_names()
+
+@pytest.mark.asyncio
+async def test_set_access_state_on_node_enables_only_selected_node():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands")
+    service = make_service(xui_clients=[first_node, second_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    result = await service.set_access_state_on_node(
+        client_uuid,
+        "netherlands",
+        enabled=True,
+    )
+
+    assert result == VpnNodeStateChangeResult(
+        node_name="netherlands",
+        succeeded=True,
+    )
+    assert first_node.enable_calls == []
+    assert second_node.enable_calls == [client_uuid]
+    assert first_node.disable_calls == []
+    assert second_node.disable_calls == []
+
+
+@pytest.mark.asyncio
+async def test_set_access_state_on_node_reports_selected_node_failure():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands", fail_disable=True)
+    service = make_service(xui_clients=[first_node, second_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    result = await service.set_access_state_on_node(
+        client_uuid,
+        "netherlands",
+        enabled=False,
+    )
+
+    assert result == VpnNodeStateChangeResult(
+        node_name="netherlands",
+        succeeded=False,
+        error="3x-ui client disable failed: test failure",
+    )
+    assert first_node.disable_calls == []
+    assert second_node.disable_calls == [client_uuid]
+
+
+@pytest.mark.asyncio
+async def test_set_access_state_on_node_reports_unknown_node_without_calls():
+    first_node = FakeXuiClient(name="frankfurt")
+    service = make_service(xui_client=first_node)
+
+    result = await service.set_access_state_on_node(
+        "existing-uuid",
+        "removed-node",
+        enabled=False,
+    )
+
+    assert result == VpnNodeStateChangeResult(
+        node_name="removed-node",
+        succeeded=False,
+        error="Configured VPN node not found: removed-node",
+    )
+    assert first_node.enable_calls == []
+    assert first_node.disable_calls == []

@@ -401,6 +401,52 @@ class VpnAccessService:
 
         return tuple(results)
 
+    async def set_access_state_on_node(
+        self,
+        uuid: str,
+        node_name: str,
+        *,
+        enabled: bool,
+    ) -> VpnNodeStateChangeResult:
+        """Apply an enable or disable operation to one configured VPN node."""
+        node_code = str(node_name).strip()
+        if not node_code:
+            raise ValueError("VPN node name must not be empty")
+
+        xui_clients = self._configured_xui_clients()
+        node_names = self.configured_node_names()
+
+        for configured_name, xui_client in zip(
+            node_names,
+            xui_clients,
+            strict=True,
+        ):
+            if configured_name != node_code:
+                continue
+
+            try:
+                if enabled:
+                    await xui_client.enable_vless_client(client_uuid=uuid)
+                else:
+                    await xui_client.disable_vless_client(client_uuid=uuid)
+            except Exception as error:  # noqa: BLE001 - isolate node failure
+                return VpnNodeStateChangeResult(
+                    node_name=node_code,
+                    succeeded=False,
+                    error=str(error),
+                )
+
+            return VpnNodeStateChangeResult(
+                node_name=node_code,
+                succeeded=True,
+            )
+
+        return VpnNodeStateChangeResult(
+            node_name=node_code,
+            succeeded=False,
+            error=f"Configured VPN node not found: {node_code}",
+        )
+
     def _access_result(self, uuid: str) -> VpnAccessResult:
         return VpnAccessResult(
             uuid=uuid,

@@ -242,3 +242,34 @@ async def test_mark_error_persists_message_and_increments_retry_count():
     assert record.last_error == "netherlands: connection refused"
     assert record.retry_count == 3
     assert session.flush_count == 1
+
+@pytest.mark.asyncio
+async def test_list_reconciliation_candidates_filters_mismatched_states():
+    record = make_record(actual_state=VPNNodeActualState.ERROR, retry_count=2)
+    session = FakeSession(items=[record])
+    repository = SubscriptionNodeAccessRepository(cast(Any, session))
+
+    result = await repository.list_reconciliation_candidates(limit=25)
+
+    assert result == [record]
+    compiled = str(
+        session.execute_calls[0].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "JOIN subscriptions" in compiled
+    assert "subscription_node_access.desired_state" in compiled
+    assert "subscription_node_access.actual_state" in compiled
+    assert "subscriptions.status" in compiled
+    assert "subscription_node_access.retry_count ASC" in compiled
+    assert "subscription_node_access.id ASC" in compiled
+    assert "LIMIT 25" in compiled
+
+
+@pytest.mark.asyncio
+async def test_list_reconciliation_candidates_rejects_invalid_limit():
+    repository = SubscriptionNodeAccessRepository(cast(Any, FakeSession()))
+
+    with pytest.raises(ValueError, match="limit must be positive"):
+        await repository.list_reconciliation_candidates(limit=0)
