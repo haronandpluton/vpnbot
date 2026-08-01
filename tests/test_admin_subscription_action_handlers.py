@@ -11,6 +11,7 @@ from app.bot.handlers.admin_subscription_actions import (
     _format_datetime,
     _parse_disable_args,
     _parse_extend_args,
+    _vpn_sync_summary,
     admin_disable_subscription_command,
     admin_extend_subscription_command,
 )
@@ -75,6 +76,12 @@ def test_helpers_clean_and_format_datetime_are_stable():
     assert _clean(23) == "23"
     assert _format_datetime(None) == "—"
     assert _format_datetime(value) == "05.07.2026 12:34:56"
+    assert _vpn_sync_summary(SimpleNamespace(vpn_sync_ok=True)) == (
+        "VPN nodes sync: OK"
+    )
+    assert _vpn_sync_summary(
+        SimpleNamespace(vpn_sync_ok=False, vpn_sync_error="node unavailable")
+    ) == "VPN nodes sync: ERROR\nError: node unavailable"
 
 
 @pytest.mark.parametrize(
@@ -193,6 +200,8 @@ async def test_extend_command_success_sends_full_admin_summary():
         new_expires_at=new_expires_at,
         uuid="uuid-1",
         admin_action_id=99,
+        vpn_sync_ok=True,
+        vpn_sync_error=None,
     )
     message = make_admin_message("/admin_extend_subscription 14 30")
 
@@ -208,8 +217,34 @@ async def test_extend_command_success_sends_full_admin_summary():
     assert "New expires at: 31.07.2026 12:00:00" in text
     assert "UUID: <code>uuid-1</code>" in text
     assert "Admin action ID: 99" in text
+    assert "VPN nodes sync: OK" in text
     assert "<code>/admin_subscription 14</code>" in text
     assert message.answer_calls[0]["parse_mode"] == "HTML"
+
+
+@pytest.mark.asyncio
+async def test_extend_command_warns_when_db_extended_but_vpn_sync_failed():
+    FakeAdminSubscriptionActionsService.extend_result = SimpleNamespace(
+        status="extended",
+        subscription_id=14,
+        user_id=7,
+        order_id=23,
+        days=30,
+        old_expires_at=datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc),
+        new_expires_at=datetime(2026, 7, 31, 12, 0, 0, tzinfo=timezone.utc),
+        uuid="uuid-1",
+        admin_action_id=99,
+        vpn_sync_ok=False,
+        vpn_sync_error="netherlands unavailable",
+    )
+    message = make_admin_message("/admin_extend_subscription 14 30")
+
+    await admin_extend_subscription_command(message, session="session")
+
+    text = message.answer_calls[0]["text"]
+    assert "<b>Подписка продлена</b>" in text
+    assert "VPN nodes sync: ERROR" in text
+    assert "Error: netherlands unavailable" in text
 
 
 @pytest.mark.asyncio

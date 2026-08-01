@@ -1,3 +1,4 @@
+from html import escape
 from typing import Any
 
 from aiogram import Router
@@ -74,6 +75,17 @@ def _parse_disable_args(message: Message) -> tuple[int, str] | None:
     return int(raw_subscription_id), reason
 
 
+def _vpn_sync_summary(result: Any) -> str:
+    if getattr(result, "vpn_sync_ok", True):
+        return "VPN nodes sync: OK"
+
+    error = escape(_clean(getattr(result, "vpn_sync_error", None)))
+    return (
+        "VPN nodes sync: ERROR\n"
+        f"Error: {error}"
+    )
+
+
 @router.message(Command("admin_extend_subscription"))
 async def admin_extend_subscription_command(
     message: Message,
@@ -142,6 +154,7 @@ async def admin_extend_subscription_command(
         f"New expires at: {_format_datetime(result.new_expires_at)}\n"
         f"UUID: <code>{_clean(result.uuid)}</code>\n"
         f"Admin action ID: {_clean(result.admin_action_id)}\n\n"
+        f"{_vpn_sync_summary(result)}\n\n"
         "Команды:\n"
         f"<code>/admin_subscription {result.subscription_id}</code>\n"
         f"<code>/admin_order {_clean(result.order_id)}</code>\n"

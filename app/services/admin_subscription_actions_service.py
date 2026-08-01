@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -8,6 +9,10 @@ from app.database.models import Subscription
 from app.payment_core.enums.subscription_status import SubscriptionStatus
 from app.services.admin_action_log_service import AdminActionLogService
 from app.services.subscription_meta_sync_service import SubscriptionMetaSyncService
+from app.services.vpn_access_service import VpnAccessService
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -21,6 +26,8 @@ class AdminExtendSubscriptionResult:
     order_id: int | None = None
     uuid: str | None = None
     admin_action_id: int | None = None
+    vpn_sync_ok: bool | None = None
+    vpn_sync_error: str | None = None
     message: str | None = None
 
 
@@ -40,9 +47,15 @@ class AdminDisableSubscriptionResult:
 
 
 class AdminSubscriptionActionsService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        vpn_access_service: VpnAccessService | None = None,
+    ) -> None:
         self.session = session
         self.action_log_service = AdminActionLogService(session)
+        self.vpn_access_service = vpn_access_service
 
     async def extend_subscription(
         self,
@@ -115,6 +128,26 @@ class AdminSubscriptionActionsService:
         await self.session.commit()
         await self.session.refresh(subscription)
 
+        vpn_sync_ok = True
+        vpn_sync_error = None
+
+        try:
+            vpn_access_service = self.vpn_access_service or VpnAccessService()
+            await vpn_access_service.extend_access(
+                uuid=subscription.uuid,
+                device_limit=subscription.device_limit,
+                expires_at=subscription.expires_at,
+            )
+        except Exception as error:  # noqa: BLE001 - external VPN boundary
+            vpn_sync_ok = False
+            vpn_sync_error = str(error)
+            logger.exception(
+                "Manual subscription extension was committed, but VPN node "
+                "synchronization failed: subscription_id=%s uuid=%s",
+                subscription.id,
+                subscription.uuid,
+            )
+
         result = AdminExtendSubscriptionResult(
             status="extended",
             subscription_id=subscription.id,
@@ -125,7 +158,13 @@ class AdminSubscriptionActionsService:
             order_id=subscription.order_id,
             uuid=subscription.uuid,
             admin_action_id=action_result.action_id,
-            message="Subscription extended.",
+            vpn_sync_ok=vpn_sync_ok,
+            vpn_sync_error=vpn_sync_error,
+            message=(
+                "Subscription extended."
+                if vpn_sync_ok
+                else "Subscription extended; VPN synchronization failed."
+            ),
         )
 
         await SubscriptionMetaSyncService(self.session).sync_safely(

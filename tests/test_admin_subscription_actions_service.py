@@ -62,6 +62,19 @@ class FakeSubscriptionMetaSyncService:
         return SimpleNamespace(status="ok")
 
 
+class FakeVpnAccessService:
+    def __init__(self, *, error: Exception | None = None) -> None:
+        self.error = error
+        self.extend_calls: list[dict] = []
+
+    async def extend_access(self, **kwargs):
+        self.extend_calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+
+        return SimpleNamespace(uuid=kwargs["uuid"])
+
+
 def make_subscription(
     *,
     subscription_id: int = 50,
@@ -69,6 +82,7 @@ def make_subscription(
     order_id: int | None = 23,
     status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
     uuid: str = "test-uuid",
+    device_limit: int = 1,
     expires_at: datetime | None = None,
 ):
     return SimpleNamespace(
@@ -77,6 +91,7 @@ def make_subscription(
         order_id=order_id,
         status=status,
         uuid=uuid,
+        device_limit=device_limit,
         expires_at=expires_at,
         updated_at=None,
         disabled_at=None,
@@ -88,10 +103,12 @@ def make_service(
     *,
     subscription=None,
     action_log_service: FakeActionLogService | None = None,
+    vpn_access_service: FakeVpnAccessService | None = None,
 ):
     service = AdminSubscriptionActionsService.__new__(AdminSubscriptionActionsService)
     service.session = FakeSession()
     service.action_log_service = action_log_service or FakeActionLogService()
+    service.vpn_access_service = vpn_access_service or FakeVpnAccessService()
     service._get_subscription = lambda subscription_id: _return_subscription(
         subscription,
         subscription_id,
@@ -167,10 +184,16 @@ async def test_extend_subscription_with_future_expiry_extends_from_old_expiry_an
         user_id=7,
         order_id=23,
         uuid="future-uuid",
+        device_limit=3,
         expires_at=old_expires_at,
     )
     action_log = FakeActionLogService(action_id=777)
-    service = make_service(subscription=subscription, action_log_service=action_log)
+    vpn_access = FakeVpnAccessService()
+    service = make_service(
+        subscription=subscription,
+        action_log_service=action_log,
+        vpn_access_service=vpn_access,
+    )
 
     result = await service.extend_subscription(
         subscription_id=50,
@@ -187,12 +210,21 @@ async def test_extend_subscription_with_future_expiry_extends_from_old_expiry_an
     assert result.old_expires_at == old_expires_at
     assert result.new_expires_at == old_expires_at + timedelta(days=5)
     assert result.admin_action_id == 777
+    assert result.vpn_sync_ok is True
+    assert result.vpn_sync_error is None
     assert result.message == "Subscription extended."
     assert subscription.expires_at == old_expires_at + timedelta(days=5)
     assert subscription.updated_at is not None
     assert service.session.commit_count == 1
     assert service.session.rollback_count == 0
     assert service.session.refresh_calls == [subscription]
+    assert vpn_access.extend_calls == [
+        {
+            "uuid": "future-uuid",
+            "device_limit": 3,
+            "expires_at": old_expires_at + timedelta(days=5),
+        }
+    ]
 
     assert action_log.calls == [
         {
@@ -279,7 +311,12 @@ async def test_extend_subscription_rolls_back_when_action_log_fails():
         action_id=None,
         message="Admin user not found in users table.",
     )
-    service = make_service(subscription=subscription, action_log_service=action_log)
+    vpn_access = FakeVpnAccessService()
+    service = make_service(
+        subscription=subscription,
+        action_log_service=action_log,
+        vpn_access_service=vpn_access,
+    )
 
     result = await service.extend_subscription(
         subscription_id=52,
@@ -299,7 +336,52 @@ async def test_extend_subscription_rolls_back_when_action_log_fails():
     assert service.session.commit_count == 0
     assert service.session.rollback_count == 1
     assert service.session.refresh_calls == []
+    assert vpn_access.extend_calls == []
     assert FakeSubscriptionMetaSyncService.calls == []
+
+
+@pytest.mark.asyncio
+async def test_extend_subscription_keeps_committed_db_state_when_vpn_sync_fails():
+    old_expires_at = datetime.now(timezone.utc) + timedelta(days=2)
+    subscription = make_subscription(
+        subscription_id=53,
+        user_id=8,
+        order_id=24,
+        uuid="vpn-failure-uuid",
+        device_limit=2,
+        expires_at=old_expires_at,
+    )
+    vpn_access = FakeVpnAccessService(error=RuntimeError("netherlands unavailable"))
+    service = make_service(
+        subscription=subscription,
+        vpn_access_service=vpn_access,
+    )
+
+    result = await service.extend_subscription(
+        subscription_id=53,
+        days=7,
+        admin_telegram_id=123,
+    )
+
+    expected_expiry = old_expires_at + timedelta(days=7)
+    assert result.status == "extended"
+    assert result.new_expires_at == expected_expiry
+    assert result.vpn_sync_ok is False
+    assert result.vpn_sync_error == "netherlands unavailable"
+    assert result.message == "Subscription extended; VPN synchronization failed."
+    assert subscription.expires_at == expected_expiry
+    assert service.session.commit_count == 1
+    assert service.session.rollback_count == 0
+    assert vpn_access.extend_calls == [
+        {
+            "uuid": "vpn-failure-uuid",
+            "device_limit": 2,
+            "expires_at": expected_expiry,
+        }
+    ]
+    assert FakeSubscriptionMetaSyncService.calls[0]["reason"] == (
+        "manual_extend_subscription"
+    )
 
 
 @pytest.mark.asyncio
