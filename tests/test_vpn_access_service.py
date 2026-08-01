@@ -548,6 +548,45 @@ async def test_enable_access_with_results_returns_success_for_all_nodes():
 
 
 @pytest.mark.asyncio
+async def test_disable_access_with_results_reports_every_configured_node():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands", fail_disable=True)
+    third_node = FakeXuiClient(name="sweden")
+    service = make_service(xui_clients=[first_node, second_node, third_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    results = await service.disable_access_with_results(client_uuid)
+
+    assert results == (
+        VpnNodeStateChangeResult(node_name="frankfurt", succeeded=True),
+        VpnNodeStateChangeResult(
+            node_name="netherlands",
+            succeeded=False,
+            error="3x-ui client disable failed: test failure",
+        ),
+        VpnNodeStateChangeResult(node_name="sweden", succeeded=True),
+    )
+    assert first_node.disable_calls == [client_uuid]
+    assert second_node.disable_calls == [client_uuid]
+    assert third_node.disable_calls == [client_uuid]
+
+
+@pytest.mark.asyncio
+async def test_disable_access_with_results_returns_success_for_all_nodes():
+    first_node = FakeXuiClient(name="frankfurt")
+    second_node = FakeXuiClient(name="netherlands")
+    service = make_service(xui_clients=[first_node, second_node])
+    client_uuid = "12345678-1234-5678-1234-567812345678"
+
+    results = await service.disable_access_with_results(client_uuid)
+
+    assert results == (
+        VpnNodeStateChangeResult(node_name="frankfurt", succeeded=True),
+        VpnNodeStateChangeResult(node_name="netherlands", succeeded=True),
+    )
+
+
+@pytest.mark.asyncio
 async def test_disable_access_attempts_every_node_and_reports_partial_failures():
     first_node = FakeXuiClient(name="frankfurt")
     second_node = FakeXuiClient(name="netherlands", fail_disable=True)

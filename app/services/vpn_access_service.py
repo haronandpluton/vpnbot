@@ -371,6 +371,36 @@ class VpnAccessService:
 
         return self._access_result(uuid)
 
+    async def disable_access_with_results(
+        self,
+        uuid: str,
+    ) -> tuple[VpnNodeStateChangeResult, ...]:
+        """Disable every configured node and report each result independently."""
+        xui_clients = self._configured_xui_clients()
+        node_names = self.configured_node_names()
+        results: list[VpnNodeStateChangeResult] = []
+
+        for node_name, xui_client in zip(node_names, xui_clients, strict=True):
+            try:
+                await xui_client.disable_vless_client(client_uuid=uuid)
+            except Exception as error:  # noqa: BLE001 - isolate node failures
+                results.append(
+                    VpnNodeStateChangeResult(
+                        node_name=node_name,
+                        succeeded=False,
+                        error=str(error),
+                    )
+                )
+            else:
+                results.append(
+                    VpnNodeStateChangeResult(
+                        node_name=node_name,
+                        succeeded=True,
+                    )
+                )
+
+        return tuple(results)
+
     def _access_result(self, uuid: str) -> VpnAccessResult:
         return VpnAccessResult(
             uuid=uuid,
