@@ -219,7 +219,7 @@ class SubscriptionMetaSyncService:
             exported_count=len(data),
             skipped_count=skipped_count,
             output_path=str(output_path),
-            remote_target=self.settings.subscription_meta_remote_target,
+            remote_target=",".join(self._remote_target_values()),
             stdout=stdout,
             stderr=stderr,
         )
@@ -310,7 +310,7 @@ class SubscriptionMetaSyncService:
                     {
                         "reason": reason,
                         "error": error_message,
-                        "remote_target": self.settings.subscription_meta_remote_target,
+                        "remote_target": ",".join(self._remote_target_values()),
                         "payload": payload or {},
                     },
                     ensure_ascii=False,
@@ -371,20 +371,68 @@ class SubscriptionMetaSyncService:
         finally:
             temporary_path.unlink(missing_ok=True)
 
-    async def _upload(self, output_path: Path) -> tuple[str, str]:
-        remote_target_raw = self.settings.subscription_meta_remote_target.strip()
+    def _remote_target_values(self) -> list[str]:
+        configured = getattr(
+            self.settings,
+            "subscription_meta_remote_targets",
+            "",
+        ).strip()
 
-        if not remote_target_raw:
+        if configured:
+            targets: list[str] = []
+
+            for item in configured.split(","):
+                normalized = item.strip()
+
+                if normalized and normalized not in targets:
+                    targets.append(normalized)
+
+            if targets:
+                return targets
+
+        legacy = self.settings.subscription_meta_remote_target.strip()
+        return [legacy] if legacy else []
+
+    async def _upload(self, output_path: Path) -> tuple[str, str]:
+        remote_targets = self._remote_target_values()
+
+        if not remote_targets:
             raise RuntimeError(
+                "SUBSCRIPTION_META_REMOTE_TARGETS or "
                 "SUBSCRIPTION_META_REMOTE_TARGET is not configured."
             )
 
+        stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
+
+        for remote_target_raw in remote_targets:
+            stdout, stderr = await self._upload_to_target(
+                output_path,
+                remote_target_raw,
+            )
+
+            if stdout:
+                stdout_parts.append(stdout)
+
+            if stderr:
+                stderr_parts.append(stderr)
+
+        return "\n".join(stdout_parts), "\n".join(stderr_parts)
+
+    async def _upload_to_target(
+        self,
+        output_path: Path,
+        remote_target_raw: str,
+    ) -> tuple[str, str]:
         remote_target = self._parse_remote_target(remote_target_raw)
         temp_name = f".{remote_target.filename}.{uuid4().hex}.tmp"
-        remote_temp_path = str(PurePosixPath(remote_target.directory) / temp_name)
-        remote_temp_target = f"{remote_target.host}:{remote_temp_path}"
+        remote_temp_path = str(
+            PurePosixPath(remote_target.directory) / temp_name
+        )
+        remote_temp_target = (
+            f"{remote_target.host}:{remote_temp_path}"
+        )
         common_args = self._ssh_common_args()
-
         scp_command = [
             "scp",
             *common_args,
@@ -400,7 +448,6 @@ class SubscriptionMetaSyncService:
             f"chmod 0660 {quoted_temp}; "
             f"mv -f {quoted_temp} {quoted_final}"
         )
-
         ssh_command = [
             "ssh",
             *common_args,
@@ -425,8 +472,16 @@ class SubscriptionMetaSyncService:
             )
             raise
 
-        stdout = "\n".join(part for part in [scp_stdout, ssh_stdout] if part)
-        stderr = "\n".join(part for part in [scp_stderr, ssh_stderr] if part)
+        stdout = "\n".join(
+            part
+            for part in [scp_stdout, ssh_stdout]
+            if part
+        )
+        stderr = "\n".join(
+            part
+            for part in [scp_stderr, ssh_stderr]
+            if part
+        )
         return stdout, stderr
 
     async def _cleanup_remote_temp(

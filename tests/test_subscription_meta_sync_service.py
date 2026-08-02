@@ -150,12 +150,14 @@ def make_settings(
     *,
     output_path: str = "subscriptions_meta.json",
     remote_target: str = "",
+    remote_targets: str = "",
     ssh_key: str = "",
     timeout: float = 1,
 ):
     return SimpleNamespace(
         subscription_meta_output_path=output_path,
         subscription_meta_remote_target=remote_target,
+        subscription_meta_remote_targets=remote_targets,
         subscription_meta_ssh_key=ssh_key,
         subscription_meta_sync_timeout_seconds=timeout,
     )
@@ -519,7 +521,8 @@ async def test_upload_with_empty_remote_target_fails_closed(tmp_path):
 
     with pytest.raises(
         RuntimeError,
-        match="SUBSCRIPTION_META_REMOTE_TARGET is not configured",
+        match="SUBSCRIPTION_META_REMOTE_TARGETS or "
+        "SUBSCRIPTION_META_REMOTE_TARGET is not configured",
     ):
         await service._upload(output_path)
 
@@ -589,6 +592,73 @@ async def test_upload_builds_scp_command_with_ssh_key_and_returns_decoded_output
     assert "chmod 0660" in ssh_args[10]
     assert "mv -f" in ssh_args[10]
     assert "/opt/subscriptions.json" in ssh_args[10]
+
+
+@pytest.mark.asyncio
+async def test_upload_publishes_to_all_remote_targets(
+    monkeypatch,
+    tmp_path,
+):
+    output_path = tmp_path / "subscriptions_meta.json"
+    processes = iter(
+        [
+            FakeProcess(),
+            FakeProcess(),
+            FakeProcess(),
+            FakeProcess(),
+        ]
+    )
+    calls = []
+
+    async def fake_create_subprocess_exec(
+        *args,
+        stdout,
+        stderr,
+    ):
+        calls.append(
+            {
+                "args": args,
+                "stdout": stdout,
+                "stderr": stderr,
+            }
+        )
+        return next(processes)
+
+    monkeypatch.setattr(
+        asyncio,
+        "create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    service = make_service(
+        settings=make_settings(
+            remote_target=(
+                "root@legacy:/opt/subscriptions.json"
+            ),
+            remote_targets=(
+                "root@za:/opt/subscriptions.json,"
+                "root@tr:/opt/subscriptions.json"
+            ),
+        )
+    )
+
+    await service._upload(output_path)
+
+    assert len(calls) == 4
+
+    assert calls[0]["args"][0] == "scp"
+    assert calls[0]["args"][-1].startswith(
+        "root@za:/opt/.subscriptions.json."
+    )
+    assert calls[1]["args"][0] == "ssh"
+    assert calls[1]["args"][-2] == "root@za"
+
+    assert calls[2]["args"][0] == "scp"
+    assert calls[2]["args"][-1].startswith(
+        "root@tr:/opt/.subscriptions.json."
+    )
+    assert calls[3]["args"][0] == "ssh"
+    assert calls[3]["args"][-2] == "root@tr"
 
 
 @pytest.mark.asyncio

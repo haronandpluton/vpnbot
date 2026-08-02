@@ -166,6 +166,10 @@ class Settings(BaseSettings):
         default="",
         alias="SUBSCRIPTION_META_REMOTE_TARGET",
     )
+    subscription_meta_remote_targets: str = Field(
+        default="",
+        alias="SUBSCRIPTION_META_REMOTE_TARGETS",
+    )
     subscription_meta_ssh_key: str = Field(
         default="",
         alias="SUBSCRIPTION_META_SSH_KEY",
