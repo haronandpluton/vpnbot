@@ -4,6 +4,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 from uuid import UUID
 
 import httpx
@@ -192,44 +193,64 @@ class XuiClient:
         self._validate_uuid(client_uuid)
         desired_enabled = bool(enabled)
 
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=20.0,
+            follow_redirects=True,
+        ) as client:
             csrf = await self._login(client)
-            existing = await self._get_client_by_uuid(client, client_uuid)
+            existing = await self._get_client_by_uuid(
+                client,
+                client_uuid,
+            )
 
             if existing is None:
+                # Absence is already the terminal disabled state.
+                # Enabling an absent client remains an error.
+                if not desired_enabled:
+                    return
+
                 raise XuiClientError(
                     "3x-ui client not found on "
                     f"{self.config.name}: uuid={client_uuid}"
                 )
 
-            if bool(existing.get("enable", True)) == desired_enabled:
+            if (
+                bool(existing.get("enable", True))
+                == desired_enabled
+            ):
                 return
 
-            updated = dict(existing)
-            updated["id"] = client_uuid
-            updated["enable"] = desired_enabled
-            payload = {
-                "id": self.config.inbound_id,
-                "settings": json.dumps(
-                    {"clients": [updated]},
-                    separators=(",", ":"),
-                ),
-            }
+            email = str(
+                existing.get("email") or ""
+            ).strip()
+
+            if not email:
+                raise XuiClientError(
+                    "3x-ui client has no email on "
+                    f"{self.config.name}: uuid={client_uuid}"
+                )
 
             try:
-                response = await client.post(
-                    f"{self.base_url}/panel/api/inbounds/updateClient/{client_uuid}",
-                    json=payload,
-                    headers=self._api_headers(csrf),
+                data = await self._replace_client(
+                    client,
+                    csrf=csrf,
+                    email=email,
+                    client_uuid=client_uuid,
+                    changes={
+                        "enable": desired_enabled,
+                    },
                 )
-                data = self._json(response)
-            except (httpx.HTTPError, XuiClientError) as error:
+            except (
+                httpx.HTTPError,
+                XuiClientError,
+            ) as error:
                 if await self._client_has_enabled_state(
                     client,
                     client_uuid=client_uuid,
                     enabled=desired_enabled,
                 ):
                     return
+
                 raise error
 
             if not data.get("success"):
@@ -240,7 +261,11 @@ class XuiClient:
                 ):
                     return
 
-                message = data.get("msg") or "unknown 3x-ui client state update error"
+                message = (
+                    data.get("msg")
+                    or "unknown 3x-ui client state update error"
+                )
+
                 raise XuiClientError(
                     "3x-ui client state update failed on "
                     f"{self.config.name}: {message}"
@@ -253,7 +278,9 @@ class XuiClient:
             ):
                 raise XuiClientError(
                     "3x-ui client state update was not applied on "
-                    f"{self.config.name}: uuid={client_uuid} enabled={desired_enabled}"
+                    f"{self.config.name}: "
+                    f"uuid={client_uuid} "
+                    f"enabled={desired_enabled}"
                 )
 
     async def _update_existing_client(
@@ -266,58 +293,67 @@ class XuiClient:
         device_limit: int,
         expiry_time_ms: int,
     ) -> None:
-        updated = dict(existing)
-        updated["id"] = client_uuid
-        updated["limitIp"] = int(device_limit or 0)
-        updated["expiryTime"] = expiry_time_ms
-        updated["enable"] = True
+        email = str(
+            existing.get("email") or ""
+        ).strip()
 
-        payload = {
-            "id": self.config.inbound_id,
-            "settings": json.dumps(
-                {"clients": [updated]},
-                separators=(",", ":"),
-            ),
-        }
+        if not email:
+            raise XuiClientError(
+                "3x-ui client has no email on "
+                f"{self.config.name}: uuid={client_uuid}"
+            )
 
         try:
-            response = await client.post(
-                f"{self.base_url}/panel/api/inbounds/updateClient/{client_uuid}",
-                json=payload,
-                headers=self._api_headers(csrf),
+            data = await self._replace_client(
+                client,
+                csrf=csrf,
+                email=email,
+                client_uuid=client_uuid,
+                changes={
+                    "limitIp": int(device_limit or 0),
+                    "expiryTime": expiry_time_ms,
+                    "enable": True,
+                },
             )
-            data = self._json(response)
-        except (httpx.HTTPError, XuiClientError) as error:
+        except (
+            httpx.HTTPError,
+            XuiClientError,
+        ) as error:
             if await self._client_has_desired_state(
                 client,
                 client_uuid=client_uuid,
-                email=str(existing.get("email") or ""),
+                email=email,
                 device_limit=device_limit,
                 expiry_time_ms=expiry_time_ms,
             ):
                 return
+
             raise error
 
         if not data.get("success"):
             if await self._client_has_desired_state(
                 client,
                 client_uuid=client_uuid,
-                email=str(existing.get("email") or ""),
+                email=email,
                 device_limit=device_limit,
                 expiry_time_ms=expiry_time_ms,
             ):
                 return
 
-            message = data.get("msg") or "unknown 3x-ui client update error"
-            raise XuiClientError(
-                f"3x-ui client update failed on {self.config.name}: {message}"
+            message = (
+                data.get("msg")
+                or "unknown 3x-ui client update error"
             )
 
-        # Do not trust a success flag without checking the persisted client.
+            raise XuiClientError(
+                "3x-ui client update failed on "
+                f"{self.config.name}: {message}"
+            )
+
         if not await self._client_has_desired_state(
             client,
             client_uuid=client_uuid,
-            email=str(existing.get("email") or ""),
+            email=email,
             device_limit=device_limit,
             expiry_time_ms=expiry_time_ms,
         ):
@@ -325,6 +361,132 @@ class XuiClient:
                 "3x-ui client update was not applied on "
                 f"{self.config.name}: uuid={client_uuid}"
             )
+
+    async def _replace_client(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        csrf: str,
+        email: str,
+        client_uuid: str,
+        changes: dict[str, Any],
+    ) -> dict[str, Any]:
+        full_client = await self._get_full_client_by_email(
+            client,
+            csrf=csrf,
+            email=email,
+        )
+
+        actual_uuid = str(
+            full_client.get("uuid") or ""
+        )
+
+        if actual_uuid != client_uuid:
+            raise XuiClientError(
+                "3x-ui UUID conflict on "
+                f"{self.config.name}: "
+                f"email={email} "
+                f"expected_uuid={client_uuid} "
+                f"existing_uuid={actual_uuid}"
+            )
+
+        # /clients/get returns a read DTO:
+        #   id = numeric database row ID
+        #   uuid = VLESS UUID
+        #
+        # /clients/update accepts a write DTO:
+        #   id = VLESS UUID string
+        updated = dict(full_client)
+
+        updated.pop("uuid", None)
+        updated.pop("createdAt", None)
+        updated.pop("updatedAt", None)
+        updated.pop("traffic", None)
+        updated.pop("inboundIds", None)
+
+        updated["id"] = client_uuid
+        updated.update(changes)
+
+        encoded_email = quote(
+            email,
+            safe="",
+        )
+
+        response = await client.post(
+            (
+                f"{self.base_url}"
+                f"/panel/api/clients/update/"
+                f"{encoded_email}"
+            ),
+            json=updated,
+            headers=self._api_headers(csrf),
+        )
+
+        return self._json(response)
+
+    async def _get_full_client_by_email(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        csrf: str,
+        email: str,
+    ) -> dict[str, Any]:
+        encoded_email = quote(
+            email,
+            safe="",
+        )
+
+        response = await client.get(
+            (
+                f"{self.base_url}"
+                f"/panel/api/clients/get/"
+                f"{encoded_email}"
+            ),
+            headers=self._api_headers(csrf),
+        )
+
+        data = self._json(response)
+
+        if not data.get("success"):
+            message = (
+                data.get("msg")
+                or "unknown 3x-ui client lookup error"
+            )
+
+            raise XuiClientError(
+                "3x-ui client lookup failed on "
+                f"{self.config.name}: {message}"
+            )
+
+        obj = data.get("obj")
+
+        if not isinstance(obj, dict):
+            raise XuiClientError(
+                "3x-ui returned invalid client object on "
+                f"{self.config.name}"
+            )
+
+        full_client = obj.get("client")
+
+        if not isinstance(full_client, dict):
+            raise XuiClientError(
+                "3x-ui returned invalid client record on "
+                f"{self.config.name}"
+            )
+
+        actual_email = str(
+            full_client.get("email") or ""
+        )
+
+        if actual_email != email:
+            raise XuiClientError(
+                "3x-ui returned unexpected client identity on "
+                f"{self.config.name}: "
+                f"expected_email={email} "
+                f"actual_email={actual_email}"
+            )
+
+        return dict(full_client)
 
     async def _get_client_by_identity(
         self,
