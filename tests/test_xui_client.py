@@ -71,7 +71,7 @@ class FakeAsyncClient:
         self.exit_count += 1
         return False
 
-    async def get(self, url: str):
+    async def get(self, url: str, **kwargs):
         self.get_calls.append(url)
 
         if not self.get_responses:
@@ -500,8 +500,9 @@ async def test_update_vless_client_updates_expiry_limit_and_reenables(monkeypatc
 
     monkeypatch.setattr(XuiClient, "_login", fake_login)
 
+    client_uuid = "12345678-1234-5678-1234-567812345678"
     old_client = {
-        "id": "12345678-1234-5678-1234-567812345678",
+        "id": client_uuid,
         "email": "tg-7-12345678",
         "subId": "existing-sub-id",
         "flow": "",
@@ -517,13 +518,31 @@ async def test_update_vless_client_updates_expiry_limit_and_reenables(monkeypatc
         "limitIp": 3,
         "enable": True,
     }
+    full_client = {
+        **old_client,
+        "id": 101,
+        "uuid": client_uuid,
+        "inboundIds": [42],
+        "createdAt": "2026-08-04T00:00:00Z",
+        "updatedAt": "2026-08-04T00:00:00Z",
+        "traffic": {"up": 0, "down": 0},
+    }
 
-    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    fake_http_client = FakeAsyncClient(
+        timeout=20.0,
+        follow_redirects=True,
+    )
     fake_http_client.get_responses = [
         FakeResponse(
             json_data={
                 "success": True,
                 "obj": {"settings": {"clients": [old_client]}},
+            }
+        ),
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"client": full_client},
             }
         ),
         FakeResponse(
@@ -547,7 +566,7 @@ async def test_update_vless_client_updates_expiry_limit_and_reenables(monkeypatc
     expires_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
 
     await client.update_vless_client(
-        client_uuid="12345678-1234-5678-1234-567812345678",
+        client_uuid=client_uuid,
         device_limit=3,
         expires_at=expires_at,
     )
@@ -555,16 +574,10 @@ async def test_update_vless_client_updates_expiry_limit_and_reenables(monkeypatc
     assert fake_http_client.post_calls == [
         {
             "url": (
-                "https://xui.example/panel/api/inbounds/updateClient/"
-                "12345678-1234-5678-1234-567812345678"
+                "https://xui.example/panel/api/clients/update/"
+                "tg-7-12345678"
             ),
-            "json": {
-                "id": 42,
-                "settings": json.dumps(
-                    {"clients": [updated_client]},
-                    separators=(",", ":"),
-                ),
-            },
+            "json": updated_client,
             "headers": {
                 "X-Requested-With": "XMLHttpRequest",
                 "X-CSRF-Token": "csrf-panel",
@@ -655,8 +668,9 @@ async def test_create_vless_client_reconciles_same_identity_with_old_expiry(
 
     monkeypatch.setattr(XuiClient, "_login", fake_login)
 
+    client_uuid = "12345678-1234-5678-1234-567812345678"
     old_client = {
-        "id": "12345678-1234-5678-1234-567812345678",
+        "id": client_uuid,
         "email": "tg-7-12345678",
         "subId": "existing-sub-id",
         "expiryTime": 0,
@@ -669,12 +683,28 @@ async def test_create_vless_client_reconciles_same_identity_with_old_expiry(
         "limitIp": 2,
         "enable": True,
     }
-    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    full_client = {
+        **old_client,
+        "id": 102,
+        "uuid": client_uuid,
+        "inboundIds": [42],
+    }
+
+    fake_http_client = FakeAsyncClient(
+        timeout=20.0,
+        follow_redirects=True,
+    )
     fake_http_client.get_responses = [
         FakeResponse(
             json_data={
                 "success": True,
                 "obj": {"settings": {"clients": [old_client]}},
+            }
+        ),
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"client": full_client},
             }
         ),
         FakeResponse(
@@ -687,6 +717,7 @@ async def test_create_vless_client_reconciles_same_identity_with_old_expiry(
     fake_http_client.post_responses = [
         FakeResponse(json_data={"success": True})
     ]
+
     monkeypatch.setattr(
         xui_module.httpx,
         "AsyncClient",
@@ -694,14 +725,25 @@ async def test_create_vless_client_reconciles_same_identity_with_old_expiry(
     )
 
     await XuiClient(make_config()).create_vless_client(
-        client_uuid="12345678-1234-5678-1234-567812345678",
+        client_uuid=client_uuid,
         email="tg-7-12345678",
         device_limit=2,
         expires_at=datetime(2030, 1, 1, tzinfo=timezone.utc),
     )
 
-    assert len(fake_http_client.post_calls) == 1
-    assert "/panel/api/inbounds/updateClient/" in fake_http_client.post_calls[0]["url"]
+    assert fake_http_client.post_calls == [
+        {
+            "url": (
+                "https://xui.example/panel/api/clients/update/"
+                "tg-7-12345678"
+            ),
+            "json": updated_client,
+            "headers": {
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRF-Token": "csrf-panel",
+            },
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -723,13 +765,32 @@ async def test_disable_vless_client_updates_state_and_verifies_persisted_client(
         "enable": True,
         "comment": "telegram user 7",
     }
-    disabled_client = {**enabled_client, "enable": False}
-    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    disabled_client = {
+        **enabled_client,
+        "enable": False,
+    }
+    full_client = {
+        **enabled_client,
+        "id": 103,
+        "uuid": client_uuid,
+        "inboundIds": [42],
+    }
+
+    fake_http_client = FakeAsyncClient(
+        timeout=20.0,
+        follow_redirects=True,
+    )
     fake_http_client.get_responses = [
         FakeResponse(
             json_data={
                 "success": True,
                 "obj": {"settings": {"clients": [enabled_client]}},
+            }
+        ),
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"client": full_client},
             }
         ),
         FakeResponse(
@@ -742,29 +803,26 @@ async def test_disable_vless_client_updates_state_and_verifies_persisted_client(
     fake_http_client.post_responses = [
         FakeResponse(json_data={"success": True})
     ]
+
     monkeypatch.setattr(
         xui_module.httpx,
         "AsyncClient",
         lambda **kwargs: fake_http_client,
     )
 
-    await XuiClient(make_config(name="netherlands")).disable_vless_client(
+    await XuiClient(
+        make_config(name="netherlands")
+    ).disable_vless_client(
         client_uuid=client_uuid,
     )
 
     assert fake_http_client.post_calls == [
         {
             "url": (
-                "https://xui.example/panel/api/inbounds/updateClient/"
-                f"{client_uuid}"
+                "https://xui.example/panel/api/clients/update/"
+                "tg-7-12345678"
             ),
-            "json": {
-                "id": 42,
-                "settings": json.dumps(
-                    {"clients": [disabled_client]},
-                    separators=(",", ":"),
-                ),
-            },
+            "json": disabled_client,
             "headers": {
                 "X-Requested-With": "XMLHttpRequest",
                 "X-CSRF-Token": "csrf-panel",
@@ -826,13 +884,32 @@ async def test_enable_vless_client_reenables_existing_client(monkeypatch):
         "limitIp": 3,
         "enable": False,
     }
-    enabled_client = {**disabled_client, "enable": True}
-    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    enabled_client = {
+        **disabled_client,
+        "enable": True,
+    }
+    full_client = {
+        **disabled_client,
+        "id": 104,
+        "uuid": client_uuid,
+        "inboundIds": [42],
+    }
+
+    fake_http_client = FakeAsyncClient(
+        timeout=20.0,
+        follow_redirects=True,
+    )
     fake_http_client.get_responses = [
         FakeResponse(
             json_data={
                 "success": True,
                 "obj": {"settings": {"clients": [disabled_client]}},
+            }
+        ),
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"client": full_client},
             }
         ),
         FakeResponse(
@@ -845,16 +922,30 @@ async def test_enable_vless_client_reenables_existing_client(monkeypatch):
     fake_http_client.post_responses = [
         FakeResponse(json_data={"success": True})
     ]
+
     monkeypatch.setattr(
         xui_module.httpx,
         "AsyncClient",
         lambda **kwargs: fake_http_client,
     )
 
-    await XuiClient(make_config()).enable_vless_client(client_uuid=client_uuid)
+    await XuiClient(make_config()).enable_vless_client(
+        client_uuid=client_uuid,
+    )
 
-    settings = json.loads(fake_http_client.post_calls[0]["json"]["settings"])
-    assert settings["clients"][0]["enable"] is True
+    assert fake_http_client.post_calls == [
+        {
+            "url": (
+                "https://xui.example/panel/api/clients/update/"
+                "tg-7-12345678"
+            ),
+            "json": enabled_client,
+            "headers": {
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRF-Token": "csrf-panel",
+            },
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -872,12 +963,28 @@ async def test_disable_vless_client_rejects_success_without_persisted_change(
         "email": "tg-7-12345678",
         "enable": True,
     }
-    fake_http_client = FakeAsyncClient(timeout=20.0, follow_redirects=True)
+    full_client = {
+        **enabled_client,
+        "id": 105,
+        "uuid": client_uuid,
+        "inboundIds": [42],
+    }
+
+    fake_http_client = FakeAsyncClient(
+        timeout=20.0,
+        follow_redirects=True,
+    )
     fake_http_client.get_responses = [
         FakeResponse(
             json_data={
                 "success": True,
                 "obj": {"settings": {"clients": [enabled_client]}},
+            }
+        ),
+        FakeResponse(
+            json_data={
+                "success": True,
+                "obj": {"client": full_client},
             }
         ),
         FakeResponse(
@@ -890,6 +997,7 @@ async def test_disable_vless_client_rejects_success_without_persisted_change(
     fake_http_client.post_responses = [
         FakeResponse(json_data={"success": True})
     ]
+
     monkeypatch.setattr(
         xui_module.httpx,
         "AsyncClient",
