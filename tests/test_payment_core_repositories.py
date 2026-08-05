@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from sqlalchemy.dialects import postgresql
+
 from app.common.enums import CurrencyCode, NetworkCode, TariffCode
 from app.database.models import Order, Payment, PaymentEvent
 from app.database.repositories.orders import OrderRepository
@@ -318,6 +320,36 @@ async def test_payment_repository_get_by_order_id_returns_scalar_list():
 
     assert result == payments
     assert len(session.execute_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_payment_repository_gets_earliest_confirmed_order_id():
+    session = FakeSession(scalar_value=23)
+    repository = PaymentRepository(session)
+
+    result = (
+        await repository
+        .get_first_confirmed_order_id_by_user(7)
+    )
+
+    assert result == 23
+
+    compiled = session.execute_calls[0].compile(
+        dialect=postgresql.dialect(),
+    )
+    sql = str(compiled)
+
+    assert "payments.user_id =" in sql
+    assert "payments.status =" in sql
+    assert (
+        "ORDER BY payments.confirmed_at ASC, "
+        "payments.id ASC"
+        in sql
+    )
+    assert (
+        PaymentStatus.CONFIRMED
+        in compiled.params.values()
+    )
 
 
 @pytest.mark.asyncio

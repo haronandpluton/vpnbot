@@ -20,6 +20,28 @@ class FakePaymentEventService:
         return self.result
 
 
+class FakeAdsGramTrackingService:
+    def __init__(
+        self,
+        *,
+        should_fail: bool = False,
+    ) -> None:
+        self.should_fail = should_fail
+        self.calls: list[dict] = []
+
+    async def enqueue_purchase_conversion(self, **kwargs):
+        self.calls.append(kwargs)
+
+        if self.should_fail:
+            raise RuntimeError(
+                "adsgram queue failed"
+            )
+
+        return SimpleNamespace(
+            status="queued",
+            goal_type=2,
+        )
+
 class FakeSubscriptionService:
     def __init__(self, *, should_fail: bool = False) -> None:
         self.should_fail = should_fail
@@ -36,11 +58,32 @@ class FakeSubscriptionService:
         return self.subscription, self.config_uri
 
 
-def make_service(*, event_result, subscription_service: FakeSubscriptionService | None = None):
-    service = PaymentActivationService.__new__(PaymentActivationService)
-    service.session = SimpleNamespace()
-    service.payment_event_service = FakePaymentEventService(event_result)
-    service.subscription_service = subscription_service or FakeSubscriptionService()
+def make_service(
+    *,
+    event_result,
+    subscription_service: (
+        FakeSubscriptionService | None
+    ) = None,
+    adsgram_tracking_service: (
+        FakeAdsGramTrackingService | None
+    ) = None,
+    session=None,
+):
+    service = PaymentActivationService.__new__(
+        PaymentActivationService
+    )
+    service.session = session or SimpleNamespace()
+    service.payment_event_service = (
+        FakePaymentEventService(event_result)
+    )
+    service.subscription_service = (
+        subscription_service
+        or FakeSubscriptionService()
+    )
+    service.adsgram_tracking_service = (
+        adsgram_tracking_service
+        or FakeAdsGramTrackingService()
+    )
     return service
 
 
@@ -52,8 +95,17 @@ def make_payment(*, status: PaymentStatus = PaymentStatus.CONFIRMED):
     return SimpleNamespace(id=2, status=status)
 
 
-def make_order(*, order_id: int = 3, status: OrderStatus = OrderStatus.PAID):
-    return SimpleNamespace(id=order_id, status=status)
+def make_order(
+    *,
+    order_id: int = 3,
+    user_id: int = 7,
+    status: OrderStatus = OrderStatus.PAID,
+):
+    return SimpleNamespace(
+        id=order_id,
+        user_id=user_id,
+        status=status,
+    )
 
 
 @pytest.mark.asyncio
@@ -84,6 +136,13 @@ async def test_confirmed_paid_order_activates_subscription_once_and_passes_event
     assert subscription.id == 4
     assert config_uri == "vless://test-config"
     assert service.subscription_service.calls == [23]
+    assert service.adsgram_tracking_service.calls == [
+        {
+            "user_id": 7,
+            "order_id": 23,
+            "payment_id": 2,
+        }
+    ]
 
     assert service.payment_event_service.calls == [
         {
@@ -122,7 +181,13 @@ async def test_duplicate_existing_event_with_activated_order_uses_idempotent_sub
     assert result[2].uuid == "test-uuid"
     assert result[3] == "vless://test-config"
     assert service.subscription_service.calls == [23]
-
+    assert service.adsgram_tracking_service.calls == [
+        {
+            "user_id": 7,
+            "order_id": 23,
+            "payment_id": 2,
+        }
+    ]
 
 @pytest.mark.asyncio
 async def test_event_without_payment_does_not_activate_subscription():
@@ -139,6 +204,7 @@ async def test_event_without_payment_does_not_activate_subscription():
 
     assert result == (event, None, None, None)
     assert service.subscription_service.calls == []
+    assert service.adsgram_tracking_service.calls == []
 
 
 @pytest.mark.asyncio
@@ -169,6 +235,7 @@ async def test_non_confirmed_payment_does_not_activate_subscription(payment_stat
 
     assert result == (event, payment, None, None)
     assert service.subscription_service.calls == []
+    assert service.adsgram_tracking_service.calls == []
 
 
 @pytest.mark.asyncio
@@ -187,6 +254,7 @@ async def test_confirmed_payment_without_paid_order_does_not_activate_subscripti
 
     assert result == (event, payment, None, None)
     assert service.subscription_service.calls == []
+    assert service.adsgram_tracking_service.calls == []
 
 
 @pytest.mark.asyncio
@@ -206,6 +274,7 @@ async def test_confirmed_payment_with_waiting_order_does_not_activate_subscripti
 
     assert result == (event, payment, None, None)
     assert service.subscription_service.calls == []
+    assert service.adsgram_tracking_service.calls == []
 
 
 @pytest.mark.asyncio
@@ -274,3 +343,61 @@ async def test_activation_passes_allow_expired_order_only_when_requested():
             "allow_expired_order": True,
         }
     ]
+
+class RollbackSession:
+    def __init__(self) -> None:
+        self.rollback_count = 0
+
+    async def rollback(self) -> None:
+        self.rollback_count += 1
+
+
+@pytest.mark.asyncio
+async def test_adsgram_enqueue_failure_does_not_block_subscription_activation():
+    event = make_event()
+    payment = make_payment(
+        status=PaymentStatus.CONFIRMED
+    )
+    paid_order = make_order(
+        order_id=23,
+        status=OrderStatus.PAID,
+    )
+
+    adsgram_service = FakeAdsGramTrackingService(
+        should_fail=True
+    )
+    session = RollbackSession()
+
+    service = make_service(
+        event_result=(
+            event,
+            payment,
+            paid_order,
+        ),
+        adsgram_tracking_service=adsgram_service,
+        session=session,
+    )
+
+    result = (
+        await service
+        .process_confirmed_payment_event_and_activate(
+            order_id=23,
+            amount=Decimal("4.00"),
+            provider="cryptobot",
+            event_type="invoice_paid",
+            external_event_id="cryptobot:55822653",
+        )
+    )
+
+    assert result[2].uuid == "test-uuid"
+    assert service.subscription_service.calls == [23]
+
+    assert adsgram_service.calls == [
+        {
+            "user_id": 7,
+            "order_id": 23,
+            "payment_id": 2,
+        }
+    ]
+
+    assert session.rollback_count == 1

@@ -30,6 +30,25 @@ class PaymentRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_first_confirmed_order_id_by_user(
+        self,
+        user_id: int,
+    ) -> int | None:
+        stmt = (
+            select(Payment.order_id)
+            .where(
+                Payment.user_id == user_id,
+                Payment.status == PaymentStatus.CONFIRMED,
+            )
+            .order_by(
+                Payment.confirmed_at.asc(),
+                Payment.id.asc(),
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def create(
         self,
         order_id: int,

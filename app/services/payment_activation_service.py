@@ -12,6 +12,9 @@ from app.database.repositories.system_errors import (
 )
 from app.payment_core.enums.order_status import OrderStatus
 from app.payment_core.enums.payment_status import PaymentStatus
+from app.services.adsgram_tracking_service import (
+    AdsGramTrackingService,
+)
 from app.services.payment_event_service import PaymentEventService
 from app.services.subscription_service import SubscriptionService
 
@@ -38,6 +41,9 @@ class PaymentActivationService:
         self.session = session
         self.payment_event_service = PaymentEventService(session)
         self.subscription_service = SubscriptionService(session)
+        self.adsgram_tracking_service = (
+            AdsGramTrackingService(session)
+        )
 
     async def process_confirmed_payment_event_and_activate(
         self,
@@ -92,6 +98,12 @@ class PaymentActivationService:
         }:
             return event, payment, None, None
 
+        await self._enqueue_adsgram_purchase_conversion(
+            user_id=paid_order.user_id,
+            order_id=paid_order.id,
+            payment_id=payment.id,
+        )
+
         failure_context = {
             "order_id": self._model_id(paid_order) or order_id,
             "payment_event_id": self._model_id(event),
@@ -138,6 +150,52 @@ class PaymentActivationService:
 
         return event, payment, subscription, config_uri
 
+    async def _enqueue_adsgram_purchase_conversion(
+        self,
+        *,
+        user_id: int,
+        order_id: int,
+        payment_id: int,
+    ) -> None:
+        try:
+            result = (
+                await self.adsgram_tracking_service
+                .enqueue_purchase_conversion(
+                    user_id=user_id,
+                    order_id=order_id,
+                    payment_id=payment_id,
+                )
+            )
+
+            logger.info(
+                "AdsGram purchase conversion handled: "
+                "user_id=%s order_id=%s payment_id=%s "
+                "status=%s goal_type=%s",
+                user_id,
+                order_id,
+                payment_id,
+                result.status,
+                result.goal_type,
+            )
+
+        except Exception:
+            # Ошибка AdsGram не должна останавливать
+            # активацию или продление VPN.
+            logger.exception(
+                "AdsGram purchase conversion enqueue failed: "
+                "user_id=%s order_id=%s payment_id=%s",
+                user_id,
+                order_id,
+                payment_id,
+            )
+
+            try:
+                await self.session.rollback()
+            except Exception:
+                logger.exception(
+                    "Failed to rollback after AdsGram purchase "
+                    "conversion enqueue failure."
+                )
     async def _record_activation_failure(
         self,
         *,

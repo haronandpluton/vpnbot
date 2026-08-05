@@ -44,6 +44,15 @@ class FakePaymentEventService:
     async def process_confirmed_event(self, **kwargs):
         return self.result
 
+class FakeAdsGramTrackingService:
+    async def enqueue_purchase_conversion(
+        self,
+        **kwargs,
+    ):
+        return SimpleNamespace(
+            status="queued",
+            goal_type=2,
+        )
 
 class FailingSubscriptionService:
     def __init__(self, message: str = "vpn mutation failed") -> None:
@@ -107,6 +116,7 @@ def make_context():
     )
     order = SimpleNamespace(
         id=33,
+        user_id=7,
         status=OrderStatus.PAID,
         target_subscription_id=50,
         activated_subscription_id=None,
@@ -125,6 +135,9 @@ def make_service(*, repository):
         (event, payment, order)
     )
     service.subscription_service = FailingSubscriptionService()
+    service.adsgram_tracking_service = (
+        FakeAdsGramTrackingService()
+    )
     return service, session, event, payment, order
 
 

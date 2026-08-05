@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.repositories.adsgram_conversions import (
     AdsGramConversionRepository,
 )
+from app.database.repositories.payments import PaymentRepository
 from app.database.repositories.users import UserRepository
 
 ADSGRAM_GOAL_REGISTRATION = 1
@@ -26,6 +27,17 @@ class AdsGramAttributionResult:
     status: str
     user_id: int | None = None
     campaign_id: str | None = None
+    conversion_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AdsGramPurchaseResult:
+    status: str
+    user_id: int | None = None
+    order_id: int | None = None
+    payment_id: int | None = None
+    campaign_id: str | None = None
+    goal_type: int | None = None
     conversion_id: int | None = None
 
 
@@ -52,6 +64,7 @@ class AdsGramTrackingService:
         conversion_repository: (
             AdsGramConversionRepository | None
         ) = None,
+        payment_repository: PaymentRepository | None = None,
     ) -> None:
         self.session = session
         self.user_repository = (
@@ -60,6 +73,9 @@ class AdsGramTrackingService:
         self.conversion_repository = (
             conversion_repository
             or AdsGramConversionRepository(session)
+        )
+        self.payment_repository = (
+                payment_repository or PaymentRepository(session)
         )
 
     async def capture_start_attribution(
@@ -168,6 +184,133 @@ class AdsGramTrackingService:
                     if conversion is not None
                     else None
                 ),
+            )
+
+        except Exception:
+            await self.session.rollback()
+            raise
+    async def enqueue_purchase_conversion(
+        self,
+        *,
+        user_id: int,
+        order_id: int,
+        payment_id: int,
+    ) -> AdsGramPurchaseResult:
+        idempotency_key = f"purchase:order:{order_id}"
+
+        try:
+            user = await self.user_repository.get_by_id(
+                user_id
+            )
+
+            if user is None:
+                await self.session.rollback()
+
+                return AdsGramPurchaseResult(
+                    status="user_not_found",
+                    user_id=user_id,
+                    order_id=order_id,
+                    payment_id=payment_id,
+                )
+
+            if user.adsgram_campaign_id is None:
+                await self.session.commit()
+
+                return AdsGramPurchaseResult(
+                    status="not_attributed",
+                    user_id=user.id,
+                    order_id=order_id,
+                    payment_id=payment_id,
+                )
+
+            existing = (
+                await self.conversion_repository
+                .get_by_idempotency_key(idempotency_key)
+            )
+
+            if existing is not None:
+                await self.session.commit()
+
+                return AdsGramPurchaseResult(
+                    status="already_queued",
+                    user_id=user.id,
+                    order_id=order_id,
+                    payment_id=payment_id,
+                    campaign_id=user.adsgram_campaign_id,
+                    goal_type=existing.goal_type,
+                    conversion_id=existing.id,
+                )
+
+            first_order_id = (
+                await self.payment_repository
+                .get_first_confirmed_order_id_by_user(
+                    user.id
+                )
+            )
+
+            if first_order_id is None:
+                await self.session.commit()
+
+                return AdsGramPurchaseResult(
+                    status="confirmed_payment_not_found",
+                    user_id=user.id,
+                    order_id=order_id,
+                    payment_id=payment_id,
+                    campaign_id=user.adsgram_campaign_id,
+                )
+
+            goal_type = (
+                ADSGRAM_GOAL_FIRST_PURCHASE
+                if first_order_id == order_id
+                else ADSGRAM_GOAL_REPEAT_PURCHASE
+            )
+
+            conversion = (
+                await self.conversion_repository
+                .create_pending(
+                    user_id=user.id,
+                    order_id=order_id,
+                    campaign_id=user.adsgram_campaign_id,
+                    goal_type=goal_type,
+                    idempotency_key=idempotency_key,
+                )
+            )
+
+            await self.session.commit()
+
+            return AdsGramPurchaseResult(
+                status="queued",
+                user_id=user.id,
+                order_id=order_id,
+                payment_id=payment_id,
+                campaign_id=user.adsgram_campaign_id,
+                goal_type=goal_type,
+                conversion_id=conversion.id,
+            )
+
+        except IntegrityError:
+            # Защита от одновременной обработки
+            # одного и того же payment event.
+            await self.session.rollback()
+
+            existing = (
+                await self.conversion_repository
+                .get_by_idempotency_key(idempotency_key)
+            )
+
+            if existing is None:
+                raise
+
+            await self.session.commit()
+
+            return AdsGramPurchaseResult(
+                status="already_queued",
+                user_id=user_id,
+                order_id=order_id,
+                payment_id=payment_id,
+                campaign_id=existing.campaign_id,
+                goal_type=existing.goal_type,
+                conversion_id=existing.id,
             )
 
         except Exception:
