@@ -36,6 +36,16 @@ class User(Base, TimestampMixin):
         nullable=True,
     )
 
+    adsgram_campaign_id: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+    adsgram_attributed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     is_admin: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

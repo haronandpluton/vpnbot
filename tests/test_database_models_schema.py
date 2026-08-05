@@ -48,6 +48,7 @@ def fk_targets(model, name: str) -> set[str]:
 
 def test_database_models_package_exports_all_domain_models():
     assert set(models_package.__all__) == {
+        "AdsGramConversion",
         "User",
         "PaymentOption",
         "Order",
