@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import select
 
 from app.database.models import User
@@ -60,5 +62,17 @@ class UserRepository(BaseRepository):
         user.first_name = first_name
         user.last_name = last_name
         user.language_code = language_code
+        await self.session.flush()
+        return user
+
+    async def set_adsgram_attribution(
+        self,
+        user: User,
+        *,
+        campaign_id: str,
+        attributed_at: datetime,
+    ) -> User:
+        user.adsgram_campaign_id = campaign_id
+        user.adsgram_attributed_at = attributed_at
         await self.session.flush()
         return user

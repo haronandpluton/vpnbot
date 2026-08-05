@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.common.enums import AppEnv
@@ -28,7 +28,54 @@ class Settings(BaseSettings):
         default=15,
         alias="PAYMENT_POLL_INTERVAL_SECONDS",
     )
-
+    adsgram_enabled: bool = Field(
+        default=False,
+        alias="ADSGRAM_ENABLED",
+    )
+    adsgram_api_url: str = Field(
+        default="https://api.adsgram.ai/confirm_conversion",
+        alias="ADSGRAM_API_URL",
+    )
+    adsgram_api_token: str = Field(
+        default="",
+        alias="ADSGRAM_API_TOKEN",
+    )
+    adsgram_request_timeout_seconds: float = Field(
+        default=10.0,
+        alias="ADSGRAM_REQUEST_TIMEOUT_SECONDS",
+        gt=0,
+        le=60,
+    )
+    adsgram_scheduler_interval_seconds: int = Field(
+        default=30,
+        alias="ADSGRAM_SCHEDULER_INTERVAL_SECONDS",
+        gt=0,
+        le=3600,
+    )
+    adsgram_scheduler_initial_delay_seconds: int = Field(
+        default=10,
+        alias="ADSGRAM_SCHEDULER_INITIAL_DELAY_SECONDS",
+        ge=0,
+        le=3600,
+    )
+    adsgram_scheduler_batch_size: int = Field(
+        default=50,
+        alias="ADSGRAM_SCHEDULER_BATCH_SIZE",
+        gt=0,
+        le=500,
+    )
+    adsgram_claim_ttl_seconds: int = Field(
+        default=300,
+        alias="ADSGRAM_CLAIM_TTL_SECONDS",
+        gt=0,
+        le=86400,
+    )
+    adsgram_max_attempts: int = Field(
+        default=8,
+        alias="ADSGRAM_MAX_ATTEMPTS",
+        gt=0,
+        le=100,
+    )
     volet_sci_enabled: bool = Field(default=False, alias="VOLET_SCI_ENABLED")
     volet_sci_url: str = Field(
         default="https://account.volet.com/sci/",
@@ -217,6 +264,28 @@ class Settings(BaseSettings):
         default=45,
         alias="ORDER_EXPIRATION_INITIAL_DELAY_SECONDS",
     )
+
+    @field_validator("adsgram_api_url")
+    @classmethod
+    def validate_adsgram_api_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if not normalized.startswith(("https://", "http://")):
+            raise ValueError(
+                "ADSGRAM_API_URL must be an HTTP(S) URL"
+            )
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_adsgram_configuration(self):
+        if (
+            self.adsgram_enabled
+            and not self.adsgram_api_token.strip()
+        ):
+            raise ValueError(
+                "ADSGRAM_API_TOKEN is required when "
+                "ADSGRAM_ENABLED=true"
+            )
+        return self
 
     @field_validator("vpn_subscription_public_base_url")
     @classmethod

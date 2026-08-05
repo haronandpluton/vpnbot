@@ -44,6 +44,21 @@ def test_settings_required_aliases_and_safe_defaults_are_stable():
     assert settings.dev_mode is False
     assert settings.order_ttl_minutes == 15
     assert settings.payment_poll_interval_seconds == 15
+    assert settings.adsgram_enabled is False
+    assert (
+        settings.adsgram_api_url
+        == "https://api.adsgram.ai/confirm_conversion"
+    )
+    assert settings.adsgram_api_token == ""
+    assert settings.adsgram_request_timeout_seconds == 10.0
+    assert settings.adsgram_scheduler_interval_seconds == 30
+    assert (
+        settings.adsgram_scheduler_initial_delay_seconds
+        == 10
+    )
+    assert settings.adsgram_scheduler_batch_size == 50
+    assert settings.adsgram_claim_ttl_seconds == 300
+    assert settings.adsgram_max_attempts == 8
     assert settings.volet_sci_enabled is False
     assert settings.volet_sci_url == "https://account.volet.com/sci/"
     assert settings.volet_sci_default_currency == "USDT_TRX"
@@ -80,6 +95,55 @@ def test_settings_required_aliases_and_safe_defaults_are_stable():
 )
 def test_settings_log_level_is_normalized(raw_level, expected):
     assert make_settings(LOG_LEVEL=raw_level).log_level == expected
+
+
+def test_settings_normalizes_adsgram_api_url():
+    settings = make_settings(
+        ADSGRAM_API_URL=(
+            " https://api.example.com/confirm/ "
+        ),
+    )
+
+    assert (
+        settings.adsgram_api_url
+        == "https://api.example.com/confirm"
+    )
+
+
+def test_settings_rejects_adsgram_api_url_without_scheme():
+    with pytest.raises(ValidationError) as exc_info:
+        make_settings(
+            ADSGRAM_API_URL="api.example.com/confirm"
+        )
+
+    assert (
+        "ADSGRAM_API_URL must be an HTTP(S) URL"
+        in str(exc_info.value)
+    )
+
+
+def test_settings_requires_adsgram_token_when_enabled():
+    with pytest.raises(ValidationError) as exc_info:
+        make_settings(
+            ADSGRAM_ENABLED=True,
+            ADSGRAM_API_TOKEN="   ",
+        )
+
+    assert (
+        "ADSGRAM_API_TOKEN is required when "
+        "ADSGRAM_ENABLED=true"
+        in str(exc_info.value)
+    )
+
+
+def test_settings_accepts_enabled_adsgram_with_token():
+    settings = make_settings(
+        ADSGRAM_ENABLED=True,
+        ADSGRAM_API_TOKEN="secret-token",
+    )
+
+    assert settings.adsgram_enabled is True
+    assert settings.adsgram_api_token == "secret-token"
 
 
 def test_settings_normalizes_vpn_subscription_public_base_url():

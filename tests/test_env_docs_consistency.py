@@ -103,3 +103,23 @@ def test_run_local_docs_contain_core_local_commands():
     assert "/start" in content
     assert "/admin" in content
     assert "/dev_create_active_subscription" in content
+
+def test_env_example_documents_adsgram_runtime_settings():
+    keys = env_example_keys()
+
+    assert {
+        "ADSGRAM_ENABLED",
+        "ADSGRAM_API_URL",
+        "ADSGRAM_API_TOKEN",
+        "ADSGRAM_REQUEST_TIMEOUT_SECONDS",
+        "ADSGRAM_SCHEDULER_INTERVAL_SECONDS",
+        "ADSGRAM_SCHEDULER_INITIAL_DELAY_SECONDS",
+        "ADSGRAM_SCHEDULER_BATCH_SIZE",
+        "ADSGRAM_CLAIM_TTL_SECONDS",
+        "ADSGRAM_MAX_ATTEMPTS",
+    }.issubset(keys)
+
+    content = read(ENV_EXAMPLE)
+
+    assert "ADSGRAM_ENABLED=false" in content
+    assert "ADSGRAM_API_TOKEN=" in content
