@@ -20,6 +20,10 @@ from app.bot.keyboards.vpn_access import vpn_access_keyboard
 from app.bot.texts.vpn_access import format_vpn_access_text
 from app.bot.utils.callback_query import edit_callback_message
 from app.bot.utils.custom_emoji import build_custom_emoji_entities
+from app.services.adsgram_tracking_service import (
+    AdsGramTrackingService,
+    normalize_adsgram_campaign_id,
+)
 from app.services.order_service import OrderService
 from app.services.trial_activation_service import (
     TrialActivationService,
@@ -27,6 +31,32 @@ from app.services.trial_activation_service import (
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+def extract_adsgram_campaign_id(
+    start_text: str | None,
+) -> str | None:
+    if start_text is None:
+        return None
+
+    parts = start_text.strip().split(maxsplit=1)
+
+    if len(parts) != 2:
+        return None
+
+    command, payload = parts
+
+    normalized_command = command.split("@", maxsplit=1)[0].lower()
+
+    if normalized_command != "/start":
+        return None
+
+    if not payload.startswith("ads_"):
+        return None
+
+    return normalize_adsgram_campaign_id(
+        payload.removeprefix("ads_")
+    )
+
 
 def main_menu_text() -> str:
     return (
@@ -46,6 +76,42 @@ def main_menu_entities(
 ) -> list[MessageEntity]:
     return build_custom_emoji_entities(text)
 
+async def _capture_adsgram_start_attribution(
+    *,
+    session: AsyncSession,
+    telegram_id: int,
+    campaign_id: str | None,
+) -> None:
+    if campaign_id is None:
+        return
+
+    try:
+        result = await AdsGramTrackingService(
+            session
+        ).capture_start_attribution(
+            telegram_id=telegram_id,
+            campaign_id=campaign_id,
+        )
+
+        logger.info(
+            "AdsGram start attribution handled: "
+            "telegram_id=%s campaign_id=%s status=%s",
+            telegram_id,
+            campaign_id,
+            result.status,
+        )
+
+    except Exception:
+        # Пользователь уже был сохранён отдельной транзакцией.
+        # Ошибка аналитики не должна блокировать /start.
+        await session.rollback()
+
+        logger.exception(
+            "AdsGram start attribution failed: "
+            "telegram_id=%s campaign_id=%s",
+            telegram_id,
+            campaign_id,
+        )
 
 async def _get_menu_trial_eligibility(
     *,
@@ -79,9 +145,21 @@ async def start_command(
         await message.answer("Could not identify the user.")
         return
 
+    campaign_id = extract_adsgram_campaign_id(
+        getattr(message, "text", None)
+    )
+
+    # Сначала надёжно создаём или обновляем пользователя.
     trial_eligible = await _get_menu_trial_eligibility(
         session=session,
         telegram_user=message.from_user,
+    )
+
+    # AdsGram обрабатывается отдельно и не блокирует меню.
+    await _capture_adsgram_start_attribution(
+        session=session,
+        telegram_id=message.from_user.id,
+        campaign_id=campaign_id,
     )
 
     text = main_menu_text()

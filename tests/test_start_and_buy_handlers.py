@@ -31,7 +31,12 @@ from app.payment_adapters.cryptobot import CryptoBotAPIError
 
 
 class FakeMessage:
-    def __init__(self, *, from_user=None) -> None:
+    def __init__(
+        self,
+        *,
+        from_user=None,
+        text: str | None = "/start",
+    ) -> None:
         self.from_user = from_user or SimpleNamespace(
             id=123,
             username="ivan",
@@ -39,6 +44,7 @@ class FakeMessage:
             last_name="Redeemer",
             language_code="ru",
         )
+        self.text = text
         self.answer_calls: list[dict] = []
         self.edit_text_calls: list[dict] = []
 
@@ -108,6 +114,35 @@ def assert_callback_rows(markup, expected):
         [button.callback_data for button in row] for row in markup.inline_keyboard
     ] == expected
 
+@pytest.mark.parametrize(
+    ("start_text", "expected"),
+    [
+        ("/start ads_123", "123"),
+        (
+            "/start ads_campaign_42",
+            "campaign_42",
+        ),
+        (
+            "/start@PresentVPNBot ads_campaign-42",
+            "campaign-42",
+        ),
+        ("/start", None),
+        ("/start referral_123", None),
+        ("/start ads_", None),
+        ("/start ads_bad/value", None),
+        (None, None),
+    ],
+)
+def test_extract_adsgram_campaign_id(
+    start_text,
+    expected,
+):
+    assert (
+        start_module.extract_adsgram_campaign_id(
+            start_text
+        )
+        == expected
+    )
 
 def test_main_menu_text_is_stable_entrypoint_copy():
     assert main_menu_text() == (
@@ -271,6 +306,181 @@ async def test_start_command_sends_trial_menu_for_eligible_user(
             ["download_vpn"],
             ["faq", "support"],
         ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_command_captures_adsgram_campaign(
+    monkeypatch,
+):
+    session = FakeSession()
+    tracking_calls: list[dict] = []
+
+    class FakeOrderService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def get_or_create_user(self, **kwargs):
+            return SimpleNamespace(
+                id=7,
+                trial_eligible=True,
+            )
+
+    class FakeAdsGramTrackingService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def capture_start_attribution(
+            self,
+            **kwargs,
+        ):
+            tracking_calls.append(kwargs)
+
+            return SimpleNamespace(
+                status="attributed",
+            )
+
+    monkeypatch.setattr(
+        start_module,
+        "OrderService",
+        FakeOrderService,
+    )
+    monkeypatch.setattr(
+        start_module,
+        "AdsGramTrackingService",
+        FakeAdsGramTrackingService,
+    )
+
+    message = FakeMessage(
+        text="/start ads_campaign_42"
+    )
+
+    await start_command(
+        message,
+        session=session,
+    )
+
+    assert tracking_calls == [
+        {
+            "telegram_id": 123,
+            "campaign_id": "campaign_42",
+        }
+    ]
+
+    assert session.commit_count == 1
+    assert session.rollback_count == 0
+
+    assert len(message.answer_calls) == 1
+    assert (
+        message.answer_calls[0]["text"]
+        == main_menu_text()
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_command_without_ads_payload_skips_adsgram(
+    monkeypatch,
+):
+    session = FakeSession()
+
+    class FakeOrderService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def get_or_create_user(self, **kwargs):
+            return SimpleNamespace(
+                id=7,
+                trial_eligible=True,
+            )
+
+    class UnexpectedAdsGramTrackingService:
+        def __init__(self, session_arg) -> None:
+            raise AssertionError(
+                "AdsGram service must not be created "
+                "without an ads_ payload"
+            )
+
+    monkeypatch.setattr(
+        start_module,
+        "OrderService",
+        FakeOrderService,
+    )
+    monkeypatch.setattr(
+        start_module,
+        "AdsGramTrackingService",
+        UnexpectedAdsGramTrackingService,
+    )
+
+    message = FakeMessage(
+        text="/start referral_123"
+    )
+
+    await start_command(
+        message,
+        session=session,
+    )
+
+    assert session.commit_count == 1
+    assert session.rollback_count == 0
+    assert len(message.answer_calls) == 1
+
+@pytest.mark.asyncio
+async def test_adsgram_failure_does_not_block_start_menu(
+    monkeypatch,
+):
+    session = FakeSession()
+
+    class FakeOrderService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def get_or_create_user(self, **kwargs):
+            return SimpleNamespace(
+                id=7,
+                trial_eligible=False,
+            )
+
+    class FailingAdsGramTrackingService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def capture_start_attribution(
+            self,
+            **kwargs,
+        ):
+            raise RuntimeError(
+                "temporary attribution failure"
+            )
+
+    monkeypatch.setattr(
+        start_module,
+        "OrderService",
+        FakeOrderService,
+    )
+    monkeypatch.setattr(
+        start_module,
+        "AdsGramTrackingService",
+        FailingAdsGramTrackingService,
+    )
+
+    message = FakeMessage(
+        text="/start ads_campaign_42"
+    )
+
+    await start_command(
+        message,
+        session=session,
+    )
+
+    # Первая транзакция сохранила пользователя,
+    # rollback относится только к AdsGram-операции.
+    assert session.commit_count == 1
+    assert session.rollback_count == 1
+
+    assert len(message.answer_calls) == 1
+    assert (
+        message.answer_calls[0]["text"]
+        == main_menu_text()
     )
 
 
