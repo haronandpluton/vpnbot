@@ -57,6 +57,11 @@ async def test_scheduler_tasks_include_cryptobot_and_shutdown_cleanly(
     )
     monkeypatch.setattr(
         main_module,
+        "AdsGramOutboxScheduler",
+        FakeScheduler,
+    )
+    monkeypatch.setattr(
+        main_module,
         "CryptoBotBackgroundSyncScheduler",
         FakeScheduler,
     )
@@ -70,17 +75,29 @@ async def test_scheduler_tasks_include_cryptobot_and_shutdown_cleanly(
             "subscription-expiration-scheduler",
             "order-expiration-scheduler",
             "subscription-meta-retry-scheduler",
+            "adsgram-outbox-scheduler",
             "cryptobot-background-sync-scheduler",
         ]
 
-        assert len(FakeScheduler.instances) == 4
-        assert FakeScheduler.instances[0].args == (session_factory,)
-        assert FakeScheduler.instances[1].args == (session_factory,)
-        assert FakeScheduler.instances[2].args == (session_factory,)
+        assert len(FakeScheduler.instances) == 5
+
+        assert FakeScheduler.instances[0].args == (
+            session_factory,
+        )
+        assert FakeScheduler.instances[1].args == (
+            session_factory,
+        )
+        assert FakeScheduler.instances[2].args == (
+            session_factory,
+        )
         assert FakeScheduler.instances[3].args == (
+            session_factory,
+        )
+        assert FakeScheduler.instances[4].args == (
             session_factory,
             bot,
         )
+
         assert all(
             scheduler.started
             for scheduler in FakeScheduler.instances

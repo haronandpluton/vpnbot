@@ -48,6 +48,9 @@ from app.bot.middlewares.db_session import DbSessionMiddleware
 from app.bot.middlewares.dev_commands_guard import DevCommandsGuardMiddleware
 from app.config.settings import get_settings
 from app.database.session import SessionLocal
+from app.services.adsgram_outbox_scheduler import (
+    AdsGramOutboxScheduler,
+)
 from app.services.cryptobot_background_sync_scheduler import (
     CryptoBotBackgroundSyncScheduler,
 )
@@ -76,6 +79,12 @@ def create_scheduler_tasks(bot: Bot) -> list[asyncio.Task[None]]:
         asyncio.create_task(
             SubscriptionMetaRetryScheduler(SessionLocal).run_forever(),
             name="subscription-meta-retry-scheduler",
+        ),
+        asyncio.create_task(
+            AdsGramOutboxScheduler(
+                SessionLocal
+            ).run_forever(),
+            name="adsgram-outbox-scheduler",
         ),
         asyncio.create_task(
             CryptoBotBackgroundSyncScheduler(

@@ -153,6 +153,21 @@ class FakeSubscriptionMetaRetryScheduler:
         CALLS.append(("subscription_meta_retry_scheduler_run",))
 
 
+class FakeAdsGramOutboxScheduler:
+    instances: list[
+        "FakeAdsGramOutboxScheduler"
+    ] = []
+
+    def __init__(self, session_factory) -> None:
+        self.session_factory = session_factory
+        self.__class__.instances.append(self)
+
+    async def run_forever(self) -> None:
+        CALLS.append(
+            ("adsgram_outbox_scheduler_run",)
+        )
+
+
 class FakeVoletSciWebServer:
     instances: list["FakeVoletSciWebServer"] = []
 
@@ -186,6 +201,7 @@ def patch_bot_main(monkeypatch):
     FakeSubscriptionExpirationScheduler.instances = []
     FakeOrderExpirationScheduler.instances = []
     FakeSubscriptionMetaRetryScheduler.instances = []
+    FakeAdsGramOutboxScheduler.instances = []
     FakeVoletSciWebServer.instances = []
 
     monkeypatch.setattr(bot_main_module, "Bot", FakeBot)
@@ -205,6 +221,11 @@ def patch_bot_main(monkeypatch):
         bot_main_module,
         "SubscriptionExpirationScheduler",
         FakeSubscriptionExpirationScheduler,
+    )
+    monkeypatch.setattr(
+        bot_main_module,
+        "AdsGramOutboxScheduler",
+        FakeAdsGramOutboxScheduler,
     )
     monkeypatch.setattr(
         bot_main_module,
@@ -309,9 +330,19 @@ async def test_bot_main_registers_middlewares_schedulers_and_base_routers_when_d
         FakeSubscriptionMetaRetryScheduler.instances[0].session_factory
         == "SESSION_FACTORY"
     )
+    assert (
+        FakeAdsGramOutboxScheduler
+        .instances[0]
+        .session_factory
+        == "SESSION_FACTORY"
+    )
     assert ("create_task", "subscription-expiration-scheduler") in CALLS
     assert ("create_task", "order-expiration-scheduler") in CALLS
     assert ("create_task", "subscription-meta-retry-scheduler") in CALLS
+    assert (
+        "create_task",
+        "adsgram-outbox-scheduler",
+    ) in CALLS
     assert ("start_polling", "bot-token") in CALLS
 
 
@@ -374,6 +405,9 @@ async def test_bot_main_cancels_scheduler_tasks_in_finally(monkeypatch):
     assert tasks_by_name["subscription-expiration-scheduler"].cancel_count == 1
     assert tasks_by_name["order-expiration-scheduler"].cancel_count == 1
     assert tasks_by_name["subscription-meta-retry-scheduler"].cancel_count == 1
+    assert tasks_by_name[
+        "adsgram-outbox-scheduler"
+    ].cancel_count == 1
     assert tasks_by_name["cryptobot-background-sync-scheduler"].cancel_count == 1
     assert (
         "gather",
@@ -381,6 +415,7 @@ async def test_bot_main_cancels_scheduler_tasks_in_finally(monkeypatch):
             "subscription-expiration-scheduler",
             "order-expiration-scheduler",
             "subscription-meta-retry-scheduler",
+            "adsgram-outbox-scheduler",
             "cryptobot-background-sync-scheduler",
         ],
         True,
