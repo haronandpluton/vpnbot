@@ -123,6 +123,24 @@ def make_context():
     )
     return event, payment, order
 
+class FakeAdsGramSessionFactory:
+    def __init__(self) -> None:
+        self.session = SimpleNamespace()
+
+    def __call__(self):
+        return self
+
+    async def __aenter__(self):
+        return self.session
+
+    async def __aexit__(
+        self,
+        exc_type,
+        exc,
+        traceback,
+    ):
+        return False
+
 
 def make_service(*, repository):
     event, payment, order = make_context()
@@ -135,6 +153,17 @@ def make_service(*, repository):
         (event, payment, order)
     )
     service.subscription_service = FailingSubscriptionService()
+    adsgram_service = FakeAdsGramTrackingService()
+    adsgram_session_factory = (
+        FakeAdsGramSessionFactory()
+    )
+
+    service.adsgram_session_factory = (
+        adsgram_session_factory
+    )
+    service.adsgram_tracking_service_factory = (
+        lambda session_arg: adsgram_service
+    )
     service.adsgram_tracking_service = (
         FakeAdsGramTrackingService()
     )

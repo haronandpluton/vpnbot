@@ -10,6 +10,8 @@ from sqlalchemy.orm import sessionmaker
 
 import app.payment_polling.processor as polling_processor_module
 import app.services.subscription_service as subscription_service_module
+import app.services.payment_activation_service as payment_activation_service_module
+
 from app.common.enums import (
     CurrencyCode,
     NetworkCode,
@@ -179,7 +181,10 @@ class FakeSubscriptionMetaSyncService:
 
 
 @pytest.fixture(autouse=True)
-def patch_external_vpn_and_meta_sync(monkeypatch):
+def patch_external_vpn_and_meta_sync(
+    monkeypatch,
+    session_factory,
+):
     FakeVpnAccessService.instances = []
     FakeVpnAccessService.create_calls = []
     FakeVpnAccessService.extend_calls = []
@@ -197,8 +202,21 @@ def patch_external_vpn_and_meta_sync(monkeypatch):
         "SubscriptionMetaSyncService",
         FakeSubscriptionMetaSyncService,
     )
-    monkeypatch.setattr(subscription_service_module, "datetime", NaiveDateTime)
-    monkeypatch.setattr(polling_processor_module, "datetime", NaiveDateTime)
+    monkeypatch.setattr(
+        subscription_service_module,
+        "datetime",
+        NaiveDateTime,
+    )
+    monkeypatch.setattr(
+        polling_processor_module,
+        "datetime",
+        NaiveDateTime,
+    )
+    monkeypatch.setattr(
+        payment_activation_service_module,
+        "SessionLocal",
+        session_factory,
+    )
 
 
 @pytest.fixture

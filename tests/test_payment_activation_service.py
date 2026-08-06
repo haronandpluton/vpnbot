@@ -57,6 +57,35 @@ class FakeSubscriptionService:
 
         return self.subscription, self.config_uri
 
+class FakeAdsGramSessionFactory:
+    def __init__(self) -> None:
+        self.session = SimpleNamespace(
+            name="adsgram-session"
+        )
+        self.call_count = 0
+        self.enter_count = 0
+        self.exit_count = 0
+        self.exit_error_types: list[
+            type[BaseException] | None
+        ] = []
+
+    def __call__(self):
+        self.call_count += 1
+        return self
+
+    async def __aenter__(self):
+        self.enter_count += 1
+        return self.session
+
+    async def __aexit__(
+        self,
+        exc_type,
+        exc,
+        traceback,
+    ):
+        self.exit_count += 1
+        self.exit_error_types.append(exc_type)
+        return False
 
 def make_service(
     *,
@@ -72,7 +101,24 @@ def make_service(
     service = PaymentActivationService.__new__(
         PaymentActivationService
     )
-    service.session = session or SimpleNamespace()
+
+    main_session = session or SimpleNamespace()
+    tracking_service = (
+        adsgram_tracking_service
+        or FakeAdsGramTrackingService()
+    )
+    adsgram_session_factory = (
+        FakeAdsGramSessionFactory()
+    )
+
+    def tracking_service_factory(session_arg):
+        assert (
+            session_arg
+            is adsgram_session_factory.session
+        )
+        return tracking_service
+
+    service.session = main_session
     service.payment_event_service = (
         FakePaymentEventService(event_result)
     )
@@ -80,10 +126,20 @@ def make_service(
         subscription_service
         or FakeSubscriptionService()
     )
-    service.adsgram_tracking_service = (
-        adsgram_tracking_service
-        or FakeAdsGramTrackingService()
+
+    service.adsgram_session_factory = (
+        adsgram_session_factory
     )
+    service.adsgram_tracking_service_factory = (
+        tracking_service_factory
+    )
+
+    # Оставляем ссылки для существующих assertions.
+    service.adsgram_tracking_service = tracking_service
+    service.adsgram_test_session_factory = (
+        adsgram_session_factory
+    )
+
     return service
 
 
@@ -400,4 +456,24 @@ async def test_adsgram_enqueue_failure_does_not_block_subscription_activation():
         }
     ]
 
-    assert session.rollback_count == 1
+    # Основная payment/subscription-сессия не откатывалась.
+    assert session.rollback_count == 0
+
+    # Ошибка произошла внутри отдельной AdsGram-сессии.
+    assert (
+            service.adsgram_test_session_factory.call_count
+            == 1
+    )
+    assert (
+            service.adsgram_test_session_factory.enter_count
+            == 1
+    )
+    assert (
+            service.adsgram_test_session_factory.exit_count
+            == 1
+    )
+    assert (
+            service.adsgram_test_session_factory
+            .exit_error_types
+            == [RuntimeError]
+    )

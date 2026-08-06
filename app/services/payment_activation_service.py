@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import json
 import logging
 from decimal import Decimal
@@ -18,6 +19,7 @@ from app.services.adsgram_tracking_service import (
 from app.services.payment_event_service import PaymentEventService
 from app.services.subscription_service import SubscriptionService
 
+from app.database.session import SessionLocal
 logger = logging.getLogger(__name__)
 
 SUBSCRIPTION_ACTIVATION_ERROR_TYPE = "subscription_activation_failed"
@@ -37,12 +39,32 @@ class PaymentActivationService:
     into a false success.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+            self,
+            session: AsyncSession,
+            *,
+            adsgram_session_factory: Callable[
+                [],
+                AsyncSession,
+            ] | None = None,
+            adsgram_tracking_service_factory: Callable[
+                [AsyncSession],
+                AdsGramTrackingService,
+            ] = AdsGramTrackingService,
+    ) -> None:
         self.session = session
         self.payment_event_service = PaymentEventService(session)
         self.subscription_service = SubscriptionService(session)
-        self.adsgram_tracking_service = (
-            AdsGramTrackingService(session)
+
+        # AdsGram использует отдельную транзакцию.
+        # Его rollback не должен затрагивать payment/order/subscription.
+        self.adsgram_session_factory = (
+            SessionLocal
+            if adsgram_session_factory is None
+            else adsgram_session_factory
+        )
+        self.adsgram_tracking_service_factory = (
+            adsgram_tracking_service_factory
         )
 
     async def process_confirmed_payment_event_and_activate(
@@ -151,21 +173,28 @@ class PaymentActivationService:
         return event, payment, subscription, config_uri
 
     async def _enqueue_adsgram_purchase_conversion(
-        self,
-        *,
-        user_id: int,
-        order_id: int,
-        payment_id: int,
+            self,
+            *,
+            user_id: int,
+            order_id: int,
+            payment_id: int,
     ) -> None:
         try:
-            result = (
-                await self.adsgram_tracking_service
-                .enqueue_purchase_conversion(
-                    user_id=user_id,
-                    order_id=order_id,
-                    payment_id=payment_id,
+            async with self.adsgram_session_factory() as adsgram_session:
+                tracking_service = (
+                    self.adsgram_tracking_service_factory(
+                        adsgram_session
+                    )
                 )
-            )
+
+                result = (
+                    await tracking_service
+                    .enqueue_purchase_conversion(
+                        user_id=user_id,
+                        order_id=order_id,
+                        payment_id=payment_id,
+                    )
+                )
 
             logger.info(
                 "AdsGram purchase conversion handled: "
@@ -179,8 +208,8 @@ class PaymentActivationService:
             )
 
         except Exception:
-            # Ошибка AdsGram не должна останавливать
-            # активацию или продление VPN.
+            # Отдельная AdsGram-сессия будет закрыта и откатана.
+            # Основную платёжную сессию здесь не трогаем.
             logger.exception(
                 "AdsGram purchase conversion enqueue failed: "
                 "user_id=%s order_id=%s payment_id=%s",
@@ -189,13 +218,6 @@ class PaymentActivationService:
                 payment_id,
             )
 
-            try:
-                await self.session.rollback()
-            except Exception:
-                logger.exception(
-                    "Failed to rollback after AdsGram purchase "
-                    "conversion enqueue failure."
-                )
     async def _record_activation_failure(
         self,
         *,
