@@ -177,6 +177,40 @@ async def test_capture_start_attribution_stores_first_touch_and_registration():
     assert session.commit_count == 1
     assert session.rollback_count == 0
 
+@pytest.mark.asyncio
+async def test_capture_start_attribution_can_skip_registration_conversion():
+    user = make_user()
+
+    service, session, users, conversions = (
+        make_service(user=user)
+    )
+
+    result = await service.capture_start_attribution(
+        telegram_id=user.telegram_id,
+        campaign_id="campaign_42",
+        enqueue_registration=False,
+    )
+
+    assert (
+        result.status
+        == "attributed_without_registration"
+    )
+    assert result.user_id == user.id
+    assert result.campaign_id == "campaign_42"
+    assert result.conversion_id is None
+
+    assert len(users.set_calls) == 1
+    assert (
+        users.set_calls[0]["campaign_id"]
+        == "campaign_42"
+    )
+
+    assert conversions.get_calls == []
+    assert conversions.create_calls == []
+
+    assert session.commit_count == 1
+    assert session.rollback_count == 0
+
 
 @pytest.mark.asyncio
 async def test_capture_start_attribution_does_not_overwrite_first_touch():

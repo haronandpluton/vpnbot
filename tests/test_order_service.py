@@ -284,6 +284,67 @@ def make_service(
 
 
 @pytest.mark.asyncio
+async def test_get_or_create_user_result_marks_new_user_as_created():
+    user_repository = FakeUserRepository(
+        existing_user=None
+    )
+    service = make_service(
+        user_repository=user_repository
+    )
+
+    result = await service.get_or_create_user_result(
+        telegram_id=123,
+        username="ivan",
+        first_name="Ivan",
+        last_name="Redeemer",
+        language_code="ru",
+    )
+
+    assert result.created is True
+    assert result.user.id == 10
+    assert result.user.telegram_id == 123
+
+    assert len(user_repository.create_calls) == 1
+    assert user_repository.update_calls == []
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_user_result_marks_existing_user_as_not_created():
+    existing_user = make_user(
+        user_id=7,
+        telegram_id=123,
+        username="old_username",
+    )
+    user_repository = FakeUserRepository(
+        existing_user=existing_user
+    )
+    service = make_service(
+        user_repository=user_repository
+    )
+
+    result = await service.get_or_create_user_result(
+        telegram_id=123,
+        username="new_username",
+        first_name="New",
+        last_name="User",
+        language_code="en",
+    )
+
+    assert result.created is False
+    assert result.user is existing_user
+
+    assert user_repository.create_calls == []
+    assert user_repository.update_calls == [
+        {
+            "user_id": 7,
+            "username": "new_username",
+            "first_name": "New",
+            "last_name": "User",
+            "language_code": "en",
+        }
+    ]
+
+@pytest.mark.asyncio
 async def test_create_order_creates_user_and_waiting_payment_order_with_tariff_and_payment_option():
     payment_option = make_payment_option(
         option_id=5,

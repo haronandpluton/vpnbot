@@ -1,16 +1,24 @@
 from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import get_settings
 from app.config.tariffs import get_tariff
+from app.database.models.user import User
 from app.database.repositories.orders import OrderRepository
 from app.database.repositories.payment_options import PaymentOptionRepository
 from app.database.repositories.subscriptions import SubscriptionRepository
 from app.database.repositories.users import UserRepository
 from app.payment_core.enums.payment_method import PaymentMethod
 from app.payment_core.enums.subscription_status import SubscriptionStatus
+
+
+@dataclass(frozen=True, slots=True)
+class GetOrCreateUserResult:
+    user: User
+    created: bool
 
 
 class OrderService:
@@ -23,14 +31,34 @@ class OrderService:
         self.subscription_repository = SubscriptionRepository(session)
 
     async def get_or_create_user(
-        self,
-        telegram_id: int,
-        username: str | None = None,
-        first_name: str | None = None,
-        last_name: str | None = None,
-        language_code: str | None = None,
-    ):
-        user = await self.user_repository.get_by_telegram_id(telegram_id)
+            self,
+            telegram_id: int,
+            username: str | None = None,
+            first_name: str | None = None,
+            last_name: str | None = None,
+            language_code: str | None = None,
+    ) -> User:
+        result = await self.get_or_create_user_result(
+            telegram_id=telegram_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            language_code=language_code,
+        )
+        return result.user
+
+    async def get_or_create_user_result(
+            self,
+            telegram_id: int,
+            username: str | None = None,
+            first_name: str | None = None,
+            last_name: str | None = None,
+            language_code: str | None = None,
+    ) -> GetOrCreateUserResult:
+        user = await self.user_repository.get_by_telegram_id(
+            telegram_id
+        )
+
         if user is not None:
             await self.user_repository.update_basic_info(
                 user=user,
@@ -39,7 +67,11 @@ class OrderService:
                 last_name=last_name,
                 language_code=language_code,
             )
-            return user
+
+            return GetOrCreateUserResult(
+                user=user,
+                created=False,
+            )
 
         is_admin = telegram_id in self.settings.admin_ids
 
@@ -51,7 +83,11 @@ class OrderService:
             language_code=language_code,
             is_admin=is_admin,
         )
-        return user
+
+        return GetOrCreateUserResult(
+            user=user,
+            created=True,
+        )
 
     async def get_order_for_telegram_user(
         self,

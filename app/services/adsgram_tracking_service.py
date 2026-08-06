@@ -79,10 +79,11 @@ class AdsGramTrackingService:
         )
 
     async def capture_start_attribution(
-        self,
-        *,
-        telegram_id: int,
-        campaign_id: str | None,
+            self,
+            *,
+            telegram_id: int,
+            campaign_id: str | None,
+            enqueue_registration: bool = True,
     ) -> AdsGramAttributionResult:
         normalized_campaign_id = normalize_adsgram_campaign_id(
             campaign_id
@@ -117,6 +118,23 @@ class AdsGramTrackingService:
                     campaign_id=user.adsgram_campaign_id,
                 )
 
+            await self.user_repository.set_adsgram_attribution(
+                user,
+                campaign_id=normalized_campaign_id,
+                attributed_at=datetime.now(UTC),
+            )
+
+            # Старому пользователю можно сохранить источник,
+            # но goal type 1 для него отправлять нельзя.
+            if not enqueue_registration:
+                await self.session.commit()
+
+                return AdsGramAttributionResult(
+                    status="attributed_without_registration",
+                    user_id=user.id,
+                    campaign_id=normalized_campaign_id,
+                )
+
             idempotency_key = (
                 f"registration:user:{user.id}"
             )
@@ -124,12 +142,6 @@ class AdsGramTrackingService:
             conversion = (
                 await self.conversion_repository
                 .get_by_idempotency_key(idempotency_key)
-            )
-
-            await self.user_repository.set_adsgram_attribution(
-                user,
-                campaign_id=normalized_campaign_id,
-                attributed_at=datetime.now(UTC),
             )
 
             if conversion is None:
@@ -161,17 +173,20 @@ class AdsGramTrackingService:
             )
 
             if (
-                user is None
-                or user.adsgram_campaign_id is None
+                    user is None
+                    or user.adsgram_campaign_id is None
             ):
                 raise
 
-            conversion = (
-                await self.conversion_repository
-                .get_by_idempotency_key(
-                    f"registration:user:{user.id}"
+            conversion = None
+
+            if enqueue_registration:
+                conversion = (
+                    await self.conversion_repository
+                    .get_by_idempotency_key(
+                        f"registration:user:{user.id}"
+                    )
                 )
-            )
 
             await self.session.commit()
 

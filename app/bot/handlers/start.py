@@ -24,7 +24,10 @@ from app.services.adsgram_tracking_service import (
     AdsGramTrackingService,
     normalize_adsgram_campaign_id,
 )
-from app.services.order_service import OrderService
+from app.services.order_service import (
+    GetOrCreateUserResult,
+    OrderService,
+)
 from app.services.trial_activation_service import (
     TrialActivationService,
 )
@@ -81,6 +84,7 @@ async def _capture_adsgram_start_attribution(
     session: AsyncSession,
     telegram_id: int,
     campaign_id: str | None,
+    enqueue_registration: bool,
 ) -> None:
     if campaign_id is None:
         return
@@ -91,6 +95,7 @@ async def _capture_adsgram_start_attribution(
         ).capture_start_attribution(
             telegram_id=telegram_id,
             campaign_id=campaign_id,
+            enqueue_registration=enqueue_registration,
         )
 
         logger.info(
@@ -113,28 +118,43 @@ async def _capture_adsgram_start_attribution(
             campaign_id,
         )
 
+async def _get_menu_user_result(
+    *,
+    session: AsyncSession,
+    telegram_user: TelegramUser,
+) -> GetOrCreateUserResult:
+    try:
+        result = (
+            await OrderService(
+                session
+            ).get_or_create_user_result(
+                telegram_id=telegram_user.id,
+                username=telegram_user.username,
+                first_name=telegram_user.first_name,
+                last_name=telegram_user.last_name,
+                language_code=telegram_user.language_code,
+            )
+        )
+
+        await session.commit()
+        return result
+
+    except Exception:
+        await session.rollback()
+        raise
+
+
 async def _get_menu_trial_eligibility(
     *,
     session: AsyncSession,
     telegram_user: TelegramUser,
 ) -> bool:
-    try:
-        user = await OrderService(session).get_or_create_user(
-            telegram_id=telegram_user.id,
-            username=telegram_user.username,
-            first_name=telegram_user.first_name,
-            last_name=telegram_user.last_name,
-            language_code=telegram_user.language_code,
-        )
+    result = await _get_menu_user_result(
+        session=session,
+        telegram_user=telegram_user,
+    )
 
-        trial_eligible = bool(user.trial_eligible)
-
-        await session.commit()
-        return trial_eligible
-
-    except Exception:
-        await session.rollback()
-        raise
+    return bool(result.user.trial_eligible)
 
 @router.message(Command("start"))
 async def start_command(
@@ -150,9 +170,13 @@ async def start_command(
     )
 
     # Сначала надёжно создаём или обновляем пользователя.
-    trial_eligible = await _get_menu_trial_eligibility(
+    user_result = await _get_menu_user_result(
         session=session,
         telegram_user=message.from_user,
+    )
+
+    trial_eligible = bool(
+        user_result.user.trial_eligible
     )
 
     # AdsGram обрабатывается отдельно и не блокирует меню.
@@ -160,6 +184,7 @@ async def start_command(
         session=session,
         telegram_id=message.from_user.id,
         campaign_id=campaign_id,
+        enqueue_registration=user_result.created,
     )
 
     text = main_menu_text()

@@ -213,17 +213,23 @@ async def test_start_command_sends_buy_menu_for_ineligible_user(
     monkeypatch,
 ):
     session = FakeSession()
-    service_calls = []
+    get_or_create_calls: list[dict] = []
 
     class FakeOrderService:
         def __init__(self, session_arg) -> None:
             assert session_arg is session
 
-        async def get_or_create_user(self, **kwargs):
-            service_calls.append(kwargs)
+        async def get_or_create_user_result(
+                self,
+                **kwargs,
+        ):
+            get_or_create_calls.append(kwargs)
+
             return SimpleNamespace(
-                id=7,
-                trial_eligible=False,
+                user=SimpleNamespace(
+                    trial_eligible=False,
+                ),
+                created=False,
             )
 
     monkeypatch.setattr(
@@ -239,7 +245,7 @@ async def test_start_command_sends_buy_menu_for_ineligible_user(
         session=session,
     )
 
-    assert service_calls == [
+    assert get_or_create_calls == [
         {
             "telegram_id": 123,
             "username": "ivan",
@@ -273,15 +279,23 @@ async def test_start_command_sends_trial_menu_for_eligible_user(
     monkeypatch,
 ):
     session = FakeSession()
+    get_or_create_calls: list[dict] = []
 
     class FakeOrderService:
         def __init__(self, session_arg) -> None:
             assert session_arg is session
 
-        async def get_or_create_user(self, **kwargs):
+        async def get_or_create_user_result(
+                self,
+                **kwargs,
+        ):
+            get_or_create_calls.append(kwargs)
+
             return SimpleNamespace(
-                id=7,
-                trial_eligible=True,
+                user=SimpleNamespace(
+                    trial_eligible=True,
+                ),
+                created=True,
             )
 
     monkeypatch.setattr(
@@ -320,10 +334,16 @@ async def test_start_command_captures_adsgram_campaign(
         def __init__(self, session_arg) -> None:
             assert session_arg is session
 
-        async def get_or_create_user(self, **kwargs):
+        async def get_or_create_user_result(
+                self,
+                **kwargs,
+        ):
             return SimpleNamespace(
-                id=7,
-                trial_eligible=True,
+                user=SimpleNamespace(
+                    id=7,
+                    trial_eligible=True,
+                ),
+                created=True,
             )
 
     class FakeAdsGramTrackingService:
@@ -364,6 +384,7 @@ async def test_start_command_captures_adsgram_campaign(
         {
             "telegram_id": 123,
             "campaign_id": "campaign_42",
+            "enqueue_registration": True,
         }
     ]
 
@@ -376,6 +397,77 @@ async def test_start_command_captures_adsgram_campaign(
         == main_menu_text()
     )
 
+@pytest.mark.asyncio
+async def test_existing_user_ads_start_skips_registration_conversion(
+    monkeypatch,
+):
+    session = FakeSession()
+    tracking_calls: list[dict] = []
+
+    class FakeOrderService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def get_or_create_user_result(
+            self,
+            **kwargs,
+        ):
+            return SimpleNamespace(
+                user=SimpleNamespace(
+                    id=7,
+                    trial_eligible=False,
+                ),
+                created=False,
+            )
+
+    class FakeAdsGramTrackingService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def capture_start_attribution(
+            self,
+            **kwargs,
+        ):
+            tracking_calls.append(kwargs)
+
+            return SimpleNamespace(
+                status=(
+                    "attributed_without_registration"
+                ),
+            )
+
+    monkeypatch.setattr(
+        start_module,
+        "OrderService",
+        FakeOrderService,
+    )
+    monkeypatch.setattr(
+        start_module,
+        "AdsGramTrackingService",
+        FakeAdsGramTrackingService,
+    )
+
+    message = FakeMessage(
+        text="/start ads_campaign_42"
+    )
+
+    await start_command(
+        message,
+        session=session,
+    )
+
+    assert tracking_calls == [
+        {
+            "telegram_id": 123,
+            "campaign_id": "campaign_42",
+            "enqueue_registration": False,
+        }
+    ]
+
+    assert session.commit_count == 1
+    assert session.rollback_count == 0
+    assert len(message.answer_calls) == 1
+
 
 @pytest.mark.asyncio
 async def test_start_command_without_ads_payload_skips_adsgram(
@@ -387,10 +479,16 @@ async def test_start_command_without_ads_payload_skips_adsgram(
         def __init__(self, session_arg) -> None:
             assert session_arg is session
 
-        async def get_or_create_user(self, **kwargs):
+        async def get_or_create_user_result(
+                self,
+                **kwargs,
+        ):
             return SimpleNamespace(
-                id=7,
-                trial_eligible=True,
+                user=SimpleNamespace(
+                    id=7,
+                    trial_eligible=True,
+                ),
+                created=False,
             )
 
     class UnexpectedAdsGramTrackingService:
@@ -434,10 +532,16 @@ async def test_adsgram_failure_does_not_block_start_menu(
         def __init__(self, session_arg) -> None:
             assert session_arg is session
 
-        async def get_or_create_user(self, **kwargs):
+        async def get_or_create_user_result(
+                self,
+                **kwargs,
+        ):
             return SimpleNamespace(
-                id=7,
-                trial_eligible=False,
+                user=SimpleNamespace(
+                    id=7,
+                    trial_eligible=False,
+                ),
+                created=True,
             )
 
     class FailingAdsGramTrackingService:
@@ -489,15 +593,23 @@ async def test_back_to_main_menu_callback_uses_current_trial_state(
     monkeypatch,
 ):
     session = FakeSession()
+    get_or_create_calls: list[dict] = []
 
     class FakeOrderService:
         def __init__(self, session_arg) -> None:
             assert session_arg is session
 
-        async def get_or_create_user(self, **kwargs):
+        async def get_or_create_user_result(
+                self,
+                **kwargs,
+        ):
+            get_or_create_calls.append(kwargs)
+
             return SimpleNamespace(
-                id=7,
-                trial_eligible=True,
+                user=SimpleNamespace(
+                    trial_eligible=True,
+                ),
+                created=False,
             )
 
     monkeypatch.setattr(
@@ -542,9 +654,18 @@ async def test_back_to_main_menu_answers_before_database_and_edit(monkeypatch):
         def __init__(self, session_arg) -> None:
             assert session_arg is session
 
-        async def get_or_create_user(self, **kwargs):
+        async def get_or_create_user_result(
+                self,
+                **kwargs,
+        ):
             callback.events.append("database")
-            return SimpleNamespace(id=7, trial_eligible=True)
+
+            return SimpleNamespace(
+                user=SimpleNamespace(
+                    trial_eligible=False,
+                ),
+                created=False,
+            )
 
     monkeypatch.setattr(start_module, "OrderService", FakeOrderService)
 
