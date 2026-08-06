@@ -203,10 +203,29 @@ async def test_invalid_api_url_is_rejected():
 
     with pytest.raises(
         AdsGramAPIError,
-        match=(
-            "ADSGRAM_API_URL must be "
-            "an HTTP\\(S\\) URL"
-        ),
+        match="ADSGRAM_API_URL must use HTTPS",
+    ) as exc_info:
+        await client.confirm_conversion(
+            telegram_id=123,
+            campaign_id="campaign_42",
+            goal_type=1,
+        )
+
+    assert exc_info.value.retryable is False
+    assert FakeAsyncClient.instances == []
+
+@pytest.mark.asyncio
+async def test_http_api_url_is_rejected():
+    client = make_client(
+        api_url=(
+            "http://api.adsgram.ai/"
+            "confirm_conversion"
+        )
+    )
+
+    with pytest.raises(
+        AdsGramAPIError,
+        match="ADSGRAM_API_URL must use HTTPS",
     ) as exc_info:
         await client.confirm_conversion(
             telegram_id=123,

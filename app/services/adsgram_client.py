@@ -120,11 +120,9 @@ class AdsGramClient:
                 retryable=False,
             )
 
-        if not self.api_url.startswith(
-            ("https://", "http://")
-        ):
+        if not self.api_url.startswith("https://"):
             raise AdsGramAPIError(
-                "ADSGRAM_API_URL must be an HTTP(S) URL",
+                "ADSGRAM_API_URL must use HTTPS",
                 retryable=False,
             )
 

@@ -269,10 +269,12 @@ class Settings(BaseSettings):
     @classmethod
     def validate_adsgram_api_url(cls, value: str) -> str:
         normalized = value.strip().rstrip("/")
-        if not normalized.startswith(("https://", "http://")):
+
+        if not normalized.startswith("https://"):
             raise ValueError(
-                "ADSGRAM_API_URL must be an HTTP(S) URL"
+                "ADSGRAM_API_URL must use HTTPS"
             )
+
         return normalized
 
     @model_validator(mode="after")
@@ -289,10 +291,20 @@ class Settings(BaseSettings):
 
     @field_validator("vpn_subscription_public_base_url")
     @classmethod
-    def validate_vpn_subscription_public_base_url(cls, value: str) -> str:
+    def validate_vpn_subscription_public_base_url(
+            cls,
+            value: str,
+    ) -> str:
         normalized = value.strip().rstrip("/")
-        if not normalized.startswith(("https://", "http://")):
-            raise ValueError("VPN_SUBSCRIPTION_PUBLIC_BASE_URL must be an HTTP(S) URL")
+
+        if not normalized.startswith(
+                ("https://", "http://")
+        ):
+            raise ValueError(
+                "VPN_SUBSCRIPTION_PUBLIC_BASE_URL "
+                "must be an HTTP(S) URL"
+            )
+
         return normalized
 
     @field_validator("log_level")

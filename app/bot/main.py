@@ -116,6 +116,11 @@ async def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
+    # httpx logs full request URLs at INFO level.
+    # AdsGram passes its secret token in the query string.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     bot = Bot(token=settings.bot_token)
     dp = Dispatcher()
 

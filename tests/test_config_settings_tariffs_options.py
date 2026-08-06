@@ -117,10 +117,22 @@ def test_settings_rejects_adsgram_api_url_without_scheme():
         )
 
     assert (
-        "ADSGRAM_API_URL must be an HTTP(S) URL"
+        "ADSGRAM_API_URL must use HTTPS"
         in str(exc_info.value)
     )
 
+def test_settings_rejects_adsgram_http_url():
+    with pytest.raises(ValidationError) as exc_info:
+        make_settings(
+            ADSGRAM_API_URL=(
+                "http://api.example.com/confirm"
+            )
+        )
+
+    assert (
+        "ADSGRAM_API_URL must use HTTPS"
+        in str(exc_info.value)
+    )
 
 def test_settings_requires_adsgram_token_when_enabled():
     with pytest.raises(ValidationError) as exc_info:
