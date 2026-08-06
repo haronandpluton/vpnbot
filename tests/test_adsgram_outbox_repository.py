@@ -4,10 +4,11 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects import postgresql, sqlite
 
 from app.database.repositories.adsgram_conversions import (
     AdsGramConversionRepository,
+    ClaimedAdsGramConversion,
 )
 
 
@@ -40,7 +41,7 @@ class FakeSession:
 
 
 @pytest.mark.asyncio
-async def test_claim_due_uses_skip_locked_and_marks_rows_processing():
+async def test_claim_due_uses_atomic_update_returning_for_sqlite():
     now = datetime(
         2026,
         8,
@@ -50,32 +51,33 @@ async def test_claim_due_uses_skip_locked_and_marks_rows_processing():
         tzinfo=UTC,
     )
 
-    conversion = SimpleNamespace(
+    claimed_row = SimpleNamespace(
         id=50,
         user_id=7,
         order_id=23,
         campaign_id="campaign_42",
         goal_type=2,
-        status="pending",
-        attempt_count=0,
-        claim_token=None,
-        claimed_at=None,
-        last_attempt_at=None,
+        attempt_count=1,
     )
 
     session = FakeSession(
         [
             FakeResult(
+                rows=[claimed_row]
+            ),
+            FakeResult(
                 rows=[
                     (
-                        conversion,
+                        7,
                         123456789,
                     )
                 ]
-            )
+            ),
         ]
     )
-    repository = AdsGramConversionRepository(session)
+    repository = AdsGramConversionRepository(
+        session
+    )
 
     claimed = await repository.claim_due(
         now=now,
@@ -83,29 +85,85 @@ async def test_claim_due_uses_skip_locked_and_marks_rows_processing():
         claim_token="claim-token",
     )
 
-    assert len(claimed) == 1
-    assert claimed[0].id == 50
-    assert claimed[0].telegram_id == 123456789
-    assert claimed[0].attempt_count == 1
-    assert claimed[0].claim_token == "claim-token"
+    assert claimed == [
+        ClaimedAdsGramConversion(
+            id=50,
+            user_id=7,
+            telegram_id=123456789,
+            order_id=23,
+            campaign_id="campaign_42",
+            goal_type=2,
+            attempt_count=1,
+            claim_token="claim-token",
+        )
+    ]
 
-    assert conversion.status == "processing"
-    assert conversion.attempt_count == 1
-    assert conversion.claim_token == "claim-token"
-    assert conversion.claimed_at == now
-    assert conversion.last_attempt_at == now
+    assert session.flush_count == 0
+    assert len(session.execute_calls) == 2
 
-    assert session.flush_count == 1
-
-    compiled = session.execute_calls[0].compile(
-        dialect=postgresql.dialect(),
+    compiled_claim = (
+        session.execute_calls[0].compile(
+            dialect=sqlite.dialect(),
+        )
     )
-    sql = " ".join(str(compiled).split())
+    claim_sql = " ".join(
+        str(compiled_claim).split()
+    )
 
     assert (
-        "FOR UPDATE OF adsgram_conversions SKIP LOCKED"
-        in sql
+        "UPDATE adsgram_conversions SET"
+        in claim_sql
     )
+    assert (
+        "adsgram_conversions.status = ?"
+        in claim_sql
+    )
+    assert (
+        "adsgram_conversions.id IN "
+        "(SELECT adsgram_conversions.id"
+        in claim_sql
+    )
+    assert (
+        "RETURNING id, user_id, order_id, "
+        "campaign_id, goal_type, attempt_count"
+        in claim_sql
+    )
+    assert "FOR UPDATE" not in claim_sql
+
+    compiled_users = (
+        session.execute_calls[1].compile(
+            dialect=sqlite.dialect(),
+        )
+    )
+    users_sql = " ".join(
+        str(compiled_users).split()
+    )
+
+    assert (
+        "SELECT users.id, users.telegram_id"
+        in users_sql
+    )
+
+@pytest.mark.asyncio
+async def test_claim_due_does_not_query_users_when_nothing_was_claimed():
+    session = FakeSession(
+        [
+            FakeResult(rows=[]),
+        ]
+    )
+    repository = AdsGramConversionRepository(
+        session
+    )
+
+    claimed = await repository.claim_due(
+        now=datetime.now(UTC),
+        limit=10,
+        claim_token="claim-token",
+    )
+
+    assert claimed == []
+    assert len(session.execute_calls) == 1
+    assert session.flush_count == 0
 
 
 @pytest.mark.asyncio

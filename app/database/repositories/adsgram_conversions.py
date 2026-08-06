@@ -79,21 +79,14 @@ class AdsGramConversionRepository(BaseRepository):
         return int(result.rowcount or 0)
 
     async def claim_due(
-        self,
-        *,
-        now: datetime,
-        limit: int,
-        claim_token: str,
+            self,
+            *,
+            now: datetime,
+            limit: int,
+            claim_token: str,
     ) -> list[ClaimedAdsGramConversion]:
-        stmt = (
-            select(
-                AdsGramConversion,
-                User.telegram_id,
-            )
-            .join(
-                User,
-                User.id == AdsGramConversion.user_id,
-            )
+        due_ids = (
+            select(AdsGramConversion.id)
             .where(
                 AdsGramConversion.status == "pending",
                 or_(
@@ -103,39 +96,101 @@ class AdsGramConversionRepository(BaseRepository):
             )
             .order_by(AdsGramConversion.id.asc())
             .limit(limit)
-            .with_for_update(
-                skip_locked=True,
-                of=AdsGramConversion,
+        )
+
+        # Один атомарный UPDATE:
+        # два воркера не смогут успешно захватить
+        # одну и ту же pending-запись.
+        claim_stmt = (
+            update(AdsGramConversion)
+            .where(
+                AdsGramConversion.status == "pending",
+                AdsGramConversion.id.in_(due_ids),
+            )
+            .values(
+                status="processing",
+                claim_token=claim_token,
+                claimed_at=now,
+                last_attempt_at=now,
+                attempt_count=(
+                        AdsGramConversion.attempt_count + 1
+                ),
+            )
+            .returning(
+                AdsGramConversion.id,
+                AdsGramConversion.user_id,
+                AdsGramConversion.order_id,
+                AdsGramConversion.campaign_id,
+                AdsGramConversion.goal_type,
+                AdsGramConversion.attempt_count,
+            )
+            .execution_options(
+                synchronize_session=False
             )
         )
 
-        result = await self.session.execute(stmt)
-        rows = result.all()
+        claim_result = await self.session.execute(
+            claim_stmt
+        )
+        claimed_rows = claim_result.all()
+
+        if not claimed_rows:
+            return []
+
+        user_ids = {
+            int(row.user_id)
+            for row in claimed_rows
+        }
+
+        user_stmt = select(
+            User.id,
+            User.telegram_id,
+        ).where(
+            User.id.in_(user_ids)
+        )
+
+        user_result = await self.session.execute(
+            user_stmt
+        )
+
+        telegram_ids = {
+            int(user_id): int(telegram_id)
+            for user_id, telegram_id
+            in user_result.all()
+        }
 
         claimed: list[ClaimedAdsGramConversion] = []
 
-        for conversion, telegram_id in rows:
-            conversion.status = "processing"
-            conversion.claim_token = claim_token
-            conversion.claimed_at = now
-            conversion.last_attempt_at = now
-            conversion.attempt_count += 1
+        for row in claimed_rows:
+            telegram_id = telegram_ids.get(
+                int(row.user_id)
+            )
+
+            if telegram_id is None:
+                raise RuntimeError(
+                    "AdsGram conversion user not found: "
+                    f"conversion_id={row.id} "
+                    f"user_id={row.user_id}"
+                )
 
             claimed.append(
                 ClaimedAdsGramConversion(
-                    id=conversion.id,
-                    user_id=conversion.user_id,
+                    id=int(row.id),
+                    user_id=int(row.user_id),
                     telegram_id=telegram_id,
-                    order_id=conversion.order_id,
-                    campaign_id=conversion.campaign_id,
-                    goal_type=conversion.goal_type,
-                    attempt_count=conversion.attempt_count,
+                    order_id=(
+                        int(row.order_id)
+                        if row.order_id is not None
+                        else None
+                    ),
+                    campaign_id=row.campaign_id,
+                    goal_type=int(row.goal_type),
+                    attempt_count=int(
+                        row.attempt_count
+                    ),
                     claim_token=claim_token,
                 )
             )
-
-        if claimed:
-            await self.session.flush()
 
         return claimed
 
