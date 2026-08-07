@@ -72,7 +72,7 @@ class Settings(BaseSettings):
         le=86400,
     )
     adsgram_max_attempts: int = Field(
-        default=8,
+        default=32,
         alias="ADSGRAM_MAX_ATTEMPTS",
         gt=0,
         le=100,

@@ -58,7 +58,7 @@ class AdsGramOutboxService:
         ) = None,
         batch_size: int = 50,
         claim_ttl_seconds: int = 900,
-        max_attempts: int = 8,
+        max_attempts: int = 32,
         now_factory: Callable[[], datetime] | None = None,
     ) -> None:
         self.session = session

@@ -162,7 +162,7 @@ def make_service(
     outcome=None,
     stale_requeued: int = 0,
     update_result: bool = True,
-    max_attempts: int = 8,
+    max_attempts: int = 32,
 ):
     session = FakeSession()
     conversions = FakeConversionRepository(

@@ -82,7 +82,7 @@ def test_settings_required_aliases_and_safe_defaults_are_stable():
     )
     assert settings.adsgram_scheduler_batch_size == 50
     assert settings.adsgram_claim_ttl_seconds == 900
-    assert settings.adsgram_max_attempts == 8
+    assert settings.adsgram_max_attempts == 32
     assert settings.volet_sci_enabled is False
     assert settings.volet_sci_url == "https://account.volet.com/sci/"
     assert settings.volet_sci_default_currency == "USDT_TRX"
