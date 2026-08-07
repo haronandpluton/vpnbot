@@ -63,6 +63,35 @@ class FakeUserRepository:
         user.adsgram_attributed_at = attributed_at
         return user
 
+    async def set_adsgram_attribution_if_empty(
+        self,
+        *,
+        telegram_id: int,
+        campaign_id: str,
+        attributed_at,
+    ) -> bool:
+        self.set_calls.append(
+            {
+                "user_id": self.user.id,
+                "campaign_id": campaign_id,
+                "attributed_at": attributed_at,
+            }
+        )
+
+        if self.user.adsgram_campaign_id is not None:
+            return False
+
+        self.user.adsgram_campaign_id = campaign_id
+        self.user.adsgram_attributed_at = attributed_at
+
+        return True
+
+    async def get_by_telegram_id_fresh(
+        self,
+        telegram_id: int,
+    ):
+        self.get_calls.append(telegram_id)
+        return self.user
 
 class FakeConversionRepository:
     def __init__(self, existing=None) -> None:
@@ -202,7 +231,7 @@ async def test_capture_start_attribution_stores_first_touch_and_registration():
     assert result.campaign_id == "campaign_42"
     assert result.conversion_id == 100
 
-    assert users.lock_calls == [user.telegram_id]
+    assert users.get_calls == [user.telegram_id]
     assert len(users.set_calls) == 1
     assert (
         users.set_calls[0]["campaign_id"]
@@ -380,7 +409,7 @@ async def test_capture_start_attribution_returns_user_not_found():
     )
 
     assert result.status == "user_not_found"
-    assert users.lock_calls == [123456]
+    assert users.get_calls == [123456]
     assert conversions.get_calls == []
     assert session.commit_count == 0
     assert session.rollback_count == 1

@@ -95,9 +95,8 @@ class AdsGramTrackingService:
             )
 
         try:
-            user = (
-                await self.user_repository
-                .get_by_telegram_id_for_update(telegram_id)
+            user = await self.user_repository.get_by_telegram_id(
+                telegram_id
             )
 
             if user is None:
@@ -107,70 +106,62 @@ class AdsGramTrackingService:
                     status="user_not_found"
                 )
 
-            # First-touch attribution:
-            # последующие рекламные ссылки источник не меняют.
-            if user.adsgram_campaign_id is not None:
-                conversion = None
+            attributed_now = False
 
-                # Если этот вызов относится к реально новому
-                # пользователю, registration conversion должна
-                # существовать даже если другой конкурентный
-                # /start успел сохранить attribution первым.
-                if enqueue_registration:
-                    idempotency_key = (
-                        f"registration:user:{user.id}"
+            if user.adsgram_campaign_id is None:
+                attributed_now = (
+                    await self.user_repository
+                    .set_adsgram_attribution_if_empty(
+                        telegram_id=telegram_id,
+                        campaign_id=normalized_campaign_id,
+                        attributed_at=datetime.now(UTC),
                     )
-
-                    conversion = (
-                        await self.conversion_repository
-                        .get_by_idempotency_key(
-                            idempotency_key
-                        )
-                    )
-
-                    if conversion is None:
-                        conversion = (
-                            await self.conversion_repository
-                            .create_pending(
-                                user_id=user.id,
-                                campaign_id=(
-                                    user.adsgram_campaign_id
-                                ),
-                                goal_type=(
-                                    ADSGRAM_GOAL_REGISTRATION
-                                ),
-                                idempotency_key=idempotency_key,
-                            )
-                        )
-
-                await self.session.commit()
-
-                return AdsGramAttributionResult(
-                    status="already_attributed",
-                    user_id=user.id,
-                    campaign_id=user.adsgram_campaign_id,
-                    conversion_id=(
-                        conversion.id
-                        if conversion is not None
-                        else None
-                    ),
                 )
 
-            await self.user_repository.set_adsgram_attribution(
-                user,
-                campaign_id=normalized_campaign_id,
-                attributed_at=datetime.now(UTC),
-            )
+                if attributed_now:
+                    effective_campaign_id = (
+                        normalized_campaign_id
+                    )
+                else:
+                    # Другой worker выиграл first-touch race.
+                    # Перечитываем фактическое состояние БД,
+                    # игнорируя возможный stale ORM object.
+                    user = (
+                        await self.user_repository
+                        .get_by_telegram_id_fresh(
+                            telegram_id
+                        )
+                    )
 
-            # Старому пользователю можно сохранить источник,
-            # но goal type 1 для него отправлять нельзя.
+                    if (
+                            user is None
+                            or user.adsgram_campaign_id is None
+                    ):
+                        raise RuntimeError(
+                            "AdsGram first-touch attribution "
+                            "was not persisted after "
+                            "conditional update lost race"
+                        )
+
+                    effective_campaign_id = (
+                        user.adsgram_campaign_id
+                    )
+            else:
+                effective_campaign_id = (
+                    user.adsgram_campaign_id
+                )
+
             if not enqueue_registration:
                 await self.session.commit()
 
                 return AdsGramAttributionResult(
-                    status="attributed_without_registration",
+                    status=(
+                        "attributed_without_registration"
+                        if attributed_now
+                        else "already_attributed"
+                    ),
                     user_id=user.id,
-                    campaign_id=normalized_campaign_id,
+                    campaign_id=effective_campaign_id,
                 )
 
             idempotency_key = (
@@ -179,7 +170,9 @@ class AdsGramTrackingService:
 
             conversion = (
                 await self.conversion_repository
-                .get_by_idempotency_key(idempotency_key)
+                .get_by_idempotency_key(
+                    idempotency_key
+                )
             )
 
             if conversion is None:
@@ -187,7 +180,7 @@ class AdsGramTrackingService:
                     await self.conversion_repository
                     .create_pending(
                         user_id=user.id,
-                        campaign_id=normalized_campaign_id,
+                        campaign_id=effective_campaign_id,
                         goal_type=ADSGRAM_GOAL_REGISTRATION,
                         idempotency_key=idempotency_key,
                     )
@@ -196,9 +189,13 @@ class AdsGramTrackingService:
             await self.session.commit()
 
             return AdsGramAttributionResult(
-                status="attributed",
+                status=(
+                    "attributed"
+                    if attributed_now
+                    else "already_attributed"
+                ),
                 user_id=user.id,
-                campaign_id=normalized_campaign_id,
+                campaign_id=effective_campaign_id,
                 conversion_id=conversion.id,
             )
 

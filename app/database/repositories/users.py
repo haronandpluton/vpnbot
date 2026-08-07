@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import select
-
+from sqlalchemy import select, update
 from app.database.models import User
 from app.database.repositories.base import BaseRepository
 
@@ -65,14 +64,43 @@ class UserRepository(BaseRepository):
         await self.session.flush()
         return user
 
-    async def set_adsgram_attribution(
-        self,
-        user: User,
-        *,
-        campaign_id: str,
-        attributed_at: datetime,
-    ) -> User:
-        user.adsgram_campaign_id = campaign_id
-        user.adsgram_attributed_at = attributed_at
-        await self.session.flush()
-        return user
+    async def set_adsgram_attribution_if_empty(
+            self,
+            *,
+            telegram_id: int,
+            campaign_id: str,
+            attributed_at: datetime,
+    ) -> bool:
+        stmt = (
+            update(User)
+            .where(
+                User.telegram_id == telegram_id,
+                User.adsgram_campaign_id.is_(None),
+            )
+            .values(
+                adsgram_campaign_id=campaign_id,
+                adsgram_attributed_at=attributed_at,
+            )
+            .execution_options(
+                synchronize_session=False
+            )
+        )
+
+        result = await self.session.execute(stmt)
+
+        return int(result.rowcount or 0) == 1
+
+    async def get_by_telegram_id_fresh(
+            self,
+            telegram_id: int,
+    ) -> User | None:
+        stmt = (
+            select(User)
+            .where(User.telegram_id == telegram_id)
+            .execution_options(
+                populate_existing=True
+            )
+        )
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
