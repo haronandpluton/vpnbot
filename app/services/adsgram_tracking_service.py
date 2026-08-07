@@ -18,7 +18,7 @@ ADSGRAM_GOAL_FIRST_PURCHASE = 2
 ADSGRAM_GOAL_REPEAT_PURCHASE = 3
 
 _CAMPAIGN_ID_PATTERN = re.compile(
-    r"^[A-Za-z0-9_-]{1,64}$"
+    r"^[A-Za-z0-9_-]{1,60}$"
 )
 
 

@@ -123,6 +123,14 @@ def assert_callback_rows(markup, expected):
             "campaign_42",
         ),
         (
+                "/start ads_" + ("x" * 60),
+                "x" * 60,
+        ),
+        (
+                "/start ads_" + ("x" * 61),
+                None,
+        ),
+        (
             "/start@PresentVPNBot ads_campaign-42",
             "campaign-42",
         ),

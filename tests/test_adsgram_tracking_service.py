@@ -176,7 +176,8 @@ def make_service(*, user=None, conversion=None):
         ("", None),
         ("contains space", None),
         ("bad/value", None),
-        ("x" * 65, None),
+        ("x" * 60, "x" * 60),
+        ("x" * 61, None),
     ],
 )
 def test_normalize_adsgram_campaign_id(raw, expected):
