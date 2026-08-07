@@ -34,6 +34,30 @@ def make_settings(**overrides):
     return Settings(**values)
 
 
+def test_settings_rejects_adsgram_claim_ttl_below_safe_window():
+    with pytest.raises(ValidationError) as exc_info:
+        make_settings(
+            ADSGRAM_REQUEST_TIMEOUT_SECONDS=10,
+            ADSGRAM_SCHEDULER_BATCH_SIZE=50,
+            ADSGRAM_CLAIM_TTL_SECONDS=559,
+        )
+
+    assert (
+        "ADSGRAM_CLAIM_TTL_SECONDS must be "
+        "at least 560"
+        in str(exc_info.value)
+    )
+
+def test_settings_accepts_minimum_safe_adsgram_claim_ttl():
+    settings = make_settings(
+        ADSGRAM_REQUEST_TIMEOUT_SECONDS=10,
+        ADSGRAM_SCHEDULER_BATCH_SIZE=50,
+        ADSGRAM_CLAIM_TTL_SECONDS=560,
+    )
+
+    assert settings.adsgram_claim_ttl_seconds == 560
+
+
 def test_settings_required_aliases_and_safe_defaults_are_stable():
     settings = make_settings()
 
@@ -57,7 +81,7 @@ def test_settings_required_aliases_and_safe_defaults_are_stable():
         == 10
     )
     assert settings.adsgram_scheduler_batch_size == 50
-    assert settings.adsgram_claim_ttl_seconds == 300
+    assert settings.adsgram_claim_ttl_seconds == 900
     assert settings.adsgram_max_attempts == 8
     assert settings.volet_sci_enabled is False
     assert settings.volet_sci_url == "https://account.volet.com/sci/"
@@ -93,6 +117,8 @@ def test_settings_required_aliases_and_safe_defaults_are_stable():
         ("critical", "CRITICAL"),
     ],
 )
+
+
 def test_settings_log_level_is_normalized(raw_level, expected):
     assert make_settings(LOG_LEVEL=raw_level).log_level == expected
 

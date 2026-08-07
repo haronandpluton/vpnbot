@@ -57,7 +57,7 @@ class AdsGramOutboxService:
             SystemErrorRecordRepository | None
         ) = None,
         batch_size: int = 50,
-        claim_ttl_seconds: int = 300,
+        claim_ttl_seconds: int = 900,
         max_attempts: int = 8,
         now_factory: Callable[[], datetime] | None = None,
     ) -> None:

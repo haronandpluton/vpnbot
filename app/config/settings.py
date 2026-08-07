@@ -1,4 +1,5 @@
 from functools import lru_cache
+from math import ceil
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -65,7 +66,7 @@ class Settings(BaseSettings):
         le=500,
     )
     adsgram_claim_ttl_seconds: int = Field(
-        default=300,
+        default=900,
         alias="ADSGRAM_CLAIM_TTL_SECONDS",
         gt=0,
         le=86400,
@@ -280,13 +281,36 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_adsgram_configuration(self):
         if (
-            self.adsgram_enabled
-            and not self.adsgram_api_token.strip()
+                self.adsgram_enabled
+                and not self.adsgram_api_token.strip()
         ):
             raise ValueError(
                 "ADSGRAM_API_TOKEN is required when "
                 "ADSGRAM_ENABLED=true"
             )
+
+        # Outbox обрабатывает batch последовательно.
+        # Claim не должен протухнуть, пока текущий
+        # воркер ещё выполняет HTTP-запросы.
+        minimum_claim_ttl_seconds = (
+                ceil(
+                    self.adsgram_scheduler_batch_size
+                    * self.adsgram_request_timeout_seconds
+                )
+                + 60
+        )
+
+        if (
+                self.adsgram_claim_ttl_seconds
+                < minimum_claim_ttl_seconds
+        ):
+            raise ValueError(
+                "ADSGRAM_CLAIM_TTL_SECONDS must be "
+                f"at least {minimum_claim_ttl_seconds} "
+                "for the configured batch size and "
+                "request timeout"
+            )
+
         return self
 
     @field_validator("vpn_subscription_public_base_url")
