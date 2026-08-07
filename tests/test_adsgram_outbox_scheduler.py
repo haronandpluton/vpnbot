@@ -65,6 +65,39 @@ class FakeAdsGramClient:
         self.timeout_seconds = timeout_seconds
         self.__class__.instances.append(self)
 
+class FakeAdsGramRecoveryService:
+    instances: list[
+        "FakeAdsGramRecoveryService"
+    ] = []
+
+    result = SimpleNamespace(
+        start_checked=0,
+        purchase_checked=0,
+        resolved=0,
+        deferred=0,
+        failed=0,
+    )
+    error: Exception | None = None
+
+    def __init__(
+        self,
+        session,
+        *,
+        batch_size: int,
+    ) -> None:
+        self.session = session
+        self.batch_size = batch_size
+        self.run_count = 0
+        self.__class__.instances.append(self)
+
+    async def run_once(self):
+        self.run_count += 1
+
+        if self.__class__.error is not None:
+            raise self.__class__.error
+
+        return self.__class__.result
+
 
 class FakeAdsGramOutboxService:
     instances: list[
@@ -133,7 +166,17 @@ def scheduler_settings(monkeypatch):
             processing_errors=0,
         )
     )
-
+    FakeAdsGramRecoveryService.instances = []
+    FakeAdsGramRecoveryService.error = None
+    FakeAdsGramRecoveryService.result = (
+        SimpleNamespace(
+            start_checked=0,
+            purchase_checked=0,
+            resolved=0,
+            deferred=0,
+            failed=0,
+        )
+    )
     monkeypatch.setattr(
         scheduler_module,
         "get_settings",
@@ -143,6 +186,11 @@ def scheduler_settings(monkeypatch):
         scheduler_module,
         "AdsGramClient",
         FakeAdsGramClient,
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "AdsGramRecoveryService",
+        FakeAdsGramRecoveryService,
     )
     monkeypatch.setattr(
         scheduler_module,
@@ -169,7 +217,7 @@ async def test_scheduler_returns_immediately_when_disabled(
     assert session_factory.contexts == []
     assert FakeAdsGramClient.instances == []
     assert FakeAdsGramOutboxService.instances == []
-
+    assert FakeAdsGramRecoveryService.instances == []
 
 @pytest.mark.asyncio
 async def test_run_once_uses_isolated_session_and_runtime_settings(
@@ -199,14 +247,43 @@ async def test_run_once_uses_isolated_session_and_runtime_settings(
     assert result.claimed == 2
     assert result.sent == 2
 
-    assert len(session_factory.contexts) == 1
+    assert len(session_factory.contexts) == 2
 
-    context = session_factory.contexts[0]
+    recovery_context = session_factory.contexts[0]
+    outbox_context = session_factory.contexts[1]
 
-    assert context.enter_count == 1
-    assert context.exit_count == 1
-    assert context.exit_error_types == [None]
+    assert recovery_context.enter_count == 1
+    assert recovery_context.exit_count == 1
+    assert (
+            recovery_context.exit_error_types
+            == [None]
+    )
 
+    assert outbox_context.enter_count == 1
+    assert outbox_context.exit_count == 1
+    assert (
+            outbox_context.exit_error_types
+            == [None]
+    )
+
+    assert (
+            recovery_context.session
+            is not outbox_context.session
+    )
+    assert len(
+        FakeAdsGramRecoveryService.instances
+    ) == 1
+
+    recovery_service = (
+        FakeAdsGramRecoveryService.instances[0]
+    )
+
+    assert (
+        recovery_service.session
+        is recovery_context.session
+    )
+    assert recovery_service.batch_size == 25
+    assert recovery_service.run_count == 1
     assert len(FakeAdsGramClient.instances) == 1
 
     client = FakeAdsGramClient.instances[0]
@@ -224,7 +301,7 @@ async def test_run_once_uses_isolated_session_and_runtime_settings(
 
     service = FakeAdsGramOutboxService.instances[0]
 
-    assert service.session.name == "adsgram-session"
+    assert service.session is outbox_context.session
     assert service.client is client
     assert service.batch_size == 25
     assert service.claim_ttl_seconds == 180
@@ -331,4 +408,74 @@ async def test_run_forever_survives_iteration_error_and_cancels_cleanly(
     assert (
         "AdsGram outbox scheduler cancelled."
         in messages
+    )
+
+@pytest.mark.asyncio
+async def test_recovery_failure_does_not_block_outbox_delivery(
+    scheduler_settings,
+    caplog,
+):
+    FakeAdsGramRecoveryService.error = (
+        RuntimeError("recovery database failed")
+    )
+
+    FakeAdsGramOutboxService.result = (
+        SimpleNamespace(
+            stale_requeued=0,
+            claimed=1,
+            sent=1,
+            retried=0,
+            failed=0,
+            lost_claim=0,
+            processing_errors=0,
+        )
+    )
+
+    session_factory = FakeSessionFactory()
+
+    scheduler = AdsGramOutboxScheduler(
+        session_factory
+    )
+
+    with caplog.at_level(logging.ERROR):
+        result = await scheduler.run_once()
+
+    # Recovery упал, но outbox отработал.
+    assert result.claimed == 1
+    assert result.sent == 1
+
+    assert len(session_factory.contexts) == 2
+
+    recovery_context = session_factory.contexts[0]
+    outbox_context = session_factory.contexts[1]
+
+    assert (
+        recovery_context.exit_error_types
+        == [RuntimeError]
+    )
+    assert (
+        outbox_context.exit_error_types
+        == [None]
+    )
+
+    assert len(
+        FakeAdsGramRecoveryService.instances
+    ) == 1
+    assert len(
+        FakeAdsGramOutboxService.instances
+    ) == 1
+
+    assert (
+        FakeAdsGramOutboxService
+        .instances[0]
+        .run_count
+        == 1
+    )
+
+    assert any(
+        (
+            "AdsGram recovery iteration failed."
+            in record.getMessage()
+        )
+        for record in caplog.records
     )

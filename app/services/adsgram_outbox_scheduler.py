@@ -12,7 +12,9 @@ from app.services.adsgram_outbox_service import (
     AdsGramOutboxRunResult,
     AdsGramOutboxService,
 )
-
+from app.services.adsgram_recovery_service import (
+    AdsGramRecoveryService,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -75,6 +77,54 @@ class AdsGramOutboxScheduler:
     async def run_once(
         self,
     ) -> AdsGramOutboxRunResult:
+        try:
+            async with (
+                self.session_factory()
+                as recovery_session
+            ):
+                recovery_result = (
+                    await AdsGramRecoveryService(
+                        recovery_session,
+                        batch_size=(
+                            self.settings
+                            .adsgram_scheduler_batch_size
+                        ),
+                    ).run_once()
+                )
+
+        except asyncio.CancelledError:
+            raise
+
+        except Exception:
+            # Recovery не должен мешать доставке
+            # уже существующего AdsGram outbox.
+            logger.exception(
+                "AdsGram recovery iteration failed."
+            )
+
+        else:
+            if (
+                recovery_result.start_checked > 0
+                or recovery_result.purchase_checked > 0
+            ):
+                log = (
+                    logger.warning
+                    if recovery_result.failed > 0
+                    else logger.info
+                )
+
+                log(
+                    "AdsGram recovery iteration completed: "
+                    "start_checked=%s "
+                    "purchase_checked=%s "
+                    "resolved=%s deferred=%s failed=%s",
+                    recovery_result.start_checked,
+                    recovery_result.purchase_checked,
+                    recovery_result.resolved,
+                    recovery_result.deferred,
+                    recovery_result.failed,
+                )
+
         client = AdsGramClient(
             api_url=self.settings.adsgram_api_url,
             api_token=self.settings.adsgram_api_token,
