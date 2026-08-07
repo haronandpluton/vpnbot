@@ -27,7 +27,15 @@ class SystemErrorRecordRepository(BaseRepository):
         self.session.add(error)
         await self.session.flush()
         return error
-
+    async def get_by_id(
+        self,
+        error_id: int,
+    ) -> SystemErrorRecord | None:
+        stmt = select(SystemErrorRecord).where(
+            SystemErrorRecord.id == error_id
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
     async def get_unresolved(self) -> list[SystemErrorRecord]:
         stmt = (
             select(SystemErrorRecord)

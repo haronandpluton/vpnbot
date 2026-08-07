@@ -40,6 +40,7 @@ class FakeSystemErrorRepository:
 
         self.lookup_calls = []
         self.get_by_type_calls = []
+        self.get_by_id_calls = []
         self.create_calls = []
         self.update_calls = []
         self.mark_resolved_calls = []
@@ -62,6 +63,26 @@ class FakeSystemErrorRepository:
                 False,
             )
         ]
+
+    async def get_by_id(
+        self,
+        error_id: int,
+    ):
+        self.get_by_id_calls.append(error_id)
+
+        candidates = []
+
+        if self.pending is not None:
+            candidates.append(self.pending)
+
+        for errors in self.unresolved_by_type.values():
+            candidates.extend(errors)
+
+        for error in candidates:
+            if getattr(error, "id", None) == error_id:
+                return error
+
+        return None
 
     async def get_unresolved_by_entity_and_error_type(
         self,

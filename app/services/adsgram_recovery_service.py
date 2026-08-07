@@ -109,14 +109,21 @@ class AdsGramRecoveryService:
         )
 
     async def run_once(
-        self,
+            self,
     ) -> AdsGramRecoveryRunResult:
-        start_errors = (
-            await self.system_error_repository
-            .get_unresolved_by_error_type(
-                ADSGRAM_START_ATTRIBUTION_ERROR_TYPE
-            )
-        )[: self.batch_size]
+        start_records = (
+                            await self.system_error_repository
+                            .get_unresolved_by_error_type(
+                                ADSGRAM_START_ATTRIBUTION_ERROR_TYPE
+                            )
+                        )[: self.batch_size]
+
+        # Нельзя держать ORM-records через replay:
+        # любой rollback() expire'ит все объекты Session.
+        start_error_ids = [
+            int(error.id)
+            for error in start_records
+        ]
 
         counters = {
             "resolved": 0,
@@ -124,30 +131,60 @@ class AdsGramRecoveryService:
             "failed": 0,
         }
 
-        # Сначала восстанавливаем attribution.
-        # Purchase recovery может зависеть от неё.
-        for error_record in start_errors:
+        # Attribution восстанавливается раньше purchase,
+        # поскольку purchase может от неё зависеть.
+        for error_id in start_error_ids:
+            error_record = await (
+                self.system_error_repository
+                .get_by_id(error_id)
+            )
+
+            # Другой worker мог уже закрыть/удалить запись.
+            if (
+                    error_record is None
+                    or error_record.is_resolved
+            ):
+                continue
+
             outcome = await self._replay_start(
                 error_record
             )
             counters[outcome] += 1
 
-        purchase_errors = (
-            await self.system_error_repository
-            .get_unresolved_by_error_type(
-                ADSGRAM_PURCHASE_ENQUEUE_ERROR_TYPE
-            )
-        )[: self.batch_size]
+        purchase_records = (
+                               await self.system_error_repository
+                               .get_unresolved_by_error_type(
+                                   ADSGRAM_PURCHASE_ENQUEUE_ERROR_TYPE
+                               )
+                           )[: self.batch_size]
 
-        for error_record in purchase_errors:
+        purchase_error_ids = [
+            int(error.id)
+            for error in purchase_records
+        ]
+
+        for error_id in purchase_error_ids:
+            error_record = await (
+                self.system_error_repository
+                .get_by_id(error_id)
+            )
+
+            if (
+                    error_record is None
+                    or error_record.is_resolved
+            ):
+                continue
+
             outcome = await self._replay_purchase(
                 error_record
             )
             counters[outcome] += 1
 
         return AdsGramRecoveryRunResult(
-            start_checked=len(start_errors),
-            purchase_checked=len(purchase_errors),
+            start_checked=len(start_error_ids),
+            purchase_checked=len(
+                purchase_error_ids
+            ),
             resolved=counters["resolved"],
             deferred=counters["deferred"],
             failed=counters["failed"],
