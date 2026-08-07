@@ -9,7 +9,7 @@ from app.services.adsgram_tracking_service import (
     AdsGramTrackingService,
     normalize_adsgram_campaign_id,
 )
-
+from sqlalchemy.exc import IntegrityError
 
 class FakeSession:
     def __init__(self) -> None:
@@ -88,6 +88,52 @@ class FakeConversionRepository:
         self.next_id += 1
         self.existing = conversion
         return conversion
+
+class IntegrityFailingConversionRepository(
+    FakeConversionRepository
+):
+    async def create_pending(self, **kwargs):
+        self.create_calls.append(kwargs)
+
+        raise IntegrityError(
+            "INSERT INTO adsgram_conversions",
+            {},
+            RuntimeError("constraint failure"),
+        )
+
+@pytest.mark.asyncio
+async def test_integrity_error_without_registration_conversion_is_not_silently_accepted():
+    user = make_user(
+        campaign_id="campaign_42"
+    )
+    session = FakeSession()
+    users = FakeUserRepository(user)
+    conversions = (
+        IntegrityFailingConversionRepository()
+    )
+
+    service = AdsGramTrackingService(
+        session,
+        user_repository=users,
+        conversion_repository=conversions,
+    )
+
+    with pytest.raises(IntegrityError):
+        await service.capture_start_attribution(
+            telegram_id=user.telegram_id,
+            campaign_id="campaign_42",
+            enqueue_registration=True,
+        )
+
+    assert conversions.get_calls == [
+        "registration:user:7",
+        "registration:user:7",
+    ]
+
+    assert len(conversions.create_calls) == 1
+
+    assert session.commit_count == 0
+    assert session.rollback_count == 1
 
 
 def make_user(*, campaign_id=None):

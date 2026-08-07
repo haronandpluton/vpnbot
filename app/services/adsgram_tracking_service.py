@@ -226,6 +226,13 @@ class AdsGramTrackingService:
                     )
                 )
 
+                # IntegrityError считается безопасной
+                # конкурентной гонкой только если
+                # registration conversion действительно
+                # появилась в другой транзакции.
+                if conversion is None:
+                    raise
+
             await self.session.commit()
 
             return AdsGramAttributionResult(
