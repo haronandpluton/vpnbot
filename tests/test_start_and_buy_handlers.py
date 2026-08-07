@@ -227,6 +227,7 @@ async def test_start_command_sends_buy_menu_for_ineligible_user(
 
             return SimpleNamespace(
                 user=SimpleNamespace(
+                    id=7,
                     trial_eligible=False,
                 ),
                 created=False,
@@ -293,6 +294,7 @@ async def test_start_command_sends_trial_menu_for_eligible_user(
 
             return SimpleNamespace(
                 user=SimpleNamespace(
+                    id=7,
                     trial_eligible=True,
                 ),
                 created=True,
@@ -556,6 +558,18 @@ async def test_adsgram_failure_does_not_block_start_menu(
                 "temporary attribution failure"
             )
 
+    recovery_calls = []
+
+    class FakeAdsGramRecoveryService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def record_start_failure(
+            self,
+            **kwargs,
+        ) -> None:
+            recovery_calls.append(kwargs)
+
     monkeypatch.setattr(
         start_module,
         "OrderService",
@@ -566,7 +580,11 @@ async def test_adsgram_failure_does_not_block_start_menu(
         "AdsGramTrackingService",
         FailingAdsGramTrackingService,
     )
-
+    monkeypatch.setattr(
+        start_module,
+        "AdsGramRecoveryService",
+        FakeAdsGramRecoveryService,
+    )
     message = FakeMessage(
         text="/start ads_campaign_42"
     )
@@ -585,6 +603,114 @@ async def test_adsgram_failure_does_not_block_start_menu(
     assert (
         message.answer_calls[0]["text"]
         == main_menu_text()
+    )
+    assert len(recovery_calls) == 1
+
+    recovery_call = recovery_calls[0]
+
+    assert recovery_call["user_id"] == 7
+    assert recovery_call["telegram_id"] == 123
+    assert recovery_call["campaign_id"] == "campaign_42"
+    assert recovery_call["enqueue_registration"] is True
+    assert isinstance(
+        recovery_call["error"],
+        RuntimeError,
+    )
+    assert str(
+        recovery_call["error"]
+    ) == "temporary attribution failure"
+
+@pytest.mark.asyncio
+async def test_adsgram_failure_for_existing_user_preserves_no_registration_flag(
+    monkeypatch,
+):
+    session = FakeSession()
+    recovery_calls = []
+
+    class FakeOrderService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def get_or_create_user_result(
+            self,
+            **kwargs,
+        ):
+            return SimpleNamespace(
+                user=SimpleNamespace(
+                    id=7,
+                    trial_eligible=False,
+                ),
+                created=False,
+            )
+
+    class FailingAdsGramTrackingService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def capture_start_attribution(
+            self,
+            **kwargs,
+        ):
+            assert kwargs[
+                "enqueue_registration"
+            ] is False
+
+            raise RuntimeError(
+                "temporary attribution failure"
+            )
+
+    class FakeAdsGramRecoveryService:
+        def __init__(self, session_arg) -> None:
+            assert session_arg is session
+
+        async def record_start_failure(
+            self,
+            **kwargs,
+        ) -> None:
+            recovery_calls.append(kwargs)
+
+    monkeypatch.setattr(
+        start_module,
+        "OrderService",
+        FakeOrderService,
+    )
+    monkeypatch.setattr(
+        start_module,
+        "AdsGramTrackingService",
+        FailingAdsGramTrackingService,
+    )
+    monkeypatch.setattr(
+        start_module,
+        "AdsGramRecoveryService",
+        FakeAdsGramRecoveryService,
+    )
+
+    message = FakeMessage(
+        text="/start ads_campaign_42"
+    )
+
+    await start_command(
+        message,
+        session=session,
+    )
+
+    assert session.commit_count == 1
+    assert session.rollback_count == 1
+
+    assert len(recovery_calls) == 1
+
+    recovery_call = recovery_calls[0]
+
+    assert recovery_call["user_id"] == 7
+    assert recovery_call["telegram_id"] == 123
+    assert recovery_call["campaign_id"] == "campaign_42"
+    assert (
+        recovery_call["enqueue_registration"]
+        is False
+    )
+    assert isinstance(
+        recovery_call["error"],
+        RuntimeError,
     )
 
 
@@ -662,6 +788,7 @@ async def test_back_to_main_menu_answers_before_database_and_edit(monkeypatch):
 
             return SimpleNamespace(
                 user=SimpleNamespace(
+                    id=7,
                     trial_eligible=False,
                 ),
                 created=False,

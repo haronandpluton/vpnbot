@@ -16,6 +16,9 @@ from app.payment_core.enums.payment_status import PaymentStatus
 from app.services.adsgram_tracking_service import (
     AdsGramTrackingService,
 )
+from app.services.adsgram_recovery_service import (
+    AdsGramRecoveryService,
+)
 from app.services.payment_event_service import PaymentEventService
 from app.services.subscription_service import SubscriptionService
 
@@ -51,6 +54,10 @@ class PaymentActivationService:
                 [AsyncSession],
                 AdsGramTrackingService,
             ] = AdsGramTrackingService,
+            adsgram_recovery_service_factory: Callable[
+                [AsyncSession],
+                AdsGramRecoveryService,
+            ] = AdsGramRecoveryService,
     ) -> None:
         self.session = session
         self.payment_event_service = PaymentEventService(session)
@@ -65,6 +72,9 @@ class PaymentActivationService:
         )
         self.adsgram_tracking_service_factory = (
             adsgram_tracking_service_factory
+        )
+        self.adsgram_recovery_service_factory = (
+            adsgram_recovery_service_factory
         )
 
     async def process_confirmed_payment_event_and_activate(
@@ -207,9 +217,10 @@ class PaymentActivationService:
                 result.goal_type,
             )
 
-        except Exception:
-            # Отдельная AdsGram-сессия будет закрыта и откатана.
-            # Основную платёжную сессию здесь не трогаем.
+        except Exception as error:
+            # Payment/order уже подтверждены.
+            # Ошибка AdsGram не должна затрагивать
+            # основную payment/subscription-транзакцию.
             logger.exception(
                 "AdsGram purchase conversion enqueue failed: "
                 "user_id=%s order_id=%s payment_id=%s",
@@ -217,6 +228,40 @@ class PaymentActivationService:
                 order_id,
                 payment_id,
             )
+
+            # Сессия, в которой упал enqueue, больше
+            # не используется. Recovery получает новую.
+            try:
+                async with (
+                    self.adsgram_session_factory()
+                    as recovery_session
+                ):
+                    recovery_service = (
+                        self.adsgram_recovery_service_factory(
+                            recovery_session
+                        )
+                    )
+
+                    await (
+                        recovery_service
+                        .record_purchase_failure(
+                            user_id=user_id,
+                            order_id=order_id,
+                            payment_id=payment_id,
+                            error=error,
+                        )
+                    )
+
+            except Exception:
+                # Даже невозможность сохранить recovery
+                # не должна блокировать VPN activation.
+                logger.exception(
+                    "AdsGram purchase recovery failed: "
+                    "user_id=%s order_id=%s payment_id=%s",
+                    user_id,
+                    order_id,
+                    payment_id,
+                )
 
     async def _record_activation_failure(
         self,

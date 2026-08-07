@@ -110,12 +110,50 @@ class AdsGramTrackingService:
             # First-touch attribution:
             # последующие рекламные ссылки источник не меняют.
             if user.adsgram_campaign_id is not None:
+                conversion = None
+
+                # Если этот вызов относится к реально новому
+                # пользователю, registration conversion должна
+                # существовать даже если другой конкурентный
+                # /start успел сохранить attribution первым.
+                if enqueue_registration:
+                    idempotency_key = (
+                        f"registration:user:{user.id}"
+                    )
+
+                    conversion = (
+                        await self.conversion_repository
+                        .get_by_idempotency_key(
+                            idempotency_key
+                        )
+                    )
+
+                    if conversion is None:
+                        conversion = (
+                            await self.conversion_repository
+                            .create_pending(
+                                user_id=user.id,
+                                campaign_id=(
+                                    user.adsgram_campaign_id
+                                ),
+                                goal_type=(
+                                    ADSGRAM_GOAL_REGISTRATION
+                                ),
+                                idempotency_key=idempotency_key,
+                            )
+                        )
+
                 await self.session.commit()
 
                 return AdsGramAttributionResult(
                     status="already_attributed",
                     user_id=user.id,
                     campaign_id=user.adsgram_campaign_id,
+                    conversion_id=(
+                        conversion.id
+                        if conversion is not None
+                        else None
+                    ),
                 )
 
             await self.user_repository.set_adsgram_attribution(

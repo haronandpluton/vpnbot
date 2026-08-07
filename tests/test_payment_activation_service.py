@@ -42,6 +42,26 @@ class FakeAdsGramTrackingService:
             goal_type=2,
         )
 
+class FakeAdsGramRecoveryService:
+    def __init__(
+        self,
+        *,
+        should_fail: bool = False,
+    ) -> None:
+        self.should_fail = should_fail
+        self.calls: list[dict] = []
+
+    async def record_purchase_failure(
+        self,
+        **kwargs,
+    ) -> None:
+        self.calls.append(kwargs)
+
+        if self.should_fail:
+            raise RuntimeError(
+                "adsgram recovery failed"
+            )
+
 class FakeSubscriptionService:
     def __init__(self, *, should_fail: bool = False) -> None:
         self.should_fail = should_fail
@@ -97,6 +117,9 @@ def make_service(
         FakeAdsGramTrackingService | None
     ) = None,
     session=None,
+    adsgram_recovery_service: (
+            FakeAdsGramRecoveryService | None
+    ) = None,
 ):
     service = PaymentActivationService.__new__(
         PaymentActivationService
@@ -110,6 +133,10 @@ def make_service(
     adsgram_session_factory = (
         FakeAdsGramSessionFactory()
     )
+    recovery_service = (
+        adsgram_recovery_service
+        or FakeAdsGramRecoveryService()
+    )
 
     def tracking_service_factory(session_arg):
         assert (
@@ -117,6 +144,13 @@ def make_service(
             is adsgram_session_factory.session
         )
         return tracking_service
+
+    def recovery_service_factory(session_arg):
+        assert (
+            session_arg
+            is adsgram_session_factory.session
+        )
+        return recovery_service
 
     service.session = main_session
     service.payment_event_service = (
@@ -133,9 +167,14 @@ def make_service(
     service.adsgram_tracking_service_factory = (
         tracking_service_factory
     )
-
+    service.adsgram_recovery_service_factory = (
+        recovery_service_factory
+    )
     # Оставляем ссылки для существующих assertions.
     service.adsgram_tracking_service = tracking_service
+    service.adsgram_recovery_service = (
+        recovery_service
+    )
     service.adsgram_test_session_factory = (
         adsgram_session_factory
     )
@@ -455,25 +494,142 @@ async def test_adsgram_enqueue_failure_does_not_block_subscription_activation():
             "payment_id": 2,
         }
     ]
+    assert len(
+        service.adsgram_recovery_service.calls
+    ) == 1
 
+    recovery_call = (
+        service.adsgram_recovery_service.calls[0]
+    )
+
+    assert recovery_call["user_id"] == 7
+    assert recovery_call["order_id"] == 23
+    assert recovery_call["payment_id"] == 2
+
+    assert isinstance(
+        recovery_call["error"],
+        RuntimeError,
+    )
+    assert (
+        str(recovery_call["error"])
+        == "adsgram queue failed"
+    )
     # Основная payment/subscription-сессия не откатывалась.
     assert session.rollback_count == 0
 
     # Ошибка произошла внутри отдельной AdsGram-сессии.
     assert (
             service.adsgram_test_session_factory.call_count
-            == 1
+            == 2
     )
     assert (
             service.adsgram_test_session_factory.enter_count
-            == 1
+            == 2
     )
     assert (
             service.adsgram_test_session_factory.exit_count
-            == 1
+            == 2
     )
     assert (
             service.adsgram_test_session_factory
             .exit_error_types
-            == [RuntimeError]
+            == [RuntimeError, None]
+    )
+
+@pytest.mark.asyncio
+async def test_adsgram_recovery_failure_does_not_block_subscription_activation():
+    event = make_event()
+    payment = make_payment(
+        status=PaymentStatus.CONFIRMED
+    )
+    paid_order = make_order(
+        order_id=23,
+        status=OrderStatus.PAID,
+    )
+
+    adsgram_service = FakeAdsGramTrackingService(
+        should_fail=True
+    )
+    recovery_service = FakeAdsGramRecoveryService(
+        should_fail=True
+    )
+    session = RollbackSession()
+
+    service = make_service(
+        event_result=(
+            event,
+            payment,
+            paid_order,
+        ),
+        adsgram_tracking_service=adsgram_service,
+        adsgram_recovery_service=recovery_service,
+        session=session,
+    )
+
+    result = (
+        await service
+        .process_confirmed_payment_event_and_activate(
+            order_id=23,
+            amount=Decimal("4.00"),
+            provider="cryptobot",
+            event_type="invoice_paid",
+            external_event_id="cryptobot:55822653",
+        )
+    )
+
+    # Несмотря на два последовательных сбоя аналитики,
+    # основная бизнес-операция завершилась.
+    assert result[0] is event
+    assert result[1] is payment
+    assert result[2].uuid == "test-uuid"
+    assert result[3] == "vless://test-config"
+
+    assert service.subscription_service.calls == [23]
+
+    assert adsgram_service.calls == [
+        {
+            "user_id": 7,
+            "order_id": 23,
+            "payment_id": 2,
+        }
+    ]
+
+    assert len(recovery_service.calls) == 1
+
+    recovery_call = recovery_service.calls[0]
+
+    assert recovery_call["user_id"] == 7
+    assert recovery_call["order_id"] == 23
+    assert recovery_call["payment_id"] == 2
+    assert isinstance(
+        recovery_call["error"],
+        RuntimeError,
+    )
+    assert (
+        str(recovery_call["error"])
+        == "adsgram queue failed"
+    )
+
+    # Основная payment/subscription session
+    # вообще не откатывалась.
+    assert session.rollback_count == 0
+
+    # Первая отдельная session — enqueue.
+    # Вторая отдельная session — recovery.
+    assert (
+        service.adsgram_test_session_factory.call_count
+        == 2
+    )
+    assert (
+        service.adsgram_test_session_factory.enter_count
+        == 2
+    )
+    assert (
+        service.adsgram_test_session_factory.exit_count
+        == 2
+    )
+    assert (
+        service.adsgram_test_session_factory
+        .exit_error_types
+        == [RuntimeError, RuntimeError]
     )

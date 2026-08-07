@@ -225,6 +225,7 @@ async def test_capture_start_attribution_does_not_overwrite_first_touch():
     result = await service.capture_start_attribution(
         telegram_id=user.telegram_id,
         campaign_id="new_campaign",
+        enqueue_registration=False,
     )
 
     assert result.status == "already_attributed"
@@ -236,6 +237,46 @@ async def test_capture_start_attribution_does_not_overwrite_first_touch():
 
     assert session.commit_count == 1
     assert session.rollback_count == 0
+
+
+@pytest.mark.asyncio
+async def test_existing_attribution_ensures_registration_conversion_for_new_user():
+    user = make_user(
+        campaign_id="campaign_42"
+    )
+
+    service, session, users, conversions = (
+        make_service(
+            user=user,
+            conversion=None,
+        )
+    )
+
+    result = await service.capture_start_attribution(
+        telegram_id=user.telegram_id,
+        campaign_id="campaign_42",
+        enqueue_registration=True,
+    )
+
+    assert result.status == "already_attributed"
+    assert result.user_id == user.id
+    assert result.campaign_id == "campaign_42"
+    assert result.conversion_id is not None
+    assert conversions.get_calls == [
+        "registration:user:7"
+    ]
+    assert len(conversions.create_calls) == 1
+
+    assert conversions.create_calls[0] == {
+        "user_id": user.id,
+        "campaign_id": "campaign_42",
+        "goal_type": ADSGRAM_GOAL_REGISTRATION,
+        "idempotency_key": (
+            f"registration:user:{user.id}"
+        ),
+    }
+
+    assert session.commit_count == 1
 
 
 @pytest.mark.asyncio

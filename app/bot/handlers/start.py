@@ -20,6 +20,9 @@ from app.bot.keyboards.vpn_access import vpn_access_keyboard
 from app.bot.texts.vpn_access import format_vpn_access_text
 from app.bot.utils.callback_query import edit_callback_message
 from app.bot.utils.custom_emoji import build_custom_emoji_entities
+from app.services.adsgram_recovery_service import (
+    AdsGramRecoveryService,
+)
 from app.services.adsgram_tracking_service import (
     AdsGramTrackingService,
     normalize_adsgram_campaign_id,
@@ -82,6 +85,7 @@ def main_menu_entities(
 async def _capture_adsgram_start_attribution(
     *,
     session: AsyncSession,
+    user_id: int,
     telegram_id: int,
     campaign_id: str | None,
     enqueue_registration: bool,
@@ -106,16 +110,27 @@ async def _capture_adsgram_start_attribution(
             result.status,
         )
 
-    except Exception:
-        # Пользователь уже был сохранён отдельной транзакцией.
-        # Ошибка аналитики не должна блокировать /start.
+    except Exception as error:
+        # Пользователь уже сохранён отдельной транзакцией.
+        # Ошибка AdsGram не должна блокировать /start.
         await session.rollback()
 
         logger.exception(
             "AdsGram start attribution failed: "
-            "telegram_id=%s campaign_id=%s",
+            "user_id=%s telegram_id=%s campaign_id=%s",
+            user_id,
             telegram_id,
             campaign_id,
+        )
+
+        await AdsGramRecoveryService(
+            session
+        ).record_start_failure(
+            user_id=user_id,
+            telegram_id=telegram_id,
+            campaign_id=campaign_id,
+            enqueue_registration=enqueue_registration,
+            error=error,
         )
 
 async def _get_menu_user_result(
@@ -182,6 +197,7 @@ async def start_command(
     # AdsGram обрабатывается отдельно и не блокирует меню.
     await _capture_adsgram_start_attribution(
         session=session,
+        user_id=user_result.user.id,
         telegram_id=message.from_user.id,
         campaign_id=campaign_id,
         enqueue_registration=user_result.created,
